@@ -12,8 +12,21 @@ Every new issue must have a workload level set as a label. The level shows how m
 - **High**
 
 ## Workflow for issues
+This is the short version. The full, detailed workflow, including verification gates, is in [WORKFLOW.md](WORKFLOW.md), and Claude reads it together with [CLAUDE.md](CLAUDE.md).
+
 1. Review the issue. Check that the workload level matches the description and Claude's own estimate of token use. If the level is wrong, update the level to a higher or lower one instead of performing the issue. Then continue, or take another issue that is within token reach.
 2. Fetch the main branch.
 3. Check out a new branch named after the issue, for example `feature-Update-ReadME`.
 4. Perform the updates.
 5. Create a pull request that is set to merge automatically. Create new issues from comments in the pull request, and set Low, Medium or High as the workload level on each new issue.
+
+## Safeguards for automatic merge
+Pull requests are merged automatically, so changes must never go straight into `main`. The following safeguards apply (see issue #3):
+
+- Direct pushes to `main` are blocked. All changes go through a pull request.
+- Before a pull request is created, all verification gates in [WORKFLOW.md](WORKFLOW.md) must pass. Steps for testing and verification are added there.
+- Once a pull request is ready, it is merged automatically.
+
+There are no required automated checks yet, because the project has no code to test. When code exists, a CI check (GitHub Actions) should be added and made required, so a pull request with a failing check cannot be merged. Until then, mistakes are caught by reviewing the pull request before it is merged.
+
+Changing branch protection and repository settings requires owner rights and is done by the repository owner.
