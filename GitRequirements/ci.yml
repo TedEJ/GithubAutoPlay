@@ -68,7 +68,3 @@ jobs:
       - name: Run tests
         working-directory: applications/Countdown
         run: python -m pytest
-
-      # Add further steps here as the project grows, for example more projects,
-      # a linter or a build. Keep them in this job so the required check name
-      # stays the same.
