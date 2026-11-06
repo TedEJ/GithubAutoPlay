@@ -1,0 +1,61 @@
+name: CI
+
+# Runs on every pull request into main, and can be started manually from the
+# Actions tab. There are deliberately no path filters: if this check is made
+# a required status check, a skipped run would leave pull requests blocked.
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+# Least privilege: the checks only need to read the repository.
+permissions:
+  contents: read
+
+# Cancel an older run of the same pull request when new commits are pushed.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The job name is what branch protection refers to when a check is required.
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Required files exist and are not empty
+        run: |
+          missing=0
+          for f in README.md WORKFLOW.md CLAUDE.md LICENSE; do
+            if [ ! -s "$f" ]; then
+              echo "::error file=$f::Required file is missing or empty"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Relative links in Markdown files resolve
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+          bad = 0
+          link = re.compile(r'\[[^\]]*\]\(([^)\s]+)\)')
+          for md in pathlib.Path('.').glob('*.md'):
+              for target in link.findall(md.read_text(encoding='utf-8')):
+                  if re.match(r'^(https?:|mailto:|#)', target):
+                      continue
+                  path = target.split('#')[0]
+                  if path and not (md.parent / path).exists():
+                      print(f"::error file={md}::Broken link: {target}")
+                      bad = 1
+          sys.exit(bad)
+          PY
+
+      # Add further steps here as the project grows, for example the project's
+      # tests, a linter or a build. Keep them in this job so the required check
+      # name stays the same.
