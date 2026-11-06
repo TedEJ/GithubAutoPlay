@@ -1,0 +1,1 @@
+Temporary file for testing the label no-auto-merge. This pull request is closed without merging.
