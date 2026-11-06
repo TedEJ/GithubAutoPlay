@@ -19,12 +19,11 @@ Every new issue must have a workload level set as a label. The level shows how m
 5. Create a pull request that is set to merge automatically. Create new issues from comments in the pull request, and set Low, Medium or High as the workload level on each new issue.
 
 ## Safeguards for automatic merge
-Pull requests are merged automatically, so a faulty change must never go straight into `main`. The following safeguards apply (see issue #3):
+Pull requests are merged automatically, so changes must never go straight into `main`. The following safeguards apply (see issue #3):
 
 - Direct pushes to `main` are blocked. All changes go through a pull request.
-- A pull request can only be merged when the required automated checks (GitHub Actions) have passed.
-- Once the checks are green, the pull request is merged automatically.
+- Once a pull request is ready, it is merged automatically.
 
-If a check fails, the pull request is not merged. Claude reads the failure, fixes the problem on the same branch and pushes again, so the checks run once more.
+There are no required automated checks yet, because the project has no code to test. When code exists, a CI check (GitHub Actions) should be added and made required, so a pull request with a failing check cannot be merged. Until then, mistakes are caught by reviewing the pull request before it is merged.
 
 Changing branch protection and repository settings requires owner rights and is done by the repository owner.
