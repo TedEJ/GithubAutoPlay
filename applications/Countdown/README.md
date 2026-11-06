@@ -23,8 +23,8 @@ The numbers 1 to 10 appear at different places in the window. After a short dela
 
 ## Planned steps
 The work is split into small issues, one step at a time. The full list with workload levels is in issue #13. In short:
-1. Folder and README (this step)
-2. Project skeleton, `pytest` and a test step in the `checks` job
+1. Folder and README (done)
+2. Project skeleton, `pytest` and a test step in the `checks` job (done)
 3. Game logic without a GUI, with unit tests
 4. GUI window that draws the numbers
 5. Hide timer (1, 5 or 10 seconds)
@@ -34,4 +34,22 @@ The work is split into small issues, one step at a time. The full list with work
 9. Polish
 
 ## How to run
-Coming soon. The game does not exist yet.
+The game is not playable yet, but the project skeleton runs. You need Python 3.10 or newer.
+
+Run the commands from the `applications/Countdown` folder:
+
+```
+python -m countdown
+```
+
+This prints a short message and exits. The window and the game arrive in later steps.
+
+## How to run the tests
+Install the test tool once, and then run the tests:
+
+```
+python -m pip install -r requirements.txt
+python -m pytest
+```
+
+The same tests run automatically in the check `checks` on every pull request. The game logic must not import `tkinter`, because the check runs without a display. Only the GUI module may use it.
