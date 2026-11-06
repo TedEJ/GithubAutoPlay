@@ -25,8 +25,9 @@ Pull requests are merged automatically, so changes must never go straight into `
 
 - Direct pushes to `main` are blocked. All changes go through a pull request.
 - Before a pull request is created, all verification gates in [WORKFLOW.md](WORKFLOW.md) must pass. Steps for testing and verification are added there.
-- Once a pull request is ready, it is merged automatically.
+- The required status check `checks` (GitHub Actions, defined in `.github/workflows/ci.yml`) must pass before a pull request can be merged. A pull request with a failing check cannot be merged.
+- Once a pull request is ready and the check is green, it is merged.
 
-There are no required automated checks yet, because the project has no code to test. When code exists, a CI check (GitHub Actions) should be added and made required, so a pull request with a failing check cannot be merged. Until then, mistakes are caught by reviewing the pull request before it is merged.
+The check currently verifies that the required files exist and that relative links in the Markdown files work. More steps, such as tests, are added to the same job when the project has code, so the required check name stays `checks`. If the check fails, fix the problem on the same branch and push again.
 
 Changing branch protection and repository settings requires owner rights and is done by the repository owner.

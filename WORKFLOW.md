@@ -30,14 +30,16 @@ All gates must pass. If one fails, fix it on the same branch and run the gates a
 1. **Scope check:** the diff contains only what the issue asks for.
 2. **Acceptance criteria:** every acceptance criterion in the issue is met. Re-read the issue and tick them off one by one.
 3. **Documentation:** README and this file are updated if behaviour or process changed.
-4. **Tests:** run the project's tests. *(Placeholder: there is no code yet. Add the test command here when code exists.)*
+4. **Tests:** run the project's tests. *(Placeholder: there is no code yet. Add the test command here when code exists.)* The CI check `checks` must also be green on the pull request (see section 5).
 5. **Extra checks:** *(Placeholder: add further verification steps here, for example linting, a build, or a manual check.)*
 
 ## 5. Pull request and merge
 1. Push the branch and create a pull request that references the issue and carries the same labels as the issue.
 2. Direct pushes to `main` are blocked. Every change goes through a pull request.
-3. Required automated checks (GitHub Actions) should be added once code exists. Until then, the verification gates in section 4 are the safeguard, and the pull request is reviewed before it is merged.
-4. The pull request is merged automatically when it is ready.
+3. The required status check `checks` (GitHub Actions, `.github/workflows/ci.yml`) must pass before the pull request can be merged. This is enforced by the repository ruleset on `main`, so a failing or missing check blocks the merge.
+4. If `checks` fails, read the failure in the pull request's Checks tab, fix it on the same branch, push again and wait for the check to run again. Never merge around a failing check, and never change the required check or ruleset to get a pull request through.
+5. New verification steps (tests, linting, build) are added as steps in the existing `checks` job, so the required check name stays the same.
+6. The pull request is merged when it is ready and `checks` is green.
 
 ## 6. Follow-up work
 Create a new issue for any follow-up found during the work or raised in pull request comments. Set a workload level (Low, Medium or High) on every new issue.
@@ -45,5 +47,6 @@ Create a new issue for any follow-up found during the work or raised in pull req
 ## 7. Hard rules
 - Never push directly to `main`.
 - Never skip verification gates.
+- The required check `checks` must be green before a pull request is merged. Never merge with a failing or missing check.
 - Do not change repository settings or branch protection. That requires the repository owner.
 - Never store tokens or credentials in the repository.
