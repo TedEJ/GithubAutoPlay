@@ -1,0 +1,32 @@
+name: Auto-merge
+
+# Enables GitHub auto-merge on new pull requests, so each one merges by itself
+# as soon as the required status check "checks" is green. A failing or missing
+# check still blocks the merge. This job is not a required check.
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+# Least privilege: enabling auto-merge needs to write to the pull request.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    name: enable-auto-merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only for pull requests from branches in this repository (not forks),
+    # not for drafts, and not when the label "no-auto-merge" is set when the
+    # pull request is opened.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft &&
+      !contains(github.event.pull_request.labels.*.name, 'no-auto-merge')
+    steps:
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --merge "$PR_URL"
