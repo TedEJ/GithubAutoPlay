@@ -32,3 +32,5 @@ Pull requests are merged automatically, so changes must never go straight into `
 The check currently verifies that the required files exist and that relative links in the Markdown files work. More steps, such as tests, are added to the same job when the project has code, so the required check name stays `checks`. If the check fails, fix the problem on the same branch and push again.
 
 Changing branch protection and repository settings requires owner rights and is done by the repository owner.
+
+See the [missing test file](MISSING-TEST-FILE.md).
