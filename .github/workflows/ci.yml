@@ -56,6 +56,15 @@ jobs:
           sys.exit(bad)
           PY
 
-      # Add further steps here as the project grows, for example the project's
-      # tests, a linter or a build. Keep them in this job so the required check
-      # name stays the same.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        working-directory: applications/Countdown
+        run: python -m pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: applications/Countdown
+        run: python -m pytest
