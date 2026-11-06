@@ -30,7 +30,7 @@ All gates must pass. If one fails, fix it on the same branch and run the gates a
 1. **Scope check:** the diff contains only what the issue asks for.
 2. **Acceptance criteria:** every acceptance criterion in the issue is met. Re-read the issue and tick them off one by one.
 3. **Documentation:** README and this file are updated if behaviour or process changed.
-4. **Tests:** run the project's tests. *(Placeholder: there is no code yet. Add the test command here when code exists.)* The CI check `checks` must also be green on the pull request (see section 5).
+4. **Tests:** run the project's tests before creating the pull request. For Python projects under `applications/`, run `python -m pytest` from the project folder (for example `applications/Countdown`), after `python -m pip install -r requirements.txt`. Add new tests for new code. The CI check `checks` runs the same tests and must be green on the pull request (see section 5).
 5. **Extra checks:** *(Placeholder: add further verification steps here, for example linting, a build, or a manual check.)*
 
 ## 5. Pull request and merge
