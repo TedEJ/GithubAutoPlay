@@ -25,7 +25,7 @@ The numbers 1 to 10 appear at different places in the window. After a short dela
 The work is split into small issues, one step at a time. The full list with workload levels is in issue #13. In short:
 1. Folder and README (done)
 2. Project skeleton, `pytest` and a test step in the `checks` job (done)
-3. Game logic without a GUI, with unit tests: number placement (done), then game state
+3. Game logic without a GUI, with unit tests (done): number placement and game state
 4. GUI window that draws the numbers
 5. Hide timer (1, 5 or 10 seconds)
 6. Clicking in order, and the lose screen
