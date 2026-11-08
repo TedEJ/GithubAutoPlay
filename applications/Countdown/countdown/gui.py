@@ -14,7 +14,7 @@ TEXT_COLOR = "#cdd6f4"
 
 
 def draw_numbers(canvas, game):
-    """Draw every number of ``game`` in a box at its position."""
+    """Draw every box of ``game`` at its position, with its number or an X."""
     canvas.delete("all")
     for number, (x, y) in game.positions.items():
         canvas.create_rectangle(
@@ -23,7 +23,7 @@ def draw_numbers(canvas, game):
         canvas.create_text(
             x + BOX_SIZE // 2,
             y + BOX_SIZE // 2,
-            text=str(number),
+            text=str(number) if game.numbers_visible else "X",
             fill=TEXT_COLOR,
             font=("Helvetica", BOX_SIZE // 2, "bold"),
         )
@@ -42,6 +42,13 @@ def run():
         root, width=WINDOW_WIDTH, height=WINDOW_HEIGHT, bg=BACKGROUND, highlightthickness=0
     )
     canvas.pack()
-    draw_numbers(canvas, new_game())
+    game = new_game()
+    draw_numbers(canvas, game)
+
+    def hide_numbers():
+        game.hide()
+        draw_numbers(canvas, game)
+
+    root.after(game.delay_milliseconds, hide_numbers)
     root.mainloop()
     return 0
