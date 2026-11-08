@@ -26,7 +26,7 @@ The work is split into small issues, one step at a time. The full list with work
 1. Folder and README (done)
 2. Project skeleton, `pytest` and a test step in the `checks` job (done)
 3. Game logic without a GUI, with unit tests (done): number placement and game state
-4. GUI window that draws the numbers
+4. GUI window that draws the numbers (done)
 5. Hide timer (1, 5 or 10 seconds)
 6. Clicking in order, and the lose screen
 7. Start screen where the player picks the delay
@@ -34,15 +34,15 @@ The work is split into small issues, one step at a time. The full list with work
 9. Polish
 
 ## How to run
-The game is not playable yet, but the project skeleton runs. You need Python 3.10 or newer.
+The game is not playable yet. For now it opens a window that shows the numbers 1 to 10 at ten different places. The hide timer and the clicking come in later steps. You need Python 3.10 or newer with `tkinter`. It is included in the standard Python installers for Windows and macOS; on some Linux systems it is a separate package (for example `python3-tk` on Debian and Ubuntu).
 
-Run the commands from the `applications/Countdown` folder:
+Run the command from the `applications/Countdown` folder:
 
 ```
 python -m countdown
 ```
 
-This prints a short message and exits. The window and the game arrive in later steps.
+If `tkinter` is missing, or there is no screen, the program prints a short explanation and exits with an error code instead of crashing.
 
 ## How to run the tests
 Install the test tool once, and then run the tests:
