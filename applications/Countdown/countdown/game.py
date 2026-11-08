@@ -13,6 +13,11 @@ ALLOWED_DELAYS = (1, 5, 10)
 NUMBER_COUNT = 10
 
 
+def delay_to_milliseconds(delay_seconds):
+    """Convert a delay in seconds to whole milliseconds."""
+    return int(delay_seconds * 1000)
+
+
 class Phase(Enum):
     SHOWING = "showing"  # numbers are visible, waiting for the timer
     PLAYING = "playing"  # numbers are hidden (X), the player clicks them
@@ -46,6 +51,20 @@ class Game:
     @property
     def delay_seconds(self):
         return self._delay_seconds
+
+    @property
+    def delay_milliseconds(self):
+        """The delay in milliseconds, for a GUI timer."""
+        return delay_to_milliseconds(self._delay_seconds)
+
+    @property
+    def numbers_visible(self):
+        """True if the numbers are drawn, False if every number is shown as an X.
+
+        Only the playing phase hides them (rule 3). After a loss all numbers are
+        shown again (rule 7).
+        """
+        return self._phase is not Phase.PLAYING
 
     @property
     def next_number(self):

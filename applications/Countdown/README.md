@@ -27,14 +27,14 @@ The work is split into small issues, one step at a time. The full list with work
 2. Project skeleton, `pytest` and a test step in the `checks` job (done)
 3. Game logic without a GUI, with unit tests (done): number placement and game state
 4. GUI window that draws the numbers (done)
-5. Hide timer (1, 5 or 10 seconds)
+5. Hide timer (done for the default of 5 seconds; the player chooses 1, 5 or 10 seconds in step 7)
 6. Clicking in order, and the lose screen
 7. Start screen where the player picks the delay
 8. Win screen and play again
 9. Polish
 
 ## How to run
-The game is not playable yet. For now it opens a window that shows the numbers 1 to 10 at ten different places. The hide timer and the clicking come in later steps. You need Python 3.10 or newer with `tkinter`. It is included in the standard Python installers for Windows and macOS; on some Linux systems it is a separate package (for example `python3-tk` on Debian and Ubuntu).
+The game is not playable yet. For now it opens a window that shows the numbers 1 to 10 at ten different places and turns every number into an **X** after 5 seconds. The clicking comes in later steps. You need Python 3.10 or newer with `tkinter`. It is included in the standard Python installers for Windows and macOS; on some Linux systems it is a separate package (for example `python3-tk` on Debian and Ubuntu).
 
 Run the command from the `applications/Countdown` folder:
 

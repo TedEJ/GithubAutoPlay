@@ -1,6 +1,6 @@
 import pytest
 
-from countdown.game import ALLOWED_DELAYS, Game, Phase
+from countdown.game import ALLOWED_DELAYS, Game, Phase, delay_to_milliseconds
 from countdown.layout import place_numbers
 
 POSITIONS = {n: (n * 70, 10) for n in range(1, 11)}
@@ -184,3 +184,31 @@ def test_games_are_independent():
     a.hide()
     a.click(1)
     assert b.phase is Phase.SHOWING and b.correct_count == 0
+
+
+# --- delay in milliseconds and what the GUI shows
+
+@pytest.mark.parametrize("seconds, milliseconds", [(1, 1000), (5, 5000), (10, 10000)])
+def test_delay_to_milliseconds(seconds, milliseconds):
+    assert delay_to_milliseconds(seconds) == milliseconds
+    assert new_game(seconds).delay_milliseconds == milliseconds
+
+
+def test_numbers_are_visible_only_while_showing_and_after_the_game_ended():
+    game = new_game()
+    assert game.numbers_visible  # SHOWING
+    game.hide()
+    assert not game.numbers_visible  # PLAYING: every number is an X
+    game.click(1)
+    assert not game.numbers_visible
+    game.click(5)  # wrong click
+    assert game.phase is Phase.LOST
+    assert game.numbers_visible  # rule 7: all numbers are shown again
+
+
+def test_numbers_are_visible_after_a_win():
+    game = playing_game()
+    for n in range(1, 11):
+        game.click(n)
+    assert game.phase is Phase.WON
+    assert game.numbers_visible
