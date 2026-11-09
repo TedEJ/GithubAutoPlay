@@ -8,7 +8,7 @@ GitHub only runs workflows from `.github/workflows/`, and that folder is hidden 
 | File | What it does |
 |------|--------------|
 | `ci.yml` | The required check `checks`. Runs on every pull request into `main` and verifies that the required files exist and that relative links in the Markdown files work. More steps (tests, linting) are added to the same job when the project has code. |
-| `auto-merge.yml` | Enables GitHub auto-merge on every new pull request from this repository, so it merges by itself when `checks` is green. Skipped for drafts, forks and pull requests with the label `no-auto-merge`. A second job, `close-linked-issues`, runs when a pull request has been merged and closes the issues named with a closing keyword (`Closes #N`) in its description, with a comment. `Refs #N` closes nothing. |
+| `auto-merge.yml` | Enables GitHub auto-merge on every new pull request from this repository, so it merges by itself when `checks` is green. Skipped for drafts, forks and pull requests with the label `no-auto-merge`. It does not close issues; the owner closes the issue after the merge. |
 
 When one of the real workflows changes, update its copy here in the same pull request, so they stay identical.
 
