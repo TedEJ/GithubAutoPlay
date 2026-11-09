@@ -9,6 +9,14 @@ def lose_message(correct_count):
     return f"You lost. You clicked {correct_count} {noun} correctly."
 
 
+def win_message(total):
+    """The text of the win screen. ``total`` is how many numbers were clicked."""
+    if total < 1:
+        raise ValueError(f"total must be at least 1, got {total!r}")
+    noun = "number" if total == 1 else "numbers"
+    return f"You won! You clicked all {total} {noun} in order."
+
+
 def delay_label(seconds):
     """The text of a start screen button, e.g. "1 second" or "5 seconds"."""
     if seconds not in ALLOWED_DELAYS:

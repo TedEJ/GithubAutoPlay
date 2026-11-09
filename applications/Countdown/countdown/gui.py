@@ -8,7 +8,7 @@ import tkinter as tk
 
 from countdown.game import ALLOWED_DELAYS, Phase
 from countdown.layout import number_at
-from countdown.messages import delay_label, lose_message
+from countdown.messages import delay_label, lose_message, win_message
 from countdown.settings import (
     BOX_SIZE,
     MESSAGE_BAR_HEIGHT,
@@ -26,10 +26,11 @@ FOUND_FILL = "#a6e3a1"
 FOUND_OUTLINE = "#40a02b"
 FOUND_TEXT = "#1e1e2e"
 MESSAGE_COLOR = "#f38ba8"
+WIN_MESSAGE_COLOR = "#a6e3a1"
 
 
 def draw_game(canvas, game):
-    """Draw every box of ``game``, and the lose message after a loss."""
+    """Draw every box of ``game``, and the lose or win message after a round."""
     canvas.delete("all")
     canvas.create_rectangle(
         0, WINDOW_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT + MESSAGE_BAR_HEIGHT,
@@ -50,12 +51,17 @@ def draw_game(canvas, game):
             fill=FOUND_TEXT if found else TEXT_COLOR,
             font=("Helvetica", BOX_SIZE // 2, "bold"),
         )
+    message = None
     if game.phase is Phase.LOST:
+        message, color = lose_message(game.correct_count), MESSAGE_COLOR
+    elif game.phase is Phase.WON:
+        message, color = win_message(len(game.positions)), WIN_MESSAGE_COLOR
+    if message is not None:
         canvas.create_text(
             WINDOW_WIDTH // 2,
             WINDOW_HEIGHT + MESSAGE_BAR_HEIGHT // 2,
-            text=lose_message(game.correct_count),
-            fill=MESSAGE_COLOR,
+            text=message,
+            fill=color,
             font=("Helvetica", 18, "bold"),
         )
 
