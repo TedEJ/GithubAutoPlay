@@ -1,26 +1,35 @@
 name: Auto-merge
 
-# Enables GitHub auto-merge on new pull requests, so each one merges by itself
-# as soon as the required status check "checks" is green. A failing or missing
-# check still blocks the merge. This job is not a required check.
+# Job 1 (enable-auto-merge): enables GitHub auto-merge on new pull requests, so
+# each one merges by itself as soon as the required status check "checks" is
+# green. A failing or missing check still blocks the merge. This job is not a
+# required check.
+#
+# Job 2 (close-linked-issues): when a pull request has been merged, closes the
+# issues that its description names with a closing keyword ("Closes #N"). It is
+# needed because a merge made by the auto-merge Action does not close them by
+# itself. "Refs #N" does not link an issue for closing, so it closes nothing.
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, closed]
 
-# Least privilege: enabling auto-merge needs to write to the pull request.
-permissions:
-  contents: write
-  pull-requests: write
+# No permissions by default. Each job asks only for what it needs.
+permissions: {}
 
 jobs:
   enable-auto-merge:
     name: enable-auto-merge
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Enabling auto-merge needs to write to the pull request.
+    permissions:
+      contents: write
+      pull-requests: write
     # Only for pull requests from branches in this repository (not forks),
-    # not for drafts, and not when the label "no-auto-merge" is set when the
-    # pull request is opened.
+    # not when the pull request was closed, not for drafts, and not when the
+    # label "no-auto-merge" is set when the pull request is opened.
     if: >-
+      github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       !github.event.pull_request.draft &&
       !contains(github.event.pull_request.labels.*.name, 'no-auto-merge')
@@ -30,3 +39,42 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: gh pr merge --auto --merge "$PR_URL"
+
+  close-linked-issues:
+    name: close-linked-issues
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Reads the pull request and closes issues.
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    # Only after a real merge (a pull request closed without merge closes
+    # nothing), and only for pull requests from this repository.
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Close the issues named with a closing keyword
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          issues=$(gh pr view "$PR_NUMBER" --json closingIssuesReferences \
+            --jq '.closingIssuesReferences[].number')
+          if [ -z "$issues" ]; then
+            echo "Pull request #$PR_NUMBER names no issue with a closing keyword."
+            exit 0
+          fi
+          for issue in $issues; do
+            state=$(gh issue view "$issue" --json state --jq '.state')
+            if [ "$state" = "OPEN" ]; then
+              gh issue close "$issue" --reason completed \
+                --comment "Closed automatically because pull request #$PR_NUMBER was merged."
+              echo "Closed issue #$issue."
+            else
+              echo "Issue #$issue is already closed."
+            fi
+          done
