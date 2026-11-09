@@ -27,6 +27,7 @@ Pull requests are merged automatically, so changes must never go straight into `
 - Before a pull request is created, all verification gates in [WORKFLOW.md](WORKFLOW.md) must pass. Steps for testing and verification are added there.
 - The required status check `checks` (GitHub Actions, defined in `.github/workflows/ci.yml`) must pass before a pull request can be merged. A pull request with a failing check cannot be merged.
 - A GitHub Action (`.github/workflows/auto-merge.yml`) enables auto-merge on every new pull request from this repository. The pull request then merges by itself as soon as `checks` is green, without anyone clicking merge.
+- When a pull request is merged, the same Action closes the issues it names with `Closes #N` in its description. `Refs #N` closes nothing.
 - To keep a pull request from merging automatically, add the label `no-auto-merge` when the pull request is opened, or open it as a draft. Pull requests from forks never get auto-merge.
 
 The check currently verifies that the required files exist and that relative links in the Markdown files work. More steps, such as tests, are added to the same job when the project has code, so the required check name stays `checks`. If the check fails, fix the problem on the same branch and push again.
