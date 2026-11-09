@@ -14,7 +14,11 @@ MESSAGE_BAR_HEIGHT = 50
 DEFAULT_DELAY_SECONDS = 5
 
 
-def new_game(rng=None):
-    """Start a new round: place the numbers and create the ``Game``."""
+def new_game(rng=None, delay_seconds=DEFAULT_DELAY_SECONDS):
+    """Start a new round: place the numbers and create the ``Game``.
+
+    ``delay_seconds`` must be 1, 5 or 10 (``ValueError`` otherwise). A restart
+    passes the delay of the round that was running.
+    """
     positions = place_numbers(WINDOW_WIDTH, WINDOW_HEIGHT, BOX_SIZE, rng=rng)
-    return Game(positions, DEFAULT_DELAY_SECONDS)
+    return Game(positions, delay_seconds)
