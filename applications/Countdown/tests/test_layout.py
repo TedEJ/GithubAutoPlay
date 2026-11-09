@@ -2,9 +2,10 @@ import random
 
 import pytest
 
-from countdown.layout import NUMBER_COUNT, place_numbers
+from countdown.layout import NUMBER_COUNT, number_at, place_numbers
 
 WIDTH, HEIGHT, SIZE = 800, 600, 60
+WINDOW_W, WINDOW_H = WIDTH, HEIGHT
 SEEDS = range(200)
 
 
@@ -67,3 +68,46 @@ def test_tight_window_still_works():
 def test_impossible_window_raises_value_error(width, height, size):
     with pytest.raises(ValueError):
         place_numbers(width, height, size, rng=random.Random(0))
+
+
+# --- number_at
+
+BOXES = {1: (100, 100), 2: (160, 100), 3: (300, 400)}  # 1 and 2 touch each other
+S = 60
+
+
+def test_number_at_inside_a_box():
+    assert number_at(BOXES, S, 130, 130) == 1
+    assert number_at(BOXES, S, 330, 430) == 3
+
+
+def test_number_at_top_left_corner_is_inside():
+    assert number_at(BOXES, S, 100, 100) == 1
+
+
+def test_number_at_first_pixel_outside_is_not_a_hit():
+    assert number_at(BOXES, S, 99, 100) is None
+    assert number_at(BOXES, S, 100, 99) is None
+    assert number_at(BOXES, S, 300 + S, 400) is None
+    assert number_at(BOXES, S, 300, 400 + S) is None
+
+
+def test_number_at_last_pixel_inside_is_a_hit():
+    assert number_at(BOXES, S, 300 + S - 1, 400 + S - 1) == 3
+
+
+def test_number_at_empty_background():
+    assert number_at(BOXES, S, 0, 0) is None
+    assert number_at(BOXES, S, 500, 300) is None
+
+
+def test_number_at_touching_boxes_never_both_match():
+    # Box 1 covers x 100..159, box 2 covers x 160..219.
+    assert number_at(BOXES, S, 159, 120) == 1
+    assert number_at(BOXES, S, 160, 120) == 2
+
+
+def test_number_at_with_placed_numbers_finds_every_box_centre():
+    positions = place_numbers(WINDOW_W, WINDOW_H, SIZE, rng=random.Random(5))
+    for number, (x, y) in positions.items():
+        assert number_at(positions, SIZE, x + SIZE // 2, y + SIZE // 2) == number

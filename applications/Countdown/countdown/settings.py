@@ -9,6 +9,8 @@ from countdown.layout import place_numbers
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 BOX_SIZE = 60
+# A strip below the play area for messages, so a message never covers a box.
+MESSAGE_BAR_HEIGHT = 50
 DEFAULT_DELAY_SECONDS = 5
 
 

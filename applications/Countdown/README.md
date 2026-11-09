@@ -28,13 +28,13 @@ The work is split into small issues, one step at a time. The full list with work
 3. Game logic without a GUI, with unit tests (done): number placement and game state
 4. GUI window that draws the numbers (done)
 5. Hide timer (done for the default of 5 seconds; the player chooses 1, 5 or 10 seconds in step 7)
-6. Clicking in order, and the lose screen
+6. Clicking in order, and the lose screen (done)
 7. Start screen where the player picks the delay
 8. Win screen and play again
 9. Polish
 
 ## How to run
-The game is not playable yet. For now it opens a window that shows the numbers 1 to 10 at ten different places and turns every number into an **X** after 5 seconds. The clicking comes in later steps. You need Python 3.10 or newer with `tkinter`. It is included in the standard Python installers for Windows and macOS; on some Linux systems it is a separate package (for example `python3-tk` on Debian and Ubuntu).
+The game is playable up to the lose screen. The window shows the numbers 1 to 10 at ten different places and turns every number into an **X** after 5 seconds. Then you click the X marks in order, 1, 2, 3 and so on: a correct click turns the box green and shows its number, and a wrong click loses at once. After a loss all ten numbers are shown again, and the strip below the play area says how many numbers you clicked correctly. The start screen, the win screen and a way to play again come in later steps, so for now you close the window and start again. You need Python 3.10 or newer with `tkinter`. It is included in the standard Python installers for Windows and macOS; on some Linux systems it is a separate package (for example `python3-tk` on Debian and Ubuntu).
 
 Run the command from the `applications/Countdown` folder:
 

@@ -57,3 +57,16 @@ def place_numbers(width, height, size, rng=None):
         f"could not place {NUMBER_COUNT} boxes of size {size} "
         f"in a window of {width} x {height}"
     )
+
+
+def number_at(positions, size, x, y):
+    """Return the number whose box contains the point ``(x, y)``, or ``None``.
+
+    ``positions`` is ``{number: (x, y)}`` as returned by ``place_numbers`` and
+    ``size`` is the side of a box. A box covers ``px <= x < px + size`` and
+    ``py <= y < py + size``, so two boxes that touch never both match.
+    """
+    for number, (px, py) in positions.items():
+        if px <= x < px + size and py <= y < py + size:
+            return number
+    return None
