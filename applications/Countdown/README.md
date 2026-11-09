@@ -27,14 +27,14 @@ The work is split into small issues, one step at a time. The full list with work
 2. Project skeleton, `pytest` and a test step in the `checks` job (done)
 3. Game logic without a GUI, with unit tests (done): number placement and game state
 4. GUI window that draws the numbers (done)
-5. Hide timer (done for the default of 5 seconds; the player chooses 1, 5 or 10 seconds in step 7)
+5. Hide timer (done; the delay is chosen on the start screen in step 7)
 6. Clicking in order, and the lose screen (done), and a restart button (done)
-7. Start screen where the player picks the delay
+7. Start screen where the player picks the delay (done), with a Change delay button
 8. Win screen and play again
 9. Polish
 
 ## How to run
-The game is playable up to the lose screen. The window shows the numbers 1 to 10 at ten different places and turns every number into an **X** after 5 seconds. Then you click the X marks in order, 1, 2, 3 and so on: a correct click turns the box green and shows its number, and a wrong click loses at once. After a loss all ten numbers are shown again, and the strip below the play area says how many numbers you clicked correctly. The **Restart** button below the play area starts a new round at any time, with new places for the numbers and the same delay. The start screen and the win screen come in later steps. You need Python 3.10 or newer with `tkinter`. It is included in the standard Python installers for Windows and macOS; on some Linux systems it is a separate package (for example `python3-tk` on Debian and Ubuntu).
+The game is playable up to the lose screen. The window opens on a **start screen** with three buttons, **1 second**, **5 seconds** and **10 seconds**: the button you click decides how long the numbers stay visible. Then the numbers 1 to 10 appear at ten different places and every number turns into an **X** after the chosen time. You click the X marks in order, 1, 2, 3 and so on: a correct click turns the box green and shows its number, and a wrong click loses at once. After a loss all ten numbers are shown again, and the strip below the play area says how many numbers you clicked correctly. The **Restart** button below the play area starts a new round at any time, with new places for the numbers and the same delay. The **Change delay** button goes back to the start screen at any time. The win screen comes in a later step. You need Python 3.10 or newer with `tkinter`. It is included in the standard Python installers for Windows and macOS; on some Linux systems it is a separate package (for example `python3-tk` on Debian and Ubuntu).
 
 Run the command from the `applications/Countdown` folder:
 

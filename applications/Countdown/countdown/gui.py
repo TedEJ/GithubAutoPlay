@@ -6,12 +6,11 @@ and contains no rules.
 
 import tkinter as tk
 
-from countdown.game import Phase
+from countdown.game import ALLOWED_DELAYS, Phase
 from countdown.layout import number_at
-from countdown.messages import lose_message
+from countdown.messages import delay_label, lose_message
 from countdown.settings import (
     BOX_SIZE,
-    DEFAULT_DELAY_SECONDS,
     MESSAGE_BAR_HEIGHT,
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
@@ -62,27 +61,55 @@ def draw_game(canvas, game):
 
 
 def create_app(root):
-    """Build the window content on ``root`` and start the first round.
+    """Build the window content on ``root`` and show the start screen.
 
-    Returns ``(canvas, state, restart_button)``. ``state["game"]`` is the
-    round that is running now.
+    Returns ``(canvas, state, controls)``. ``state["game"]`` is the round that
+    is running now, or ``None`` while the start screen is shown. ``controls``
+    holds the widgets: ``start_frame``, ``play_frame``, ``delay_buttons``
+    (delay in seconds -> button), ``restart`` and ``change_delay``.
     """
+    total_height = WINDOW_HEIGHT + MESSAGE_BAR_HEIGHT
+    state = {"game": None, "timer": None}
+
+    start_frame = tk.Frame(root, width=WINDOW_WIDTH, height=total_height, bg=BACKGROUND)
+    start_frame.pack_propagate(False)
+    tk.Label(
+        start_frame,
+        text="How long should the numbers be visible?",
+        bg=BACKGROUND,
+        fg=TEXT_COLOR,
+        font=("Helvetica", 20, "bold"),
+    ).pack(pady=(total_height // 3, 20))
+    delay_buttons = {}
+
+    play_frame = tk.Frame(root, bg=BACKGROUND)
     canvas = tk.Canvas(
-        root,
+        play_frame,
         width=WINDOW_WIDTH,
-        height=WINDOW_HEIGHT + MESSAGE_BAR_HEIGHT,
+        height=total_height,
         bg=BACKGROUND,
         highlightthickness=0,
     )
     canvas.pack()
-    state = {"game": None, "timer": None}
 
-    def start_round(delay_seconds):
+    def cancel_timer():
         # A hide timer from an earlier round must never hide the numbers of
         # the new one, so the old timer is cancelled first. (cancelling a timer
         # that has already run does no harm.)
         if state["timer"] is not None:
             root.after_cancel(state["timer"])
+            state["timer"] = None
+
+    def show_start_screen():
+        cancel_timer()
+        state["game"] = None
+        play_frame.pack_forget()
+        start_frame.pack()
+
+    def start_round(delay_seconds):
+        cancel_timer()
+        start_frame.pack_forget()
+        play_frame.pack()
         game = new_game(delay_seconds=delay_seconds)
         state["game"] = game
         draw_game(canvas, game)
@@ -96,7 +123,7 @@ def create_app(root):
 
     def on_click(event):
         game = state["game"]
-        if game.phase is not Phase.PLAYING:
+        if game is None or game.phase is not Phase.PLAYING:
             return
         number = number_at(game.positions, BOX_SIZE, event.x, event.y)
         if number is None:
@@ -106,13 +133,37 @@ def create_app(root):
 
     def restart():
         # Same delay as the round that is running now.
-        start_round(state["game"].delay_seconds)
+        if state["game"] is not None:
+            start_round(state["game"].delay_seconds)
+
+    for seconds in ALLOWED_DELAYS:
+        button = tk.Button(
+            start_frame,
+            text=delay_label(seconds),
+            width=14,
+            command=lambda seconds=seconds: start_round(seconds),
+        )
+        button.pack(pady=6)
+        delay_buttons[seconds] = button
 
     canvas.bind("<Button-1>", on_click)
-    restart_button = tk.Button(root, text="Restart", command=restart)
-    restart_button.pack(pady=6)
-    start_round(DEFAULT_DELAY_SECONDS)
-    return canvas, state, restart_button
+    button_row = tk.Frame(play_frame, bg=BACKGROUND)
+    button_row.pack(pady=6)
+    restart_button = tk.Button(button_row, text="Restart", command=restart)
+    restart_button.pack(side="left", padx=6)
+    change_delay_button = tk.Button(
+        button_row, text="Change delay", command=show_start_screen
+    )
+    change_delay_button.pack(side="left", padx=6)
+    show_start_screen()
+    controls = {
+        "start_frame": start_frame,
+        "play_frame": play_frame,
+        "delay_buttons": delay_buttons,
+        "restart": restart_button,
+        "change_delay": change_delay_button,
+    }
+    return canvas, state, controls
 
 
 def run():
