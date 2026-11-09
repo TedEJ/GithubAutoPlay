@@ -11,6 +11,7 @@ from countdown.layout import number_at
 from countdown.messages import lose_message
 from countdown.settings import (
     BOX_SIZE,
+    DEFAULT_DELAY_SECONDS,
     MESSAGE_BAR_HEIGHT,
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
@@ -61,7 +62,11 @@ def draw_game(canvas, game):
 
 
 def create_app(root):
-    """Build the canvas on ``root``, start a round and return ``(canvas, game)``."""
+    """Build the window content on ``root`` and start the first round.
+
+    Returns ``(canvas, state, restart_button)``. ``state["game"]`` is the
+    round that is running now.
+    """
     canvas = tk.Canvas(
         root,
         width=WINDOW_WIDTH,
@@ -70,15 +75,27 @@ def create_app(root):
         highlightthickness=0,
     )
     canvas.pack()
-    game = new_game()
-    draw_game(canvas, game)
+    state = {"game": None, "timer": None}
 
-    def hide_numbers():
-        if game.phase is Phase.SHOWING:
+    def start_round(delay_seconds):
+        # A hide timer from an earlier round must never hide the numbers of
+        # the new one, so the old timer is cancelled first. (cancelling a timer
+        # that has already run does no harm.)
+        if state["timer"] is not None:
+            root.after_cancel(state["timer"])
+        game = new_game(delay_seconds=delay_seconds)
+        state["game"] = game
+        draw_game(canvas, game)
+        state["timer"] = root.after(game.delay_milliseconds, lambda: hide_numbers(game))
+
+    def hide_numbers(game):
+        # Second guard: only act on the round this timer was made for.
+        if game is state["game"] and game.phase is Phase.SHOWING:
             game.hide()
             draw_game(canvas, game)
 
     def on_click(event):
+        game = state["game"]
         if game.phase is not Phase.PLAYING:
             return
         number = number_at(game.positions, BOX_SIZE, event.x, event.y)
@@ -87,9 +104,15 @@ def create_app(root):
         game.click(number)
         draw_game(canvas, game)
 
+    def restart():
+        # Same delay as the round that is running now.
+        start_round(state["game"].delay_seconds)
+
     canvas.bind("<Button-1>", on_click)
-    root.after(game.delay_milliseconds, hide_numbers)
-    return canvas, game
+    restart_button = tk.Button(root, text="Restart", command=restart)
+    restart_button.pack(pady=6)
+    start_round(DEFAULT_DELAY_SECONDS)
+    return canvas, state, restart_button
 
 
 def run():
