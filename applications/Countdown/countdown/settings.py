@@ -9,6 +9,8 @@ from countdown.layout import place_numbers
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 BOX_SIZE = 60
+# The least number of pixels between two boxes, so boxes never touch.
+MIN_GAP = 10
 # A strip below the play area for messages, so a message never covers a box.
 MESSAGE_BAR_HEIGHT = 50
 DEFAULT_DELAY_SECONDS = 5
@@ -20,5 +22,5 @@ def new_game(rng=None, delay_seconds=DEFAULT_DELAY_SECONDS):
     ``delay_seconds`` must be 1, 5 or 10 (``ValueError`` otherwise). A restart
     passes the delay of the round that was running.
     """
-    positions = place_numbers(WINDOW_WIDTH, WINDOW_HEIGHT, BOX_SIZE, rng=rng)
+    positions = place_numbers(WINDOW_WIDTH, WINDOW_HEIGHT, BOX_SIZE, rng=rng, gap=MIN_GAP)
     return Game(positions, delay_seconds)

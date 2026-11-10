@@ -3,6 +3,7 @@ import random
 import pytest
 
 from countdown.layout import NUMBER_COUNT, number_at, place_numbers
+from countdown.settings import MIN_GAP
 
 WIDTH, HEIGHT, SIZE = 800, 600, 60
 WINDOW_W, WINDOW_H = WIDTH, HEIGHT
@@ -68,6 +69,54 @@ def test_tight_window_still_works():
 def test_impossible_window_raises_value_error(width, height, size):
     with pytest.raises(ValueError):
         place_numbers(width, height, size, rng=random.Random(0))
+
+
+# --- the gap between boxes
+
+def gap_between(a, b):
+    """Pixels between two boxes of side SIZE (the larger of the two axis gaps)."""
+    return max(abs(a[0] - b[0]), abs(a[1] - b[1])) - SIZE
+
+
+@pytest.mark.parametrize("gap", [1, 10, 25])
+@pytest.mark.parametrize("seed", range(100))
+def test_boxes_keep_the_gap(seed, gap):
+    boxes = list(place_numbers(WIDTH, HEIGHT, SIZE, rng=random.Random(seed), gap=gap).values())
+    assert len(boxes) == NUMBER_COUNT
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            assert gap_between(a, b) >= gap
+
+
+def test_default_gap_is_zero():
+    # Without a gap the old behaviour stays: the boxes may touch.
+    boxes = list(make(1, width=400, height=200).values())
+    assert len(boxes) == NUMBER_COUNT
+    assert all(max(abs(a[0] - b[0]), abs(a[1] - b[1])) >= SIZE
+               for i, a in enumerate(boxes) for b in boxes[i + 1:])
+
+
+def test_gap_makes_a_tight_window_impossible():
+    with pytest.raises(ValueError):
+        place_numbers(300, 120, SIZE, rng=random.Random(1), gap=10)
+
+
+def test_negative_gap_raises_value_error():
+    with pytest.raises(ValueError):
+        place_numbers(WIDTH, HEIGHT, SIZE, rng=random.Random(1), gap=-1)
+
+
+def test_gap_is_kept_with_the_real_settings():
+    from countdown.settings import BOX_SIZE, WINDOW_HEIGHT, WINDOW_WIDTH
+
+    assert MIN_GAP > 0
+    for seed in range(300):
+        boxes = list(place_numbers(
+            WINDOW_WIDTH, WINDOW_HEIGHT, BOX_SIZE, rng=random.Random(seed), gap=MIN_GAP
+        ).values())
+        for i, a in enumerate(boxes):
+            for b in boxes[i + 1:]:
+                assert max(abs(a[0] - b[0]), abs(a[1] - b[1])) - BOX_SIZE >= MIN_GAP
 
 
 # --- number_at

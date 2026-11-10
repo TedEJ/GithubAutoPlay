@@ -17,16 +17,17 @@ from countdown.settings import (
     new_game,
 )
 
-BACKGROUND = "#1e1e2e"
-BAR_BACKGROUND = "#181825"
+# All colours of the window are defined here and nowhere else.
+BACKGROUND = "#1e1e2e"  # window, start screen, play area and button row
+BAR_BACKGROUND = "#181825"  # the message strip below the play area
 BOX_FILL = "#313244"
 BOX_OUTLINE = "#89b4fa"
 TEXT_COLOR = "#cdd6f4"
 FOUND_FILL = "#a6e3a1"
 FOUND_OUTLINE = "#40a02b"
 FOUND_TEXT = "#1e1e2e"
-MESSAGE_COLOR = "#f38ba8"
-WIN_MESSAGE_COLOR = "#a6e3a1"
+MESSAGE_COLOR = "#f38ba8"  # lose message
+WIN_MESSAGE_COLOR = FOUND_FILL  # win message: same green as the found boxes
 
 
 def draw_game(canvas, game):
@@ -75,6 +76,7 @@ def create_app(root):
     (delay in seconds -> button), ``restart`` and ``change_delay``.
     """
     total_height = WINDOW_HEIGHT + MESSAGE_BAR_HEIGHT
+    root.configure(bg=BACKGROUND)
     state = {"game": None, "timer": None}
 
     start_frame = tk.Frame(root, width=WINDOW_WIDTH, height=total_height, bg=BACKGROUND)
@@ -147,6 +149,7 @@ def create_app(root):
             start_frame,
             text=delay_label(seconds),
             width=14,
+            highlightbackground=BACKGROUND,
             command=lambda seconds=seconds: start_round(seconds),
         )
         button.pack(pady=6)
@@ -155,10 +158,15 @@ def create_app(root):
     canvas.bind("<Button-1>", on_click)
     button_row = tk.Frame(play_frame, bg=BACKGROUND)
     button_row.pack(pady=6)
-    restart_button = tk.Button(button_row, text="Restart", command=restart)
+    restart_button = tk.Button(
+        button_row, text="Restart", highlightbackground=BACKGROUND, command=restart
+    )
     restart_button.pack(side="left", padx=6)
     change_delay_button = tk.Button(
-        button_row, text="Change delay", command=show_start_screen
+        button_row,
+        text="Change delay",
+        highlightbackground=BACKGROUND,
+        command=show_start_screen,
     )
     change_delay_button.pack(side="left", padx=6)
     show_start_screen()
