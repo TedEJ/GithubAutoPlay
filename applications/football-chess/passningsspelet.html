@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Passningsspelet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  --bg: #eef1e8;
+  --ink: #17231b;
+  --muted: #56655a;
+  --card: #ffffff;
+  --line: #cbd5c3;
+  --chip: #e1e8d9;
+  --accent: #f2c230;
+  --accent-ink: #1b1a0c;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1712;
+    --ink: #e9f0e4;
+    --muted: #9fb1a3;
+    --card: #17251c;
+    --line: #2a3c2f;
+    --chip: #1b2b20;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1712;
+  --ink: #e9f0e4;
+  --muted: #9fb1a3;
+  --card: #17251c;
+  --line: #2a3c2f;
+  --chip: #1b2b20;
+  color-scheme: dark;
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+}
+.app { max-width: 480px; margin: 0 auto; padding: 12px 14px 18px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+h1 {
+  margin: 0;
+  font-family: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 30px;
+  letter-spacing: .01em;
+  line-height: 1.05;
+}
+.levels {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.lv {
+  flex: 0 0 44px;
+  height: 46px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--chip);
+  color: var(--ink);
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.05;
+  cursor: pointer;
+  padding: 0;
+}
+.lv .n { font-family: "Barlow Condensed", system-ui, sans-serif; font-weight: 700; font-size: 20px; }
+.lv .s { font-size: 9px; letter-spacing: .05em; color: var(--muted); min-height: 10px; }
+.lv.cur { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.lv.cur .s { color: var(--accent-ink); }
+.lv:disabled { opacity: .4; cursor: not-allowed; }
+.lv:focus-visible, .btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.stats { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.stats .info { font-size: 15px; color: var(--muted); }
+.stats .info strong { color: var(--ink); font-weight: 600; }
+.btn {
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 16px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.btn.ghost { background: var(--chip); color: var(--ink); border: 1.5px solid var(--line); }
+.btn.small { min-height: 40px; padding: 8px 12px; font-size: 14px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.stage {
+  position: relative;
+  width: min(100%, 440px, calc((100vh - 280px) * .643));
+  width: min(100%, 440px, calc((100dvh - 280px) * .643));
+  min-width: 250px;
+  aspect-ratio: 360 / 560;
+  margin: 0 auto;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #1f6b3a;
+  box-shadow: 0 0 0 1.5px var(--line);
+}
+canvas { display: block; width: 100%; height: 100%; touch-action: manipulation; cursor: pointer; }
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(8, 16, 11, .66);
+}
+.overlay[hidden] { display: none; }
+.card {
+  width: 100%;
+  max-width: 320px;
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 16px;
+  padding: 20px 18px 18px;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .35);
+}
+.card h2 {
+  margin: 0 0 6px;
+  font-family: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1.05;
+}
+.card p { margin: 0 0 14px; color: var(--muted); font-size: 15px; }
+.card .stars { font-size: 30px; letter-spacing: .12em; margin: 0 0 8px; color: #d9a400; }
+.card .btn { width: 100%; }
+.card .btn + .btn { margin-top: 8px; }
+.card .btn[hidden] { display: none; }
+.status { min-height: 44px; margin: 10px 2px 0; text-align: center; font-size: 16px; font-weight: 500; }
+</style>
+</head>
+<body>
+<main class="app">
+  <div class="top">
+    <h1>Passningsspelet</h1>
+    <button class="btn ghost small" id="restartBtn" type="button">Börja om</button>
+  </div>
+  <div class="levels" id="levels" role="group" aria-label="Banor"></div>
+  <div class="stats">
+    <div class="info" id="info"></div>
+    <button class="btn ghost" id="hintBtn" type="button">Tips (3)</button>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="c" role="img" aria-label="Fotbollsplan sedd uppifrån. Tryck på en fri spelare för att passa bollen."></canvas>
+    <div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="ovTitle">
+      <div class="card">
+        <div class="stars" id="ovStars" hidden></div>
+        <h2 id="ovTitle"></h2>
+        <p id="ovText"></p>
+        <button class="btn" id="ovBtn" type="button"></button>
+        <button class="btn ghost" id="ovBtn2" type="button" hidden></button>
+      </div>
+    </div>
+  </div>
+  <p class="status" id="status" aria-live="polite"></p>
+</main>
+
+<script>
+(function () {
+  var W = 360, H = 560, PX = 14, PY = 14, PW = 332, PH = 532;
+
+  // Spelarnas platser (andel av planen) och tröjnummer
+  var SPOTS = {
+    A: [.14, .74], B: [.37, .79], C: [.63, .79], D: [.86, .74],
+    E: [.30, .60], F: [.70, .60],
+    G: [.12, .43], H: [.50, .46], I: [.88, .43],
+    J: [.50, .22]
+  };
+  var NUM = { A: 2, B: 3, C: 4, D: 5, E: 6, F: 8, G: 11, H: 10, I: 7, J: 9 };
+
+  // Regler för blockering
+  var ZONE = 17;           // en motspelare bryter passningar som går närmare än så
+  var SHOOT_RANGE = 252;   // inom detta avstånd från mål skjuter spelaren direkt
+  var GOAL = { x: 180, y: 16 };
+
+  // Sju fasta banor. defs = motspelarnas platser (andel av planen).
+  // 21 fasta banor: tre per nivå, nivåerna blir successivt svårare.
+  // defs = motspelarnas platser (andel av planen).
+  var LEVELS = [
+    { active: ['B','C','E','J'],
+      defs: [[0.411, 0.444], [0.534, 0.774]] },
+    { active: ['A','B','F','J'],
+      defs: [[0.607, 0.632], [0.485, 0.333], [0.204, 0.612]] },
+    { active: ['C','D','E','J'],
+      defs: [[0.644, 0.09], [0.416, 0.635], [0.536, 0.321]] },
+    { active: ['A','B','C','E','J'],
+      defs: [[0.581, 0.164], [0.207, 0.78], [0.632, 0.735], [0.444, 0.662], [0.453, 0.779]] },
+    { active: ['B','C','D','F','J'],
+      defs: [[0.505, 0.782], [0.764, 0.634], [0.601, 0.836], [0.502, 0.367]] },
+    { active: ['A','C','E','F','J'],
+      defs: [[0.477, 0.326], [0.916, 0.411], [0.556, 0.813], [0.28, 0.65]] },
+    { active: ['B','C','D','F','H','J'],
+      defs: [[0.764, 0.757], [0.392, 0.837], [0.55, 0.262], [0.615, 0.682]] },
+    { active: ['A','B','D','E','H','J'],
+      defs: [[0.802, 0.785], [0.382, 0.645], [0.451, 0.335], [0.255, 0.759]] },
+    { active: ['A','C','E','F','H','J'],
+      defs: [[0.45, 0.412], [0.321, 0.466], [0.611, 0.736], [0.243, 0.701]] },
+    { active: ['A','B','C','E','F','H','J'],
+      defs: [[0.199, 0.636], [0.526, 0.787], [0.53, 0.357], [0.558, 0.657], [0.357, 0.637]] },
+    { active: ['B','C','D','E','F','H','J'],
+      defs: [[0.542, 0.285], [0.358, 0.633], [0.488, 0.771], [0.815, 0.169], [0.714, 0.648]] },
+    { active: ['A','B','D','E','G','H','J'],
+      defs: [[0.292, 0.652], [0.323, 0.477], [0.513, 0.293], [0.414, 0.853], [0.604, 0.758]] },
+    { active: ['A','B','C','E','F','G','H','J'],
+      defs: [[0.465, 0.265], [0.237, 0.745], [0.619, 0.728], [0.165, 0.484], [0.447, 0.854], [0.493, 0.681]] },
+    { active: ['A','B','D','E','F','G','H','J'],
+      defs: [[0.166, 0.681], [0.261, 0.452], [0.506, 0.274], [0.363, 0.71], [0.704, 0.761], [0.61, 0.656]] },
+    { active: ['B','C','D','E','F','G','I','J'],
+      defs: [[0.644, 0.662], [0.31, 0.483], [0.546, 0.77], [0.303, 0.674], [0.532, 0.279], [0.835, 0.471]] },
+    { active: ['A','B','C','D','F','G','H','I','J'],
+      defs: [[0.794, 0.454], [0.218, 0.484], [0.481, 0.272], [0.743, 0.795], [0.636, 0.739], [0.212, 0.72], [0.407, 0.854]] },
+    { active: ['A','B','C','E','F','G','H','I','J'],
+      defs: [[0.286, 0.788], [0.602, 0.597], [0.487, 0.286], [0.254, 0.521], [0.386, 0.74], [0.591, 0.841], [0.807, 0.458]] },
+    { active: ['A','B','C','D','E','F','G','H','I','J'],
+      defs: [[0.23, 0.338], [0.627, 0.663], [0.814, 0.461], [0.507, 0.271], [0.553, 0.758], [0.792, 0.765], [0.342, 0.703]] },
+    { active: ['A','B','C','D','E','F','G','H','I','J'],
+      defs: [[0.238, 0.75], [0.522, 0.864], [0.383, 0.608], [0.548, 0.279], [0.694, 0.761], [0.388, 0.741], [0.819, 0.463], [0.312, 0.504]] },
+    { active: ['A','B','C','D','E','F','G','H','I','J'],
+      defs: [[0.81, 0.787], [0.561, 0.766], [0.521, 0.267], [0.17, 0.473], [0.64, 0.654], [0.256, 0.716], [0.415, 0.853], [0.845, 0.494]] },
+    { active: ['A','B','C','D','E','F','G','H','I','J'],
+      defs: [[0.596, 0.844], [0.455, 0.768], [0.226, 0.749], [0.7, 0.651], [0.163, 0.5], [0.517, 0.271], [0.38, 0.599], [0.565, 0.535]] }
+  ];
+
+  var KEEPER = { x: 180, y: 520 };
+  var BALL_AT_KEEPER = { x: 180, y: 499 };
+
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var stage = document.getElementById('stage');
+  var levelsEl = document.getElementById('levels');
+  var infoEl = document.getElementById('info');
+  var hintBtn = document.getElementById('hintBtn');
+  var restartBtn = document.getElementById('restartBtn');
+  var statusEl = document.getElementById('status');
+  var overlay = document.getElementById('overlay');
+  var ovTitle = document.getElementById('ovTitle');
+  var ovText = document.getElementById('ovText');
+  var ovStars = document.getElementById('ovStars');
+  var ovBtn = document.getElementById('ovBtn');
+  var ovBtn2 = document.getElementById('ovBtn2');
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Sparade stjärnor per bana
+  var KEY = 'passningsspelet-v3';
+  var stars = LEVELS.map(function () { return 0; });
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (saved && Array.isArray(saved.stars)) {
+      stars = LEVELS.map(function (_, i) { return +saved.stars[i] || 0; });
+    }
+  } catch (e) {}
+  function persist() {
+    try { localStorage.setItem(KEY, JSON.stringify({ stars: stars })); } catch (e) {}
+  }
+  function maxPlayable() {
+    var i = stars.findIndex(function (s) { return !s; });
+    return i < 0 ? LEVELS.length - 1 : i;
+  }
+
+  // Speltillstånd
+  var lv = 0, holder = 'GK', attempts = 1, hints = 3, hintUntil = 0;
+  var visited = [];        // spelare som redan haft bollen i detta försök
+  var path = [];           // kedjan i detta försök, börjar med 'GK'
+  var ghost = [];          // föregående misslyckade försök, ritas streckat
+  var mode = 'intro';      // intro | ready | passing | shooting | result
+  var ball = { x: BALL_AT_KEEPER.x, y: BALL_AT_KEEPER.y, lift: 0 };
+  var anim = null, ripple = null, flash = null, confetti = [];
+  var oppK = { x: 180, tx: 180 };
+  var lastT = performance.now();
+
+  function pos(id) {
+    if (id === 'GK') return { x: BALL_AT_KEEPER.x, y: BALL_AT_KEEPER.y };
+    var s = SPOTS[id];
+    return { x: PX + s[0] * PW, y: PY + s[1] * PH };
+  }
+  function defenders() {
+    return LEVELS[lv].defs.map(function (d) { return { x: PX + d[0] * PW, y: PY + d[1] * PH }; });
+  }
+
+  // ---------- Geometri ----------
+  function segInfo(p, a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y, l = dx * dx + dy * dy;
+    var t = l === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l));
+    return { t: t, d: Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)) };
+  }
+  // Första motspelaren som bryter linjen a–b, annars null
+  function blocker(a, b) {
+    var best = null, bt = 2;
+    defenders().forEach(function (d) {
+      var s = segInfo(d, a, b);
+      if (s.d < ZONE && s.t < bt) { bt = s.t; best = d; }
+    });
+    return best;
+  }
+  function isShooter(id) {
+    var p = pos(id);
+    return Math.hypot(p.x - GOAL.x, p.y - GOAL.y) <= SHOOT_RANGE;
+  }
+  function freeTargets(from) {
+    var a = pos(from);
+    return LEVELS[lv].active.filter(function (id) {
+      return id !== from && visited.indexOf(id) < 0 && !blocker(a, pos(id));
+    });
+  }
+
+  function setStatus(t) { statusEl.textContent = t; }
+
+  function updateInfo() {
+    infoEl.innerHTML = '<strong>Bana ' + (lv + 1) + '</strong> av ' + LEVELS.length +
+      ', nivå ' + (Math.floor(lv / 3) + 1) + ' &nbsp;<strong>Försök ' + attempts + '</strong>';
+    hintBtn.textContent = 'Tips (' + hints + ')';
+    hintBtn.disabled = hints <= 0 || mode !== 'ready';
+  }
+
+  function renderLevels() {
+    var max = maxPlayable();
+    levelsEl.innerHTML = '';
+    LEVELS.forEach(function (_, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lv' + (i === lv ? ' cur' : '');
+      b.disabled = i > max;
+      b.setAttribute('aria-label', 'Bana ' + (i + 1) + (stars[i] ? ', ' + stars[i] + ' stjärnor' : ''));
+      var s = '';
+      for (var k = 0; k < 3; k++) s += k < stars[i] ? '★' : (stars[i] ? '☆' : '');
+      b.innerHTML = '<span class="n">' + (i + 1) + '</span><span class="s">' + s + '</span>';
+      b.addEventListener('click', function () {
+        if (mode === 'passing' || mode === 'shooting') return;
+        loadLevel(i);
+      });
+      levelsEl.appendChild(b);
+    });
+    var cur = levelsEl.querySelector('.cur');
+    if (cur) {
+      levelsEl.scrollLeft = Math.max(0, cur.offsetLeft - (levelsEl.clientWidth - cur.offsetWidth) / 2);
+    }
+  }
+
+  function showOverlay(o) {
+    ovTitle.textContent = o.title;
+    ovText.textContent = o.text;
+    if (o.stars != null) {
+      var s = '';
+      for (var k = 0; k < 3; k++) s += k < o.stars ? '★' : '☆';
+      ovStars.textContent = s;
+      ovStars.hidden = false;
+    } else {
+      ovStars.hidden = true;
+    }
+    ovBtn.textContent = o.btn;
+    ovBtn.onclick = function () { overlay.hidden = true; o.action(); };
+    if (o.secondary) {
+      ovBtn2.textContent = o.secondary.text;
+      ovBtn2.onclick = function () { overlay.hidden = true; o.secondary.action(); };
+      ovBtn2.hidden = false;
+    } else {
+      ovBtn2.hidden = true;
+    }
+    overlay.hidden = false;
+    ovBtn.focus({ preventScroll: true });
+  }
+
+  function loadLevel(i) {
+    lv = i;
+    attempts = 1;
+    ghost = [];
+    overlay.hidden = true;
+    startAttempt();
+    renderLevels();
+  }
+
+  function startAttempt() {
+    holder = 'GK';
+    visited = [];
+    path = ['GK'];
+    anim = null;
+    ripple = null;
+    flash = null;
+    confetti = [];
+    ball.x = BALL_AT_KEEPER.x;
+    ball.y = BALL_AT_KEEPER.y;
+    ball.lift = 0;
+    oppK.tx = 180;
+    mode = 'ready';
+    setStatus('Hitta en fri väg till mål. Motspelarnas röda zoner bryter passningar.');
+    updateInfo();
+  }
+
+  // Starta om hela spelet: alla banor spelas om och tipsen återställs
+  function resetGame() {
+    stars = LEVELS.map(function () { return 0; });
+    persist();
+    hints = 3;
+    hintUntil = 0;
+    loadLevel(0);
+  }
+
+  function tween(to, dur, lift, cb) {
+    anim = { fx: ball.x, fy: ball.y, tx: to.x, ty: to.y, t0: performance.now(), dur: dur, lift: lift, cb: cb };
+  }
+
+  function fail(kind, text) {
+    ghost = path.slice();
+    mode = 'result';
+    updateInfo();
+    var title = { pass: 'Passningen bröts', shot: 'Skottet blockerades', stuck: 'Ingen fri passning' }[kind];
+    setStatus(title + '.');
+    var extra = ghost.length > 1 ? ' Din väg ligger kvar som streckad linje.' : '';
+    setTimeout(function () {
+      showOverlay({
+        title: title,
+        text: text + extra,
+        btn: 'Försök igen',
+        action: function () { attempts++; startAttempt(); }
+      });
+    }, reduce ? 300 : 900);
+  }
+
+  function passTo(id) {
+    if (mode !== 'ready') return;
+    mode = 'passing';
+    updateInfo();
+    var from = pos(holder), target = pos(id);
+    var blk = blocker(from, target);
+
+    if (blk) {
+      // Passningen bryts av motspelaren i linjen
+      var d = Math.hypot(blk.x - from.x, blk.y - from.y);
+      path.push(id);
+      tween(blk, 200 + d * 1.1, 4, function () {
+        flash = { t0: performance.now(), text: 'Bruten!', color: '#ff8a7a' };
+        fail('pass', 'En motspelare stod i passlinjen.');
+      });
+      return;
+    }
+
+    var dist = Math.hypot(target.x - from.x, target.y - from.y);
+    tween(target, 240 + dist * 1.1, 4, function () {
+      holder = id;
+      visited.push(id);
+      path.push(id);
+      if (isShooter(id)) {
+        shoot();
+      } else if (freeTargets(id).length === 0) {
+        flash = { t0: performance.now(), text: 'Fastnat!', color: '#ff8a7a' };
+        mode = 'result';
+        fail('stuck', 'Spelaren hade ingen fri medspelare att passa till.');
+      } else {
+        mode = 'ready';
+        setStatus('Fri passning! Vem får bollen nu?');
+        updateInfo();
+      }
+    });
+  }
+
+  function shoot() {
+    mode = 'shooting';
+    updateInfo();
+    var from = pos(holder);
+    var blk = blocker(from, GOAL);
+    if (blk) {
+      setStatus('Skott … men linjen är inte fri.');
+      var d = Math.hypot(blk.x - from.x, blk.y - from.y);
+      tween(blk, 200 + d * 1.1, 4, function () {
+        flash = { t0: performance.now(), text: 'Blockerat!', color: '#ff8a7a' };
+        fail('shot', 'En motspelare stod i skottlinjen.');
+      });
+      return;
+    }
+    setStatus('Fri skottlinje! Han skjuter …');
+    var side = Math.random() < .5 ? -1 : 1;
+    var tx = 180 + side * 20;
+    oppK.tx = 180 - side * 30;
+    tween({ x: tx, y: 7 }, 520, 6, function () {
+      ripple = { t0: performance.now(), x: tx, y: 7 };
+      flash = { t0: performance.now(), text: 'MÅL!', color: '#ffe066' };
+      spawnConfetti();
+      mode = 'result';
+      var earned = attempts <= 2 ? 3 : attempts <= 4 ? 2 : 1;
+      stars[lv] = Math.max(stars[lv], earned);
+      persist();
+      renderLevels();
+      updateInfo();
+      setStatus('Mål!');
+      var last = lv === LEVELS.length - 1;
+      setTimeout(function () {
+        showOverlay({
+          title: last ? 'Alla banor klara!' : 'Mål!',
+          text: 'Du klarade banan på ' + attempts + ' försök.' +
+            (last ? ' Spela om från början för att jaga fler stjärnor.' : ''),
+          stars: earned,
+          btn: last ? 'Spela om från början' : 'Nästa bana',
+          action: function () { if (last) resetGame(); else loadLevel(lv + 1); }
+        });
+      }, reduce ? 300 : 1200);
+    });
+  }
+
+  function spawnConfetti() {
+    if (reduce) return;
+    var cols = ['#ffe066', '#ffffff', '#6ee7b7', '#f9a8d4', '#93c5fd'];
+    for (var i = 0; i < 70; i++) {
+      confetti.push({
+        x: 180 + (Math.random() - .5) * 40, y: 20,
+        vx: (Math.random() - .5) * 260, vy: 60 + Math.random() * 240,
+        r: 2 + Math.random() * 3, c: cols[i % cols.length], life: 1.6 + Math.random() * .8
+      });
+    }
+  }
+
+  // Tips: visar vilka spelare som är fria att passa till just nu
+  hintBtn.addEventListener('click', function () {
+    if (mode !== 'ready' || hints <= 0) return;
+    hints--;
+    hintUntil = performance.now() + 2600;
+    updateInfo();
+  });
+
+  restartBtn.addEventListener('click', function () {
+    if (mode === 'passing' || mode === 'shooting') return;
+    showOverlay({
+      title: 'Börja om från början?',
+      text: 'Alla banor spelas om, stjärnorna nollställs och du får tillbaka alla tre tips.',
+      btn: 'Ja, börja om',
+      action: resetGame,
+      secondary: { text: 'Avbryt', action: function () {} }
+    });
+  });
+
+  canvas.addEventListener('pointerdown', function (e) {
+    if (mode !== 'ready') return;
+    var r = canvas.getBoundingClientRect();
+    var s = r.width / W;
+    var x = (e.clientX - r.left) / s, y = (e.clientY - r.top) / s;
+    var best = null, bd = 28 * 28;
+    LEVELS[lv].active.forEach(function (id) {
+      if (id === holder || visited.indexOf(id) >= 0) return;
+      var p = pos(id);
+      var d = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
+      if (d < bd) { bd = d; best = id; }
+    });
+    if (best) passTo(best);
+  });
+
+  function resize() {
+    var r = stage.getBoundingClientRect();
+    var dpr = Math.min(window.devicePixelRatio || 1, 3);
+    canvas.width = Math.max(1, Math.round(r.width * dpr));
+    canvas.height = Math.max(1, Math.round(r.height * dpr));
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+  window.addEventListener('resize', resize);
+
+  // ---------- Uppdatering ----------
+  function update(now, dt) {
+    if (anim) {
+      var t = (now - anim.t0) / anim.dur;
+      if (t >= 1) {
+        ball.x = anim.tx; ball.y = anim.ty; ball.lift = 0;
+        var cb = anim.cb; anim = null;
+        if (cb) cb();
+      } else {
+        var e = 1 - (1 - t) * (1 - t);
+        ball.x = anim.fx + (anim.tx - anim.fx) * e;
+        ball.y = anim.fy + (anim.ty - anim.fy) * e;
+        ball.lift = Math.sin(Math.PI * t) * anim.lift;
+      }
+    }
+    if (mode !== 'shooting' && mode !== 'result') oppK.tx = 180 + Math.sin(now / 650) * 12;
+    oppK.x += (oppK.tx - oppK.x) * (1 - Math.exp(-dt * 9));
+    for (var i = confetti.length - 1; i >= 0; i--) {
+      var c = confetti[i];
+      c.vy += 420 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.life -= dt;
+      if (c.life <= 0 || c.y > H + 10) confetti.splice(i, 1);
+    }
+  }
+
+  // ---------- Ritning ----------
+  function drawPitch() {
+    ctx.fillStyle = '#1f6b3a';
+    ctx.fillRect(0, 0, W, H);
+    var stripes = 10, sh = PH / stripes;
+    for (var i = 0; i < stripes; i++) {
+      ctx.fillStyle = i % 2 ? '#247a42' : '#1f6b3a';
+      ctx.fillRect(PX, PY + i * sh, PW, sh);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(PX, PY, PW, PH);
+    ctx.beginPath(); ctx.moveTo(PX, PY + PH / 2); ctx.lineTo(PX + PW, PY + PH / 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(W / 2, PY + PH / 2, 40, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath(); ctx.arc(W / 2, PY + PH / 2, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeRect(80, PY, 200, 70);
+    ctx.strokeRect(130, PY, 100, 26);
+    ctx.strokeRect(80, PY + PH - 70, 200, 70);
+    ctx.strokeRect(130, PY + PH - 26, 100, 26);
+    ctx.beginPath(); ctx.arc(W / 2, PY + 52, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W / 2, PY + PH - 52, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function drawNet(x0, y0, x1, y1, now, animated) {
+    function pt(x, y) {
+      var oy = 0;
+      if (animated && ripple) {
+        var age = now - ripple.t0;
+        if (age < 1100) {
+          var d = Math.hypot(x - ripple.x, y - ripple.y);
+          oy = -7 * Math.exp(-age / 260) * Math.exp(-d / 24) * Math.cos(age / 55);
+        }
+      }
+      return [x, y + oy];
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.55)';
+    ctx.lineWidth = 1;
+    var cols = 10, rows = 3, k, p;
+    for (var i = 0; i <= cols; i++) {
+      ctx.beginPath();
+      for (k = 0; k <= 6; k++) {
+        p = pt(x0 + (x1 - x0) * i / cols, y0 + (y1 - y0) * k / 6);
+        k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]);
+      }
+      ctx.stroke();
+    }
+    for (var j = 0; j <= rows; j++) {
+      ctx.beginPath();
+      for (k = 0; k <= 20; k++) {
+        p = pt(x0 + (x1 - x0) * k / 20, y0 + (y1 - y0) * j / rows);
+        k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]);
+      }
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x0, animated ? y1 : y0);
+    ctx.lineTo(x0, animated ? y0 : y1);
+    ctx.lineTo(x1, animated ? y0 : y1);
+    ctx.lineTo(x1, animated ? y1 : y0);
+    ctx.stroke();
+  }
+
+  function segment(a, b, trim) {
+    var dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+    var ux = dx / d, uy = dy / d;
+    ctx.beginPath();
+    ctx.moveTo(a.x + ux * trim, a.y + uy * trim);
+    ctx.lineTo(b.x - ux * trim, b.y - uy * trim);
+    ctx.stroke();
+  }
+
+  function drawChain(ids, dashed) {
+    if (ids.length < 2) return;
+    ctx.lineCap = 'round';
+    if (dashed) {
+      ctx.setLineDash([7, 7]);
+      ctx.strokeStyle = 'rgba(255,255,255,.55)';
+      ctx.lineWidth = 2.5;
+    } else {
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#ffe066';
+      ctx.lineWidth = 3;
+    }
+    for (var i = 1; i < ids.length; i++) {
+      segment(pos(ids[i - 1]), pos(ids[i]), i === 1 ? 4 : 15);
+    }
+    ctx.setLineDash([]);
+  }
+
+  function drawFigure(x, y, fill, text, textColor, r) {
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.beginPath(); ctx.ellipse(x + 2, y + 4, r, r * .8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = fill;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(0,0,0,.45)';
+    ctx.stroke();
+    if (text != null) {
+      ctx.fillStyle = textColor;
+      ctx.font = '700 15px "Barlow Condensed", "Arial Narrow", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(text), x, y + 1);
+    }
+  }
+
+  function draw(now) {
+    var s = canvas.width / W;
+    ctx.setTransform(s, 0, 0, s, 0, 0);
+    drawPitch();
+    drawNet(150, 0, 210, PY, now, true);
+    drawNet(150, PY + PH, 210, H, now, false);
+
+    var L = LEVELS[lv];
+    var defs = defenders();
+
+    // Motspelarnas zoner
+    defs.forEach(function (d) {
+      ctx.fillStyle = 'rgba(217,69,61,.22)';
+      ctx.beginPath(); ctx.arc(d.x, d.y, ZONE, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,160,150,.55)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
+
+    // Kritlinjer: förra försöket streckat, pågående försök heldraget
+    if (mode !== 'result') drawChain(ghost, true);
+    drawChain(path, false);
+
+    // Motspelare (rör sig bara lite, zonen ligger still)
+    defs.forEach(function (d, i) {
+      var dx = d.x + Math.sin(now / 900 + i * 2) * 2;
+      var dy = d.y + Math.cos(now / 1100 + i * 3) * 1.5;
+      drawFigure(dx, dy, '#d9453d', null, null, 10);
+    });
+
+    // Målvakter
+    drawFigure(oppK.x, 30, '#ff9d4d', null, null, 12);
+    drawFigure(KEEPER.x, KEEPER.y, '#34c6c0', null, null, 12);
+
+    // Spelare (de som redan haft bollen tonas ned)
+    L.active.forEach(function (id) {
+      var p = pos(id);
+      var used = visited.indexOf(id) >= 0 && id !== holder;
+      ctx.globalAlpha = used ? .5 : 1;
+      drawFigure(p.x, p.y, '#f2c230', NUM[id], '#1b1a0c', 13);
+      ctx.globalAlpha = 1;
+    });
+
+    // Ring runt bollhållaren
+    if (mode === 'ready' && holder !== 'GK') {
+      var h = pos(holder);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(h.x, h.y, 18, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // Tips: ringar runt de spelare som är fria just nu
+    if (mode === 'ready' && now < hintUntil) {
+      var pulse = 20 + Math.sin(now / 120) * 3;
+      freeTargets(holder).forEach(function (id) {
+        var tp = pos(id);
+        ctx.strokeStyle = '#7dffb0';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(tp.x, tp.y, pulse, 0, Math.PI * 2); ctx.stroke();
+      });
+    }
+
+    // Boll
+    var bx = ball.x, by = ball.y - ball.lift;
+    ctx.fillStyle = 'rgba(0,0,0,.28)';
+    ctx.beginPath(); ctx.ellipse(ball.x + 1.5, ball.y + 3.5, 5, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(bx, by, 5.5 + ball.lift * .1, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(bx, by, 2, 0, Math.PI * 2); ctx.fill();
+
+    // Konfetti
+    confetti.forEach(function (c) {
+      ctx.fillStyle = c.c;
+      ctx.fillRect(c.x, c.y, c.r * 1.6, c.r);
+    });
+
+    // Text vid mål / bruten passning
+    if (flash) {
+      var age = now - flash.t0;
+      if (age < 1700) {
+        var a = age < 1200 ? 1 : 1 - (age - 1200) / 500;
+        var sc = reduce ? 1 : Math.min(1, .6 + age / 250 * .4);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, a);
+        ctx.translate(W / 2, 290);
+        ctx.scale(sc, sc);
+        ctx.font = '700 72px "Barlow Condensed", "Arial Narrow", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = 'rgba(0,0,0,.45)';
+        ctx.lineJoin = 'round';
+        ctx.strokeText(flash.text, 0, 0);
+        ctx.fillStyle = flash.color;
+        ctx.fillText(flash.text, 0, 0);
+        ctx.restore();
+      }
+    }
+  }
+
+  function frame(now) {
+    var dt = Math.min(.05, (now - lastT) / 1000);
+    lastT = now;
+    update(now, dt);
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Start ----------
+  resize();
+  loadLevel(maxPlayable());
+  mode = 'intro';
+  updateInfo();
+  setStatus('');
+  showOverlay({
+    title: 'Passa dig fram till mål',
+    text: 'Bollen startar hos målvakten. Tryck på en medspelare för att passa. Röda zoner är motspelare och de bryter passningar och skott som går genom dem. Hitta en fri väg till en spelare som kan skjuta.',
+    btn: 'Spela',
+    action: function () {
+      mode = 'ready';
+      setStatus('Hitta en fri väg till mål. Motspelarnas röda zoner bryter passningar.');
+      updateInfo();
+    }
+  });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
