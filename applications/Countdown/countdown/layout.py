@@ -13,23 +13,29 @@ _ATTEMPTS_PER_NUMBER = 200
 _RESTARTS = 50
 
 
-def _overlaps(a, b, size):
-    """True if two square boxes of side ``size`` with top-left corners a and b overlap."""
-    return abs(a[0] - b[0]) < size and abs(a[1] - b[1]) < size
+def _too_close(a, b, size, gap):
+    """True if two square boxes of side ``size`` with top-left corners a and b
+    overlap or are closer than ``gap`` pixels to each other."""
+    pitch = size + gap
+    return abs(a[0] - b[0]) < pitch and abs(a[1] - b[1]) < pitch
 
 
-def place_numbers(width, height, size, rng=None):
+def place_numbers(width, height, size, rng=None, gap=0):
     """Return ``{number: (x, y)}`` for the numbers 1 to 10.
 
     ``(x, y)`` is the top-left corner of a square box with side ``size``.
-    The boxes never overlap and lie fully inside a window of ``width`` x
-    ``height``. Pass a ``random.Random`` as ``rng`` for repeatable results.
+    The boxes never overlap, keep at least ``gap`` pixels between each other
+    (0 by default, so boxes may touch) and lie fully inside a window of
+    ``width`` x ``height``. Pass a ``random.Random`` as ``rng`` for repeatable
+    results.
 
-    Raises ``ValueError`` if the arguments are not positive or if the ten
-    boxes cannot be placed in the window.
+    Raises ``ValueError`` if the arguments are not positive (``gap`` must not
+    be negative) or if the ten boxes cannot be placed in the window.
     """
     if width <= 0 or height <= 0 or size <= 0:
         raise ValueError("width, height and size must be positive")
+    if gap < 0:
+        raise ValueError("gap must not be negative")
     if size > width or size > height:
         raise ValueError(
             f"a box of size {size} does not fit in a window of {width} x {height}"
@@ -45,7 +51,7 @@ def place_numbers(width, height, size, rng=None):
         for _number in range(NUMBER_COUNT):
             for _attempt in range(_ATTEMPTS_PER_NUMBER):
                 candidate = (rng.randint(0, max_x), rng.randint(0, max_y))
-                if not any(_overlaps(candidate, other, size) for other in placed):
+                if not any(_too_close(candidate, other, size, gap) for other in placed):
                     placed.append(candidate)
                     break
             else:

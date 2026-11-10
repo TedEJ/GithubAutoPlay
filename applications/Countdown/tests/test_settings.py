@@ -6,6 +6,7 @@ from countdown.game import Game, Phase
 from countdown.settings import (
     BOX_SIZE,
     DEFAULT_DELAY_SECONDS,
+    MIN_GAP,
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
     new_game,
@@ -56,3 +57,11 @@ def test_restart_keeps_the_delay_but_makes_a_new_game():
     assert second.delay_seconds == 10
     assert second.phase is Phase.SHOWING
     assert second.positions != first.positions
+
+
+def test_new_game_keeps_the_minimum_gap_between_boxes():
+    for seed in range(100):
+        boxes = list(new_game(rng=random.Random(seed)).positions.values())
+        for i, a in enumerate(boxes):
+            for b in boxes[i + 1:]:
+                assert max(abs(a[0] - b[0]), abs(a[1] - b[1])) - BOX_SIZE >= MIN_GAP
