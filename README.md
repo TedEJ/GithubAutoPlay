@@ -36,4 +36,6 @@ Changing branch protection and repository settings requires owner rights and is 
 
 Helper scripts for checks, GUI verification and pull request descriptions live in `scripts/`, and [WORKFLOW.md](WORKFLOW.md) explains when to use each one. Issue templates for ordinary tasks and for GUI tasks are in `.github/ISSUE_TEMPLATE/`.
 
+What we learned from working this way is written down in [RETROSPECTIVE.md](RETROSPECTIVE.md).
+
 Small projects built from issues live in [applications/](applications/README.md).
