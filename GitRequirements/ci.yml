@@ -1,5 +1,5 @@
 name: CI
-
+ 
 # Runs on every pull request into main, and can be started manually from the
 # Actions tab. There are deliberately no path filters: if this check is made
 # a required status check, a skipped run would leave pull requests blocked.
@@ -7,27 +7,27 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-
+ 
 # Least privilege: the checks only need to read the repository.
 permissions:
   contents: read
-
+ 
 # Cancel an older run of the same pull request when new commits are pushed.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
-
+ 
 jobs:
   # The job name is what branch protection refers to when a check is required.
   checks:
     name: checks
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
+ 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
+ 
       - name: Required files exist and are not empty
         run: |
           missing=0
@@ -38,7 +38,7 @@ jobs:
             fi
           done
           exit $missing
-
+ 
       - name: Relative links in Markdown files resolve
         run: |
           python3 - <<'PY'
@@ -55,16 +55,22 @@ jobs:
                       bad = 1
           sys.exit(bad)
           PY
-
+ 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
+ 
       - name: Install test dependencies
         working-directory: applications/Countdown
         run: python -m pip install -r requirements.txt
-
+ 
       - name: Run tests
         working-directory: applications/Countdown
         run: python -m pytest
+ 
+      # The tests of the helper scripts in scripts/. pytest is already
+      # installed by the step that installs the test dependencies above.
+      - name: Run tests of the helper scripts
+        run: python -m pytest scripts/tests
+ 
