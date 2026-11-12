@@ -30,7 +30,7 @@ All gates must pass. If one fails, fix it on the same branch and run the gates a
 1. **Scope check:** the diff contains only what the issue asks for.
 2. **Acceptance criteria:** every acceptance criterion in the issue is met. Re-read the issue and tick them off one by one.
 3. **Documentation:** README and this file are updated if behaviour or process changed.
-4. **Tests:** run the project's tests before creating the pull request. For Python projects under `applications/`, run `python -m pytest` from the project folder (for example `applications/Countdown`), after `python -m pip install -r requirements.txt`. Add new tests for new code. The CI check `checks` runs the same tests and must be green on the pull request (see section 5).
+4. **Tests:** run the project's tests before creating the pull request. For Python projects under `applications/`, run `python -m pytest` from the project folder (for example `applications/Countdown`), after `python -m pip install -r requirements.txt`. Add new tests for new code. The CI check `checks` runs the same tests and must be green on the pull request (see section 5). `scripts/check.sh` runs these tests and the other checks locally in one step (see section 8).
 5. **Extra checks:** *(Placeholder: add further verification steps here, for example linting, a build, or a manual check.)*
 
 ## 5. Pull request and merge
@@ -45,7 +45,7 @@ All gates must pass. If one fails, fix it on the same branch and run the gates a
 9. Name the issue in the pull request description: `Closes #N` if the pull request finishes issue #N, or `Refs #N` if it does not. Issues named with `Closes #N` were not closed after merges made by the auto-merge Action (see #28), so do not rely on it. The owner closes the issue after the pull request is merged (GitHub also closes it by itself when the owner merges by hand). Do not wait for the issue to close, and do not close it by hand. In the report after the last pull request of an issue, say that the owner closes the issue.
 
 ## 6. Follow-up work
-Create a new issue for any follow-up found during the work or raised in pull request comments. Set a workload level (Low, Medium or High) on every new issue. New issues use the issue template (`.github/ISSUE_TEMPLATE/task.md`) so that goal, tasks and acceptance criteria are always present.
+Create a new issue for any follow-up found during the work or raised in pull request comments. Set a workload level (Low, Medium or High) on every new issue. New issues use an issue template so that goal, tasks and acceptance criteria are always present: `.github/ISSUE_TEMPLATE/task.md` for ordinary tasks and `.github/ISSUE_TEMPLATE/gui-task.md` for changes to a window that the owner tests by hand (it adds an owner check list and reminds that the pull request needs the label `no-auto-merge`).
 
 ## 7. Hard rules
 - Never push directly to `main`.
@@ -54,3 +54,27 @@ Create a new issue for any follow-up found during the work or raised in pull req
 - Do not merge pull requests by hand when auto-merge is enabled. Let the check and the auto-merge Action do it.
 - Do not change repository settings or branch protection. That requires the repository owner.
 - Never store tokens or credentials in the repository.
+
+## 8. Helper scripts
+The folder `scripts/` holds small helpers. They are conveniences: the required check `checks` in CI is still the authority. They need plain `bash` and Python 3.10 or newer, and no extra packages (the tests need `pytest`). The two `.sh` scripts need bash, so they run on Linux, macOS and in a cloud session, and on Windows only through WSL or Git Bash. `pr_body.py` is plain Python and runs anywhere.
+
+| Script | Use it when | Example |
+|--------|-------------|---------|
+| `scripts/check.sh [project folder]` | Before creating a pull request (verification gate 4). It runs the required-files check, the link check, the tests of the project folder (default `applications/Countdown`) and the tests of the scripts, prints a summary and exits with an error code if any step fails. | `scripts/check.sh applications/Countdown` |
+| `scripts/verify_gui.sh script.py [args]` | When a tkinter window must be tested without a screen, for example to start the window with a test script that sends clicks. It runs the given script under `xvfb-run` with a Python that has `tkinter`, or says what is missing. Run it from the folder the script expects. | `scripts/verify_gui.sh my_check.py` |
+| `scripts/pr_body.py` | When writing the pull request description. It prints text in the format of `.github/pull_request_template.md`, with options for the issue number, `Closes` or `Refs`, ticked gates, the workload feedback, and the owner check list for pull requests with `no-auto-merge`. It refuses text that looks like a token and never adds links. Use `--footer` for text that must end the description. | `python3 scripts/pr_body.py --issue 50 --summary "..." --gates-passed --workload right` |
+
+The link check in `scripts/check.sh` repeats the logic in `.github/workflows/ci.yml`. If one changes, change the other as well. CI does not run the tests in `scripts/tests/`, only `scripts/check.sh` does. Running them in CI needs a new step in `ci.yml`, which is a workflow change for the owner (see `GitRequirements/README.md`).
+
+## 9. Token handling options
+This section only describes choices. All of them are **owner settings**: Claude does not change tokens, repository settings or how a session is set up.
+
+Claude needs write access to this repository to push a branch. The git proxy in a cloud session refuses the repository unless it has a credential for it (it answers with an error that says the repository is not in the session's authorized set).
+
+| Option | How it works | Trade-offs |
+|--------|--------------|------------|
+| Paste a token per session (today) | The owner creates a token and pastes it in the chat when Claude has to push. Claude uses it for the push and does not store it. | Simple, but needs a paste in nearly every session, and the token is visible in the conversation. Revoke it when the work is done. |
+| A fine-grained token with a short expiry | The same flow, but the token is limited to this repository, has only Contents, Pull requests and Issues set to Read and write (as in `GitRequirements/README.md`), and expires after a few days. | Less damage if it leaks and no long-lived secret, but still pasted by hand. It cannot change files under `.github/workflows/`. |
+| Add the repository to the session's sources | The proxy's error message says the repository must be added to the session's sources. When it is, the proxy supplies the credential itself and no token has to be pasted. | Removes the most repeated manual step. How and where to set it depends on the Claude app, and it has not been tested in this repository, so the owner should check the app's settings. |
+
+Never store a token in the repository, in a script or in an issue, whichever option is used.
