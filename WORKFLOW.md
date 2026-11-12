@@ -78,3 +78,5 @@ Claude needs write access to this repository to push a branch. The git proxy in 
 | Add the repository to the session's sources | The proxy's error message says the repository must be added to the session's sources. When it is, the proxy supplies the credential itself and no token has to be pasted. | Removes the most repeated manual step. How and where to set it depends on the Claude app, and it has not been tested in this repository, so the owner should check the app's settings. |
 
 Never store a token in the repository, in a script or in an issue, whichever option is used.
+
+Lessons from using this workflow are collected in [RETROSPECTIVE.md](RETROSPECTIVE.md).
