@@ -1,5 +1,201 @@
 {
-  "cleaning": [],
+  "cleaning": [
+    {
+      "id": "plain",
+      "input": "Ny budget presenteras i riksdagen",
+      "expected": "Ny budget presenteras i riksdagen"
+    },
+    {
+      "id": "tags-simple",
+      "input": "<b>Ny</b> budget i <i>riksdagen</i>",
+      "expected": "Ny budget i riksdagen"
+    },
+    {
+      "id": "tags-with-attributes",
+      "input": "Läs <a href=\"https://example.invalid/x?a=1&b=2\" class='l'>mer</a> här",
+      "expected": "Läs mer här"
+    },
+    {
+      "id": "tags-self-closing-and-comment",
+      "input": "Rubrik<br/> med<!-- dold --> text",
+      "expected": "Rubrik med text"
+    },
+    {
+      "id": "less-than-sign-is-not-a-tag",
+      "input": "Skatten sänks till < 30 procent",
+      "expected": "Skatten sänks till < 30 procent"
+    },
+    {
+      "id": "named-entities",
+      "input": "Tom &amp; Jerry &quot;tar&quot; &lt;makten&gt;",
+      "expected": "Tom & Jerry \"tar\" <makten>"
+    },
+    {
+      "id": "named-entity-apos-and-quote",
+      "input": "Statsministerns &apos;plan&apos;",
+      "expected": "Statsministerns 'plan'"
+    },
+    {
+      "id": "named-entities-swedish",
+      "input": "&aring;&auml;&ouml;&eacute; &Aring;&Auml;&Ouml;",
+      "expected": "åäöé ÅÄÖ"
+    },
+    {
+      "id": "numeric-entities-decimal",
+      "input": "Skatt p&#229; 5&#160;procent",
+      "expected": "Skatt på 5 procent"
+    },
+    {
+      "id": "numeric-entities-hex",
+      "input": "&#xE5;&#xe4;&#xF6; &#x20AC;5",
+      "expected": "åäö €5"
+    },
+    {
+      "id": "double-encoded-entity",
+      "input": "Tom &amp;amp; Jerry",
+      "expected": "Tom &amp; Jerry"
+    },
+    {
+      "id": "double-encoded-tag",
+      "input": "&lt;b&gt;Fet&lt;/b&gt;",
+      "expected": "<b>Fet</b>"
+    },
+    {
+      "id": "entity-tag-after-decoding-is-kept",
+      "input": "&lt;b&gt; och <i>kursiv</i>",
+      "expected": "<b> och kursiv"
+    },
+    {
+      "id": "ampersand-without-entity",
+      "input": "Skatt & avgifter",
+      "expected": "Skatt & avgifter"
+    },
+    {
+      "id": "whitespace-runs",
+      "input": "Ny    budget \t i   riksdagen",
+      "expected": "Ny budget i riksdagen"
+    },
+    {
+      "id": "whitespace-newlines",
+      "input": "\n  Ny budget\r\n  i\nriksdagen  \n",
+      "expected": "Ny budget i riksdagen"
+    },
+    {
+      "id": "whitespace-between-removed-tags",
+      "input": "Ny <b> budget </b> klar",
+      "expected": "Ny budget klar"
+    },
+    {
+      "id": "whitespace-from-entities",
+      "input": "Ny&#32;&#32;budget&#10;klar",
+      "expected": "Ny budget klar"
+    },
+    {
+      "id": "no-break-space-is-white-space",
+      "input": "5 000 kronor ",
+      "expected": "5 000 kronor"
+    },
+    {
+      "id": "unicode-swedish",
+      "input": "Åsa Östlund från Västerås möter Zoë Müller i Malmö, café ägs av Åke",
+      "expected": "Åsa Östlund från Västerås möter Zoë Müller i Malmö, café ägs av Åke"
+    },
+    {
+      "id": "unicode-swedish-lowercase",
+      "input": "åäöé",
+      "expected": "åäöé"
+    },
+    {
+      "id": "quotes-and-dashes-untouched",
+      "input": "”Nej” – sa ministern … ‘kanske’",
+      "expected": "”Nej” – sa ministern … ‘kanske’"
+    },
+    {
+      "id": "empty",
+      "input": "",
+      "expected": ""
+    },
+    {
+      "id": "whitespace-only",
+      "input": " \t\r\n  ",
+      "expected": ""
+    },
+    {
+      "id": "only-tags",
+      "input": "<b></b><br/>",
+      "expected": ""
+    },
+    {
+      "id": "very-long-headline",
+      "input": "Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten och mer",
+      "expected": "Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten och mer"
+    },
+    {
+      "id": "entity-without-semicolon-is-left",
+      "input": "Tom &amp Jerry &aring och &#229",
+      "expected": "Tom &amp Jerry &aring och &#229"
+    },
+    {
+      "id": "entity-unknown-name-is-left",
+      "input": "Fel &unknown; och &Aacute; och &AMP;",
+      "expected": "Fel &unknown; och &Aacute; och &AMP;"
+    },
+    {
+      "id": "entity-name-is-case-sensitive",
+      "input": "&Amp; &NBSP;",
+      "expected": "&Amp; &NBSP;"
+    },
+    {
+      "id": "entity-null-is-left",
+      "input": "a&#0;b&#x0;c",
+      "expected": "a&#0;b&#x0;c"
+    },
+    {
+      "id": "entity-surrogate-is-left",
+      "input": "a&#xD800;b&#55357;c&#xDFFF;d",
+      "expected": "a&#xD800;b&#55357;c&#xDFFF;d"
+    },
+    {
+      "id": "entity-above-unicode-range-is-left",
+      "input": "a&#1114112;b&#x110000;c",
+      "expected": "a&#1114112;b&#x110000;c"
+    },
+    {
+      "id": "entity-c1-is-plain-character",
+      "input": "x&#128;y",
+      "expected": "xy"
+    },
+    {
+      "id": "entity-hex-upper-and-lower-x",
+      "input": "&#xC5;&#XE4;&#x1F600;",
+      "expected": "Åä😀"
+    },
+    {
+      "id": "entity-decimal-leading-zeros",
+      "input": "&#00229;",
+      "expected": "å"
+    },
+    {
+      "id": "entity-named-list",
+      "input": "&laquo;a&raquo; &ndash; &mdash; &hellip; &lsquo;b&rsquo; &ldquo;c&rdquo; &Eacute;&copy;&euro;",
+      "expected": "«a» – — … ‘b’ “c” É©€"
+    },
+    {
+      "id": "entity-nbsp-collapses-as-white-space",
+      "input": "  &nbsp;a&nbsp;&nbsp;b&nbsp; ",
+      "expected": "a b"
+    },
+    {
+      "id": "whitespace-vt-ff-and-nbsp",
+      "input": "\u000b\fa\u000b\f  b \f",
+      "expected": "a b"
+    },
+    {
+      "id": "whitespace-other-unicode-spaces-are-kept",
+      "input": "a b　c",
+      "expected": "a b　c"
+    }
+  ],
   "time": [],
   "keywords": []
 }

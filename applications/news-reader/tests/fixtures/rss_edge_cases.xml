@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Edge cases</title>
+    <item>
+      <title></title>
+      <link>https://example.invalid/e/empty-title</link>
+    </item>
+    <item>
+    </item>
+    <item/>
+    <item>
+      <title>   </title>
+      <link></link>
+      <description>  </description>
+    </item>
+    <item>
+      <title>Title without link</title>
+    </item>
+    <item>
+      <link>https://example.invalid/e/no-title</link>
+      <pubDate>Fri, 13 Nov 2026 14:05:00 +0100</pubDate>
+    </item>
+    <item>
+      <title>Unusable link kept for later steps</title>
+      <link>javascript:alert(1)</link>
+    </item>
+    <item>
+      <title>Duplicate URL one</title>
+      <link>https://example.invalid/e/dup?x=1</link>
+    </item>
+    <item>
+      <title>Duplicate URL two</title>
+      <link>https://example.invalid/e/dup?x=2</link>
+    </item>
+    <item>
+      <title>First title</title>
+      <title>Second title is ignored</title>
+      <link>https://example.invalid/e/two-titles</link>
+    </item>
+  </channel>
+</rss>

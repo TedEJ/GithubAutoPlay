@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Invented Atom feed</title>
+  <entry>
+    <title>Invented entry</title>
+    <link href="https://example.invalid/atom/1"/>
+  </entry>
+</feed>
