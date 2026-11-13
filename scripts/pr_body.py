@@ -5,6 +5,7 @@
 Example:
     python3 scripts/pr_body.py --issue 42 --summary "Adds a start screen." \\
         --gates-passed --workload right --no-auto-merge \\
+        --reviewer-verdict ok --reviewer-summary "No must-fix findings." \\
         --owner-check "The start screen shows three buttons"
 
 Nothing is written to disk and nothing is sent anywhere. The script refuses
@@ -28,6 +29,8 @@ WORKLOAD = {
     "low": "Too low (should have been higher)",
     "high": "Too high (should have been lower)",
 }
+VERDICTS = {"ok": "OK", "must-fix": "Must fix"}
+DOCS_ONLY_VERDICT = "Not needed (documentation only)"
 TOKEN_PATTERN = re.compile(r"(github_pat_|gh[pousr]_)[A-Za-z0-9_]{10,}")
 
 
@@ -36,15 +39,29 @@ def box(checked, text):
 
 
 def build_body(issue, summary, closes=False, gates_passed=False,
-               workload=None, no_auto_merge=False, owner_checks=(), footer=""):
+               workload=None, no_auto_merge=False, owner_checks=(), footer="",
+               reviewer_verdict=None, reviewer_summary="", docs_only=False):
     """Return the pull request description as a string."""
     if issue < 1:
         raise ValueError("issue must be a positive number")
     if workload is not None and workload not in WORKLOAD:
         raise ValueError(f"workload must be one of {sorted(WORKLOAD)}")
-    for text in [summary, footer, *owner_checks]:
+    if reviewer_verdict is not None and reviewer_verdict not in VERDICTS:
+        raise ValueError(f"reviewer verdict must be one of {sorted(VERDICTS)}")
+    for text in [summary, footer, reviewer_summary, *owner_checks]:
         if TOKEN_PATTERN.search(text):
             raise ValueError("the text looks like it contains a GitHub token")
+
+    if reviewer_verdict is not None:
+        verdict = VERDICTS[reviewer_verdict]
+    elif docs_only:
+        verdict = DOCS_ONLY_VERDICT
+    else:
+        verdict = "pending"
+    reviewer = ["## Reviewer", f"Verdict: {verdict}"]
+    if reviewer_summary.strip():
+        reviewer += ["", reviewer_summary.strip()]
+    reviewer.append("")
 
     word = "Closes" if closes else "Refs"
     parts = [
@@ -68,6 +85,7 @@ def build_body(issue, summary, closes=False, gates_passed=False,
         "## Verification gates",
         *[box(gates_passed, gate) for gate in GATES],
         "",
+        *reviewer,
         "## Workload level",
         "Was the workload label on the issue right?",
         "",
@@ -95,14 +113,25 @@ def main(argv=None):
                         help="add the owner check section")
     parser.add_argument("--owner-check", action="append", default=[],
                         help="one owner check item (repeat for more)")
+    parser.add_argument("--reviewer-verdict", choices=sorted(VERDICTS),
+                        help="the Reviewer's verdict: ok or must-fix")
+    parser.add_argument("--reviewer-summary", default="",
+                        help="short summary of the Reviewer's findings")
+    parser.add_argument("--docs-only", action="store_true",
+                        help="documentation-only change: no Reviewer verdict needed")
     parser.add_argument("--footer", default="", help="text added at the very end")
     args = parser.parse_args(argv)
+    if args.reviewer_verdict is None and not args.docs_only:
+        print("pr_body.py: give --reviewer-verdict (ok or must-fix), or "
+              "--docs-only for a documentation-only change", file=sys.stderr)
+        return 2
     try:
         body = build_body(
             args.issue, args.summary, closes=args.closes,
             gates_passed=args.gates_passed, workload=args.workload,
             no_auto_merge=args.no_auto_merge, owner_checks=args.owner_check,
-            footer=args.footer,
+            footer=args.footer, reviewer_verdict=args.reviewer_verdict,
+            reviewer_summary=args.reviewer_summary, docs_only=args.docs_only,
         )
     except ValueError as error:
         print(f"pr_body.py: {error}", file=sys.stderr)
