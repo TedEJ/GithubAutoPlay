@@ -123,7 +123,7 @@ Every requirement is numbered and testable. "Build" means the Python program tha
 ### R6. The build (SVT and any other `fetchedBy: build` source)
 - R6.1 (hand, owner) Published variant only: the build runs every 30 minutes on a schedule, and by hand from the Actions tab. Local variant: the owner runs it by hand (R12.1).
 - R6.2 (auto py) Each source is fetched with a timeout of 15 seconds, one request per feed per build; redirects only within `allowedHosts`. On failure (network error, status other than 200, not RSS 2.0, zero items, redirect to another host) the build keeps the source's items from the previous `news.json` if they are less than 24 hours old, and records the status `error` and the time of the last success.
-- R6.3 (auto py) `news.json` has a `sources` list with, for each build source: `id`, `name`, `status` (`ok`, `error` or `blocked-by-robots`), `lastSuccess`, `itemCount`.
+- R6.3 (auto py) `news.json` has a `sources` list with, for each build source: `id`, `name`, `status` (`ok`, `error` or `blocked-by-robots`), `lastSuccess`, `itemCount`. A source that is not `ok` also has an optional string `message` that says why (present only when `status` is not `ok`): fixed text or the name of an exception class, never any feed content.
 - R6.4 (auto py) A failing source never fails the build. The build fails only if `sources.json` or `politics-keywords.json` is invalid.
 - R6.5 (auto py) The build sends `User-Agent: GithubAutoPlay-news-reader/1.0` and no cookies.
 - R6.6 (auto py) The build reads the host's `/robots.txt` once per run and does not fetch a path disallowed for its User-Agent (status `blocked-by-robots`). If robots.txt cannot be read, it does not fetch (status `error`).
@@ -414,7 +414,7 @@ Matching rules, defined so that Python and JavaScript give the same result:
   ]
 }
 ```
-The headline, URL and count are made up for illustration. A Sveriges Radio item in memory has the same seven fields.
+A source whose status is not `ok` has one more field, `message`, for example `{ "id": "svt", "name": "SVT", "status": "error", "lastSuccess": "2026-11-13T09:00:00Z", "itemCount": 3, "message": "fetch failed: timeout" }` (R6.3). The headline, URL and count are made up for illustration. A Sveriges Radio item in memory has the same seven fields.
 
 ## 8. Edge cases and failure modes
 
