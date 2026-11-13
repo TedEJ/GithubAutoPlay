@@ -14,7 +14,10 @@ the same results (see the README):
   - A local time that exists twice (the hour repeated when summer time ends,
     02:00-02:59 on the last Sunday of October) is read as the first
     occurrence, with the summer offset (+02:00), so 02:30 becomes 00:30Z.
-* Anything else, or an impossible date or time, gives None.
+* Anything else, an impossible date or time, or a year outside 1970 to 9998
+  (checked on the parsed text, before any conversion) gives None.
+* Text is never formatted with strftime (it does not zero-pad years below
+  1000 on every platform); every field is padded explicitly.
 """
 import re
 from datetime import datetime, timedelta, timezone
@@ -24,6 +27,7 @@ STOCKHOLM = ZoneInfo("Europe/Stockholm")
 UTC = timezone.utc
 MISSING_DISPLAY = "Tid saknas"
 FUTURE_LIMIT = timedelta(minutes=10)
+MIN_YEAR, MAX_YEAR = 1970, 9998
 
 _MONTHS = {m: i + 1 for i, m in enumerate(
     "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split())}
@@ -38,12 +42,12 @@ _ZONE_NAMES = {
 # ASCII digits only ([0-9], not \d), so JavaScript can use the same patterns.
 _RFC822 = re.compile(
     r"^(?:[A-Za-z]{3},[ ]+)?([0-9]{1,2})[ ]+([A-Za-z]{3})[ ]+([0-9]{4})[ ]+"
-    r"([0-9]{2}):([0-9]{2})(?::([0-9]{2}))?(?:[ ]+([A-Za-z]+|[+-][0-9]{4}))?$")
+    r"([0-9]{2}):([0-9]{2})(?::([0-9]{2}))?(?:[ ]+([A-Za-z]+|[+-][0-9]{4}))?\Z")
 _ISO = re.compile(
     r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2})(?::([0-9]{2}))?"
-    r"(?:\.[0-9]+)?(Z|z|[+-][0-9]{2}(?::?[0-9]{2})?)?$")
+    r"(?:\.[0-9]+)?(Z|z|[+-][0-9]{2}(?::?[0-9]{2})?)?\Z")
 _UTC_TEXT = re.compile(
-    r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z$")
+    r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z\Z")
 
 _WHITESPACE = " \t\n\r\f\v"  # same trimming set as the cleaning code, without U+00A0
 
@@ -61,6 +65,8 @@ def _offset(text):
 
 def _build(year, month, day, hour, minute, second, offset):
     """Naive fields plus an offset (timedelta) or None (Stockholm) -> UTC datetime."""
+    if not MIN_YEAR <= year <= MAX_YEAR:
+        raise ValueError("year")
     if second == 60 or hour > 23 or minute > 59 or second > 59:
         raise ValueError("time")
     naive = datetime(year, month, day, hour, minute, second)  # checks day/month/leap day
@@ -107,14 +113,16 @@ def parse_time(text):
             else:
                 offset = _offset(zone)
             return _build(int(year), int(month), int(day), int(hh), int(mm), int(ss or 0), offset)
-    except ValueError:
+    except (ValueError, OverflowError):
         return None
     return None
 
 
 def format_utc(moment):
     """Aware datetime -> `YYYY-MM-DDTHH:MM:SSZ` in UTC (R2.1)."""
-    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    m = moment.astimezone(UTC)
+    return "%04d-%02d-%02dT%02d:%02d:%02dZ" % (
+        m.year, m.month, m.day, m.hour, m.minute, m.second)
 
 
 def published_utc(text, now):
@@ -124,8 +132,13 @@ def published_utc(text, now):
     treated as missing; exactly 10 minutes ahead is kept.
     """
     moment = parse_time(text)
-    if moment is None or moment > now.astimezone(UTC) + FUTURE_LIMIT:
+    if moment is None:
         return None
+    try:
+        if moment > now.astimezone(UTC) + FUTURE_LIMIT:
+            return None
+    except OverflowError:
+        pass  # `now` is at the very end of the range: nothing is in the future
     return format_utc(moment)
 
 
@@ -136,8 +149,11 @@ def display_time(published):
     m = _UTC_TEXT.match(published)
     if not m:
         raise ValueError("not a UTC time: %r" % (published,))
-    moment = datetime(*map(int, m.groups()), tzinfo=UTC)
-    return moment.astimezone(STOCKHOLM).strftime("%Y-%m-%d %H:%M")
+    try:
+        m = datetime(*map(int, m.groups()), tzinfo=UTC).astimezone(STOCKHOLM)
+    except (ValueError, OverflowError):
+        raise ValueError("not a usable UTC time: %r" % (published,))
+    return "%04d-%02d-%02d %02d:%02d" % (m.year, m.month, m.day, m.hour, m.minute)
 
 
 def generated_at(now):

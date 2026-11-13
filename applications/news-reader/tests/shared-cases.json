@@ -889,6 +889,347 @@
         "published": null,
         "publishedDisplay": "Tid saknas"
       }
+    },
+    {
+      "id": "year-0001-z",
+      "input": {
+        "text": "0001-01-01T00:30:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0001-no-zone",
+      "input": {
+        "text": "0001-01-01T00:30:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0001-plus-offset",
+      "input": {
+        "text": "0001-01-01T00:30:00+01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0001-minus-offset",
+      "input": {
+        "text": "0001-12-31T23:59:59-01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0026-z",
+      "input": {
+        "text": "0026-01-01T00:30:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0026-no-zone",
+      "input": {
+        "text": "0026-01-01T00:30:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0026-plus-offset",
+      "input": {
+        "text": "0026-01-01T00:30:00+01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0026-minus-offset",
+      "input": {
+        "text": "0026-12-31T23:59:59-01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0999-z",
+      "input": {
+        "text": "0999-01-01T00:30:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0999-no-zone",
+      "input": {
+        "text": "0999-01-01T00:30:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0999-plus-offset",
+      "input": {
+        "text": "0999-01-01T00:30:00+01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0999-minus-offset",
+      "input": {
+        "text": "0999-12-31T23:59:59-01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-1969-z",
+      "input": {
+        "text": "1969-01-01T00:30:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-1969-no-zone",
+      "input": {
+        "text": "1969-01-01T00:30:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-1969-plus-offset",
+      "input": {
+        "text": "1969-01-01T00:30:00+01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-1969-minus-offset",
+      "input": {
+        "text": "1969-12-31T23:59:59-01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-9999-z",
+      "input": {
+        "text": "9999-01-01T00:30:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-9999-no-zone",
+      "input": {
+        "text": "9999-01-01T00:30:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-9999-plus-offset",
+      "input": {
+        "text": "9999-01-01T00:30:00+01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-9999-minus-offset",
+      "input": {
+        "text": "9999-12-31T23:59:59-01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-0026-rfc822",
+      "input": {
+        "text": "Mon, 01 Jan 0026 00:00:00 +0000",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-9999-rfc822",
+      "input": {
+        "text": "Fri, 31 Dec 9999 23:59:59 -0100",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "year-1970-z",
+      "input": {
+        "text": "1970-01-01T00:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "1970-01-01T00:00:00Z",
+        "publishedDisplay": "1970-01-01 01:00"
+      }
+    },
+    {
+      "id": "year-1970-no-zone",
+      "input": {
+        "text": "1970-01-01T00:30:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "1969-12-31T23:30:00Z",
+        "publishedDisplay": "1970-01-01 00:30"
+      }
+    },
+    {
+      "id": "year-1970-plus-offset-crosses-into-1969",
+      "input": {
+        "text": "1970-01-01T00:30:00+01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "1969-12-31T23:30:00Z",
+        "publishedDisplay": "1970-01-01 00:30"
+      }
+    },
+    {
+      "id": "year-1970-rfc822-gmt",
+      "input": {
+        "text": "Thu, 01 Jan 1970 00:00:00 GMT",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "1970-01-01T00:00:00Z",
+        "publishedDisplay": "1970-01-01 01:00"
+      }
+    },
+    {
+      "id": "year-9998-z",
+      "input": {
+        "text": "9998-12-31T23:59:59Z",
+        "now": "9999-01-01T12:00:00Z"
+      },
+      "expected": {
+        "published": "9998-12-31T23:59:59Z",
+        "publishedDisplay": "9999-01-01 00:59"
+      }
+    },
+    {
+      "id": "year-9998-minus-offset-crosses-into-9999",
+      "input": {
+        "text": "9998-12-31T23:59:59-01:00",
+        "now": "9999-01-01T12:00:00Z"
+      },
+      "expected": {
+        "published": "9999-01-01T00:59:59Z",
+        "publishedDisplay": "9999-01-01 01:59"
+      }
+    },
+    {
+      "id": "year-9998-no-zone",
+      "input": {
+        "text": "9998-12-31T23:30:00",
+        "now": "9999-01-01T12:00:00Z"
+      },
+      "expected": {
+        "published": "9998-12-31T22:30:00Z",
+        "publishedDisplay": "9998-12-31 23:30"
+      }
+    },
+    {
+      "id": "year-9998-rfc822",
+      "input": {
+        "text": "Thu, 31 Dec 9998 23:00:00 +0100",
+        "now": "9999-01-01T12:00:00Z"
+      },
+      "expected": {
+        "published": "9998-12-31T22:00:00Z",
+        "publishedDisplay": "9998-12-31 23:00"
+      }
+    },
+    {
+      "id": "year-1969-rfc822",
+      "input": {
+        "text": "Wed, 31 Dec 1969 23:59:59 GMT",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
     }
   ],
   "keywords": []
