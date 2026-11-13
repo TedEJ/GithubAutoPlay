@@ -111,25 +111,42 @@ class Keywords:
 
 
 def _reject_duplicate_keys(pairs):
-    keys = [k for k, _ in pairs]
-    if len(keys) != len(set(keys)):
-        raise KeywordsError("duplicate key in object")
+    seen = set()
+    for key, _ in pairs:
+        if key in seen:
+            raise KeywordsError(f"duplicate key in object: {key!r}")
+        seen.add(key)
     return dict(pairs)
 
 
-def _string_list(value, where):
+def _string_list(value, where, lowercase):
+    """Check a list of terms and return it.
+
+    `lowercase=True` (words, exclude words, exclude phrases): capitals are
+    accepted; each term is NFC-normalised and then lowercased, and duplicates are
+    found after that. `lowercase=False` (caseSensitive): terms must already be
+    NFC and are kept exactly as written.
+    """
     if not isinstance(value, list):
         raise KeywordsError(f"{where} must be a list")
+    result = []
     for item in value:
         if not isinstance(item, str):
             raise KeywordsError(f"{where} must hold only strings")
         if item == "" or item != item.strip():
             raise KeywordsError(f"{where}: empty term or term with surrounding white space: {item!r}")
-        if item != unicodedata.normalize("NFC", item):
+        nfc = unicodedata.normalize("NFC", item)
+        if lowercase:
+            item = nfc.lower()
+        elif nfc != item:
             raise KeywordsError(f"{where}: term is not NFC-normalised: {item!r}")
-    if len(set(value)) != len(value):
-        raise KeywordsError(f"{where} has duplicate terms")
-    return value
+        result.append(item)
+    seen = set()
+    for item in result:
+        if item in seen:
+            raise KeywordsError(f"{where}: duplicate term (after lowercasing): {item!r}")
+        seen.add(item)
+    return result
 
 
 def _check_keys(obj, allowed, where):
@@ -144,13 +161,14 @@ def _single_word(term, where):
     body = term[:-1] if term.endswith("*") else term
     if body == "" or split_words(body) != [body]:
         raise KeywordsError(f"{where}: not a single word (letters and digits, optional trailing *): {term!r}")
-    if body != body.lower():
-        raise KeywordsError(f"{where}: must be lower case: {term!r}")
     return body
 
 
 def validate_keywords(data):
     """Check the shape and rules of the parsed file and return a `Keywords`.
+
+    The term lists words, exclude.words and exclude.phrases may be written with
+    capitals (as in design 7.2); they are NFC-normalised and lowercased here.
 
     Raises `KeywordsError` for anything invalid.
     """
@@ -163,10 +181,10 @@ def validate_keywords(data):
     _check_keys(inc, ["words", "caseSensitive"], "include")
     _check_keys(exc, ["words", "phrases"], "exclude")
 
-    inc_words = _string_list(inc["words"], "include.words")
-    case_terms = _string_list(inc["caseSensitive"], "include.caseSensitive")
-    exc_words = _string_list(exc["words"], "exclude.words")
-    exc_phrases = _string_list(exc["phrases"], "exclude.phrases")
+    inc_words = _string_list(inc["words"], "include.words", True)
+    case_terms = _string_list(inc["caseSensitive"], "include.caseSensitive", False)
+    exc_words = _string_list(exc["words"], "exclude.words", True)
+    exc_phrases = _string_list(exc["phrases"], "exclude.phrases", True)
 
     if not inc_words and not case_terms:
         raise KeywordsError("the include lists are both empty")
@@ -185,8 +203,6 @@ def validate_keywords(data):
         if len(words) < 2 or " ".join(words) != phrase:
             raise KeywordsError(
                 f"exclude.phrases: two or more words separated by single spaces, no other characters: {phrase!r}")
-        if phrase != phrase.lower():
-            raise KeywordsError(f"exclude.phrases: must be lower case: {phrase!r}")
         phrases.append(tuple(words))
     for term in case_terms:
         if term == term.lower() and term == term.upper():

@@ -56,6 +56,60 @@ def test_too_broad_terms_are_not_include_terms():
         assert term not in RAW["include"]["words"]
 
 
+DESIGN_7_2_SPELLING = {
+    "version": 1,
+    "category": "politics-sweden",
+    "include": {
+        "words": ["riksdag*", "regering*", "statsminister*", "partiledar*",
+                  "talman*", "oppositionsledar*", "Rosenbad", "budgetproposition*",
+                  "riksdagsval*", "Socialdemokrat*", "Moderat*", "Sverigedemokrat*",
+                  "Centerpartiet", "Vänsterpartiet", "Kristdemokrat*", "Liberalerna",
+                  "Miljöpartiet"],
+        "caseSensitive": ["(S)", "(M)", "(SD)", "(C)", "(V)", "(KD)", "(L)", "(MP)"],
+    },
+    "exclude": {
+        "words": ["Moderat", "MODERATA"],
+        "phrases": [p.title() for p in RAW["exclude"]["phrases"]],
+    },
+}
+
+
+def test_file_spelled_with_capitals_as_in_the_design_loads_the_same():
+    assert load_keywords_from(DESIGN_7_2_SPELLING) == load_keywords()
+
+
+def test_capitalised_file_gives_identical_matching(keywords):
+    other = load_keywords_from(DESIGN_7_2_SPELLING)
+    for case in CASES:
+        inp = case["input"]
+        assert other.matches(inp["headline"], inp.get("description")) is \
+            keywords.matches(inp["headline"], inp.get("description"))
+
+
+def test_case_sensitive_terms_keep_their_case():
+    data = copy.deepcopy(DESIGN_7_2_SPELLING)
+    data["include"]["caseSensitive"] = ["(SD)", "(Xy)"]
+    kw = load_keywords_from(data)
+    assert kw.case_sensitive == ("(SD)", "(Xy)")
+    assert kw.matches("Kalle (Xy) svarar") and not kw.matches("Kalle (xy) svarar")
+
+
+def test_duplicate_error_names_the_term():
+    with pytest.raises(KeywordsError, match="riksdag"):
+        validate_keywords(_with(["include", "words"], ["riksdag*", "Riksdag*"]))
+
+
+def test_duplicate_json_key_error_names_the_key(tmp_path):
+    path = tmp_path / "k.json"
+    path.write_text('{"version": 1, "version": 1}', encoding="utf-8")
+    with pytest.raises(KeywordsError, match="version"):
+        load_keywords(path)
+
+
+def load_keywords_from(data):
+    return validate_keywords(data)
+
+
 def test_file_terms_are_lower_case_except_case_sensitive_ones():
     for term in RAW["include"]["words"] + RAW["exclude"]["words"] + RAW["exclude"]["phrases"]:
         assert term == term.lower()
@@ -86,14 +140,17 @@ INVALID = {
     "word-not-string": _with(["include", "words"], ["riksdag*", 5]),
     "word-empty": _with(["include", "words"], ["riksdag*", ""]),
     "word-only-wildcard": _with(["include", "words"], ["*"]),
-    "word-upper-case": _with(["include", "words"], ["Riksdag*"]),
     "word-surrounding-space": _with(["include", "words"], ["riksdag* "]),
     "word-two-words": _with(["include", "words"], ["ny riksdag"]),
     "word-hyphen": _with(["include", "words"], ["riks-dag"]),
     "word-wildcard-in-the-middle": _with(["include", "words"], ["riks*dag"]),
     "word-double-wildcard": _with(["include", "words"], ["riksdag**"]),
     "word-duplicate": _with(["include", "words"], ["riksdag*", "riksdag*"]),
-    "word-not-nfc": _with(["include", "words"], ["vänsterpartiet"]),
+    "word-capitalised-duplicate": _with(["include", "words"], ["riksdag*", "Riksdag*"]),
+    "word-nfd-duplicate": _with(["include", "words"], ["vänsterpartiet", "va\u0308nsterpartiet"]),
+    "exclude-word-capitalised-duplicate": _with(["exclude", "words"], ["moderat", "Moderat"]),
+    "exclude-phrase-capitalised-duplicate": _with(["exclude", "phrases"], ["tyska regeringen", "Tyska Regeringen"]),
+    "case-sensitive-not-nfc": _with(["include", "caseSensitive"], ["(S)", "(A\u030a)"]),
     "case-sensitive-empty-term": _with(["include", "caseSensitive"], ["(S)", ""]),
     "case-sensitive-duplicate": _with(["include", "caseSensitive"], ["(S)", "(S)"]),
     "case-sensitive-without-letters": _with(["include", "caseSensitive"], ["()"]),
@@ -101,11 +158,9 @@ INVALID = {
     "include-all-empty": {**RAW, "include": {"words": [], "caseSensitive": []}},
     "exclude-word-empty": _with(["exclude", "words"], [""]),
     "exclude-word-wildcard": _with(["exclude", "words"], ["moderat*"]),
-    "exclude-word-upper-case": _with(["exclude", "words"], ["Moderat"]),
     "exclude-word-duplicate": _with(["exclude", "words"], ["moderat", "moderat"]),
     "exclude-phrase-empty": _with(["exclude", "phrases"], [""]),
     "exclude-phrase-one-word": _with(["exclude", "phrases"], ["regeringen"]),
-    "exclude-phrase-upper-case": _with(["exclude", "phrases"], ["Tyska regeringen"]),
     "exclude-phrase-double-space": _with(["exclude", "phrases"], ["tyska  regeringen"]),
     "exclude-phrase-punctuation": _with(["exclude", "phrases"], ["tyska, regeringen"]),
     "exclude-phrase-duplicate": _with(["exclude", "phrases"], ["tyska regeringen", "tyska regeringen"]),
