@@ -1232,5 +1232,1504 @@
       }
     }
   ],
-  "keywords": []
+  "keywords": [
+    {
+      "id": "include-riksdag-exact",
+      "input": {
+        "headline": "Riksdag"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-riksdagen-wildcard",
+      "input": {
+        "headline": "Nya regler klubbas i riksdagen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-riksdagsledamot-compound",
+      "input": {
+        "headline": "Riksdagsledamot lämnar uppdraget"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-regeringen",
+      "input": {
+        "headline": "Regeringen presenterar nytt förslag"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-regeringsskifte",
+      "input": {
+        "headline": "Efter regeringsskiftet väntar förändringar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-statsminister",
+      "input": {
+        "headline": "Statsministern öppnar partiets möte"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-statsministerkandidat",
+      "input": {
+        "headline": "Ny statsministerkandidat utsedd"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-partiledare",
+      "input": {
+        "headline": "Partiledaren svarar på kritiken"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-partiledardebatt",
+      "input": {
+        "headline": "Partiledardebatten sänds ikväll"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-talman",
+      "input": {
+        "headline": "Talmannen kallar till sammanträde"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-oppositionsledare",
+      "input": {
+        "headline": "Oppositionsledaren kräver svar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-rosenbad",
+      "input": {
+        "headline": "Möte på Rosenbad i dag"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-rosenbad-compound-is-not-whole-word",
+      "input": {
+        "headline": "Rosenbadet stängs för renovering"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "include-budgetproposition",
+      "input": {
+        "headline": "Budgetpropositionen lämnas i september"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "include-riksdagsval",
+      "input": {
+        "headline": "Inför riksdagsvalet 2026"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-socialdemokraterna",
+      "input": {
+        "headline": "Socialdemokraterna vill höja bidraget"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-socialdemokrat",
+      "input": {
+        "headline": "En socialdemokrat blir ny ordförande"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-moderaterna",
+      "input": {
+        "headline": "Moderaterna presenterar skatteförslag"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-moderatledaren",
+      "input": {
+        "headline": "Moderatledaren talar i Almedalen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-sverigedemokraterna",
+      "input": {
+        "headline": "Sverigedemokraterna går framåt i mätning"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-centerpartiet",
+      "input": {
+        "headline": "Centerpartiet väljer ny ledning"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-centerpartiets-is-not-whole-word",
+      "input": {
+        "headline": "Centerpartiets stämma börjar"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "party-vansterpartiet",
+      "input": {
+        "headline": "Vänsterpartiet kräver ändring"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-kristdemokraterna",
+      "input": {
+        "headline": "Kristdemokraterna lägger fram motion"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-kristdemokrat",
+      "input": {
+        "headline": "Kristdemokrat vald till ordförande"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-liberalerna",
+      "input": {
+        "headline": "Liberalerna överväger sin hållning"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-miljopartiet",
+      "input": {
+        "headline": "Miljöpartiet föreslår ny klimatplan"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-miljopartiet-uppercase-swedish-letters",
+      "input": {
+        "headline": "MILJÖPARTIET OCH VÄNSTERPARTIET ÖVERENS"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "party-liberal-alone-no-match",
+      "input": {
+        "headline": "En liberal syn på handel"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "abbr-s",
+      "input": {
+        "headline": "Lena Svensson (S) kritiserar förslaget"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-m",
+      "input": {
+        "headline": "Kalle Persson (M) vill sänka skatten"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-sd",
+      "input": {
+        "headline": "Anna Berg (SD) nobbar överenskommelsen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-c",
+      "input": {
+        "headline": "Eva Lind (C) lämnar posten"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-v",
+      "input": {
+        "headline": "Olle Dahl (V) går till val på bostadsfrågan"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-kd",
+      "input": {
+        "headline": "Sara Holm (KD) svarar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-l",
+      "input": {
+        "headline": "Johan Ek (L) vill ha nya regler"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-mp",
+      "input": {
+        "headline": "Maja Strand (MP) hotar att lämna"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-at-start",
+      "input": {
+        "headline": "(SD) kräver förändring"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-at-end",
+      "input": {
+        "headline": "Kritik mot förslaget från (KD)"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-alone",
+      "input": {
+        "headline": "(V)"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-lowercase-no-match",
+      "input": {
+        "headline": "Anna Berg (sd) skriver"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "abbr-mixed-case-no-match",
+      "input": {
+        "headline": "Anna Berg (Sd) skriver"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "abbr-without-brackets-no-match",
+      "input": {
+        "headline": "SD och M är bokstäver"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "abbr-square-brackets-no-match",
+      "input": {
+        "headline": "Anna Berg [SD] skriver"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "abbr-unknown-no-match",
+      "input": {
+        "headline": "Anna Berg (X) skriver"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "abbr-in-description",
+      "input": {
+        "headline": "Ny intervju",
+        "description": "Anna Berg (SD) svarar på frågor"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "abbr-not-removed-by-exclude-phrase",
+      "input": {
+        "headline": "Tyska regeringen kritiseras av Eva Lind (C)"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "case-uppercase-term",
+      "input": {
+        "headline": "RIKSDAGEN SAMLAS"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "case-lowercase-text",
+      "input": {
+        "headline": "riksdagen samlas"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "case-mixed",
+      "input": {
+        "headline": "rIkSdAgEn samlas"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "case-capitalised-swedish-term",
+      "input": {
+        "headline": "Vänsterpartiet"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-term-at-start",
+      "input": {
+        "headline": "Riksdagen röstar ja"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-term-at-end",
+      "input": {
+        "headline": "Beslut fattades i riksdagen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-only-term",
+      "input": {
+        "headline": "Regeringen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-punctuation-around",
+      "input": {
+        "headline": "\"Riksdagen\", sa hon."
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-comma-after",
+      "input": {
+        "headline": "Riksdagen, regeringen och domstolarna"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-hyphenated-compound-not-split",
+      "input": {
+        "headline": "Riksdagsledamot-kandidat"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-hyphen-before-term",
+      "input": {
+        "headline": "EU-riksdag är inte svensk"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-prefix-inside-word-no-match",
+      "input": {
+        "headline": "Vårdriksdagen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "boundary-suffix-inside-word-no-match",
+      "input": {
+        "headline": "Domstolsregering"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "boundary-exact-term-not-prefix-of-longer",
+      "input": {
+        "headline": "Rosenbadsmötet"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "boundary-swedish-letter-after-term",
+      "input": {
+        "headline": "Riksdagå är inget ord"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-swedish-letter-before-exact-term-no-match",
+      "input": {
+        "headline": "Ärosenbad"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "boundary-swedish-letter-after-exact-term-no-match",
+      "input": {
+        "headline": "Rosenbadö"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "boundary-swedish-letter-before-wildcard-term-no-match",
+      "input": {
+        "headline": "Åriksdag"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "boundary-swedish-letters-in-term",
+      "input": {
+        "headline": "Miljöpartiet"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-swedish-letters-exact-term-longer-no-match",
+      "input": {
+        "headline": "Miljöpartiets"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "boundary-digit-after-term-wildcard",
+      "input": {
+        "headline": "Riksdag2026 planeras"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-digit-before-exact-term-no-match",
+      "input": {
+        "headline": "2Rosenbad"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "boundary-underscore-splits-words",
+      "input": {
+        "headline": "kris_rosenbad_mote"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-slash-splits-words",
+      "input": {
+        "headline": "Gäster/Rosenbad"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-accented-letter-next-to-term-no-match",
+      "input": {
+        "headline": "Rosenbadé"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "boundary-combining-form-nfd-matches",
+      "input": {
+        "headline": "Vänsterpartiet"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "boundary-nfd-letters-nfc-equal",
+      "input": {
+        "headline": "Miljöpartiet"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "no-match-plain",
+      "input": {
+        "headline": "Vädret blir soligt i helgen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "no-match-minister-alone",
+      "input": {
+        "headline": "Ministern besökte skolan"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "no-match-minister-word",
+      "input": {
+        "headline": "Ny minister utsedd"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "no-match-val-alone",
+      "input": {
+        "headline": "Valet av ny rektor"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "no-match-parti-alone",
+      "input": {
+        "headline": "Parti i trädgården"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "no-match-foreign-government-is-excluded",
+      "input": {
+        "headline": "Franska regeringen faller"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "no-match-empty-headline",
+      "input": {
+        "headline": ""
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "no-match-whitespace-headline",
+      "input": {
+        "headline": "   \t "
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "no-match-only-punctuation",
+      "input": {
+        "headline": "(( )) -- ..."
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-word-moderat-alone",
+      "input": {
+        "headline": "En moderat ton i debatten"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-word-moderata-alone",
+      "input": {
+        "headline": "Moderata förslag ger ro"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-word-moderat-capitalised",
+      "input": {
+        "headline": "Moderat kritik från alla håll"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-word-moderat-uppercase",
+      "input": {
+        "headline": "MODERAT TILLVÄXT"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-word-moderata-samlingspartiet-not-matched",
+      "input": {
+        "headline": "Moderata samlingspartiet"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-word-moderaterna-still-matches",
+      "input": {
+        "headline": "Moderaterna vill ha ny politik"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-word-moderatledaren-still-matches",
+      "input": {
+        "headline": "Moderatledaren svarar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-word-moderat-with-other-hit",
+      "input": {
+        "headline": "Moderat kritik mot riksdagen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-word-moderat-in-description-only",
+      "input": {
+        "headline": "Ny rapport om tillväxt",
+        "description": "Rapporten ger en moderat prognos"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-word-moderat-hyphen-splits",
+      "input": {
+        "headline": "Moderat-ledaren"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-word-moderat-next-to-abbreviation",
+      "input": {
+        "headline": "En moderat åsikt från Kalle Persson (M)"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-word-moderat-then-moderaterna",
+      "input": {
+        "headline": "Moderat kritik men Moderaterna svarar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-tyska-alone",
+      "input": {
+        "headline": "Tyska regeringen sänker skatten"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-amerikanska",
+      "input": {
+        "headline": "Amerikanska regeringen stänger myndigheter"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-brittiska",
+      "input": {
+        "headline": "Brittiska regeringen presenterar budget"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-danska",
+      "input": {
+        "headline": "Danska regeringen skärper gränskontroll"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-finska",
+      "input": {
+        "headline": "Finska regeringen sammanträder"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-franska",
+      "input": {
+        "headline": "Franska regeringen faller efter misstroendevotum"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-israeliska",
+      "input": {
+        "headline": "Israeliska regeringen möts"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-kinesiska",
+      "input": {
+        "headline": "Kinesiska regeringen svarar"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-norska",
+      "input": {
+        "headline": "Norska regeringen lägger fram budget"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-ryska",
+      "input": {
+        "headline": "Ryska regeringen kritiseras"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-ukrainska",
+      "input": {
+        "headline": "Ukrainska regeringen ber om hjälp"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-with-riksdag-still-matches",
+      "input": {
+        "headline": "Tyska regeringen kritiserar riksdagen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-with-riksdag-first-still-matches",
+      "input": {
+        "headline": "Riksdagen granskar tyska regeringen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-case-insensitive",
+      "input": {
+        "headline": "TYSKA REGERINGEN SÄNKER SKATTEN"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-in-the-middle",
+      "input": {
+        "headline": "I dag säger tyska regeringen nej"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-at-end",
+      "input": {
+        "headline": "Kritik mot den tyska regeringen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-with-extra-spaces-and-tags",
+      "input": {
+        "headline": "Tyska   <b>regeringen</b> sänker"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-with-comma-between-words-still-a-phrase",
+      "input": {
+        "headline": "Tyska, regeringen sänker"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-twice-without-other-hit",
+      "input": {
+        "headline": "Tyska regeringen och franska regeringen träffas"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-and-plain-regeringen",
+      "input": {
+        "headline": "Tyska regeringen och regeringen träffas"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-words-apart-no-removal",
+      "input": {
+        "headline": "Tyska och spanska regeringen träffas"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-reversed-order-no-removal",
+      "input": {
+        "headline": "Regeringen tyska sänker"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-longer-first-word-no-removal",
+      "input": {
+        "headline": "Tyskarna regeringen sänker"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-inside-longer-word-no-removal",
+      "input": {
+        "headline": "Antityska regeringen sänker"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-last-word-longer-still-matches",
+      "input": {
+        "headline": "Tyska regeringens plan"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-other-country-not-listed-matches",
+      "input": {
+        "headline": "Spanska regeringen sammanträder"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-overlap-include-term-inside-phrase",
+      "input": {
+        "headline": "Danska regeringen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-overlap-adjacent-phrases",
+      "input": {
+        "headline": "Tyska regeringen franska regeringen norska regeringen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-overlap-sharing-no-words-then-hit",
+      "input": {
+        "headline": "Tyska regeringen riksdagen franska regeringen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-in-description-only",
+      "input": {
+        "headline": "Ny analys",
+        "description": "Tyska regeringen sänker skatten"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-in-headline-hit-in-description",
+      "input": {
+        "headline": "Tyska regeringen sänker skatten",
+        "description": "Riksdagen debatterar frågan"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-in-description-hit-in-headline",
+      "input": {
+        "headline": "Riksdagen debatterar frågan",
+        "description": "Tyska regeringen sänker skatten"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-does-not-cross-headline-and-description",
+      "input": {
+        "headline": "Tyska",
+        "description": "regeringen sänker skatten"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "exclude-phrase-with-moderat-exclude-word",
+      "input": {
+        "headline": "Tyska regeringen vill ha moderat tillväxt"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "exclude-phrase-with-moderaterna",
+      "input": {
+        "headline": "Tyska regeringen kritiseras av Moderaterna"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "description-only-match",
+      "input": {
+        "headline": "Ny rapport publicerad",
+        "description": "Rapporten diskuteras i riksdagen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "description-no-match",
+      "input": {
+        "headline": "Ny rapport publicerad",
+        "description": "Rapporten handlar om väder"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "description-null",
+      "input": {
+        "headline": "Ny rapport publicerad",
+        "description": null
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "description-null-headline-match",
+      "input": {
+        "headline": "Riksdagen röstar",
+        "description": null
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "description-absent-headline-match",
+      "input": {
+        "headline": "Riksdagen röstar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "description-empty-string",
+      "input": {
+        "headline": "Ny rapport publicerad",
+        "description": ""
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "description-whitespace-only",
+      "input": {
+        "headline": "Ny rapport publicerad",
+        "description": "  \n "
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "description-with-tags-and-entities",
+      "input": {
+        "headline": "Ny rapport",
+        "description": "<p>Debatt i <b>riksdagen</b> &amp; mer</p>"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "description-tag-hides-term",
+      "input": {
+        "headline": "Ny rapport",
+        "description": "<riksdagen>text</riksdagen>"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "description-entity-decoded-before-match",
+      "input": {
+        "headline": "Ny rapport",
+        "description": "Beslut om Milj&ouml;partiet"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "description-entity-abbreviation",
+      "input": {
+        "headline": "Ny rapport",
+        "description": "Anna Berg (SD) svarar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "description-numeric-entity-brackets",
+      "input": {
+        "headline": "Intervju",
+        "description": "Anna Berg &#40;SD&#41; svarar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "description-long-with-hit-at-end",
+      "input": {
+        "headline": "Rapport",
+        "description": "Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord riksdagen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "description-long-without-hit",
+      "input": {
+        "headline": "Rapport",
+        "description": "Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord Ord "
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "description-both-match",
+      "input": {
+        "headline": "Riksdagen",
+        "description": "Regeringen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "description-empty-headline-description-match",
+      "input": {
+        "headline": "",
+        "description": "Statsministern talar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "headline-empty-description-empty",
+      "input": {
+        "headline": "",
+        "description": ""
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "cleaning-tags-in-headline",
+      "input": {
+        "headline": "<b>Riksdagen</b> röstar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "cleaning-tag-splits-word-removed",
+      "input": {
+        "headline": "Riks<b>dagen</b> röstar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "cleaning-entity-amp-neighbour",
+      "input": {
+        "headline": "Skatt&amp;riksdagen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "cleaning-entity-swedish-letter",
+      "input": {
+        "headline": "V&auml;nsterpartiet"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "cleaning-whitespace-runs",
+      "input": {
+        "headline": "Tyska \n\t regeringen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "cleaning-nbsp-between-phrase-words",
+      "input": {
+        "headline": "Tyska regeringen sänker"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "cleaning-nbsp-entity-between-phrase-words",
+      "input": {
+        "headline": "Tyska&nbsp;regeringen sänker"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "cleaning-other-unicode-space-splits-words-too",
+      "input": {
+        "headline": "Tyska regeringen sänker"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "unicode-non-latin-text-no-match",
+      "input": {
+        "headline": "Правительство и риксдаг"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "unicode-emoji-around-term",
+      "input": {
+        "headline": "🏛 riksdagen 🏛"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "unicode-digits-only-no-match",
+      "input": {
+        "headline": "2026 2027 12345"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "unicode-arabic-indic-digit-is-a-word-character",
+      "input": {
+        "headline": "riksdag٣"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "unicode-arabic-indic-digit-before-exact-term-no-match",
+      "input": {
+        "headline": "٣rosenbad"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "unicode-fullwidth-letter-is-a-word-character",
+      "input": {
+        "headline": "rosenbadＡ"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "unicode-long-text-many-words",
+      "input": {
+        "headline": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word rosenbad"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "unicode-long-text-without-hit",
+      "input": {
+        "headline": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word "
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "unicode-dotted-capital-i-lowercase",
+      "input": {
+        "headline": "İ riksdagen"
+      },
+      "expected": {
+        "match": true
+      }
+    }
+  ]
 }

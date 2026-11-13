@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "category": "politics-sweden",
+  "include": {
+    "words": [
+      "riksdag*",
+      "regering*",
+      "statsminister*",
+      "partiledar*",
+      "talman*",
+      "oppositionsledar*",
+      "rosenbad",
+      "budgetproposition*",
+      "riksdagsval*",
+      "socialdemokrat*",
+      "moderat*",
+      "sverigedemokrat*",
+      "centerpartiet",
+      "vänsterpartiet",
+      "kristdemokrat*",
+      "liberalerna",
+      "miljöpartiet"
+    ],
+    "caseSensitive": ["(S)", "(M)", "(SD)", "(C)", "(V)", "(KD)", "(L)", "(MP)"]
+  },
+  "exclude": {
+    "words": ["moderat", "moderata"],
+    "phrases": [
+      "amerikanska regeringen",
+      "brittiska regeringen",
+      "danska regeringen",
+      "finska regeringen",
+      "franska regeringen",
+      "israeliska regeringen",
+      "kinesiska regeringen",
+      "norska regeringen",
+      "ryska regeringen",
+      "tyska regeringen",
+      "ukrainska regeringen"
+    ]
+  }
+}
