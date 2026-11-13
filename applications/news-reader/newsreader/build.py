@@ -29,7 +29,7 @@ from .keywords import KeywordsError, load_keywords
 from .model import NewsItem
 from .parse import FeedError, parse_rss
 from .robots import is_allowed, robots_url, url_path
-from .select import MAX_ITEMS, check_url, item_id, select_items
+from .select import MAX_AGE, MAX_ITEMS, check_url, item_id, select_items
 from .timeutil import UTC, display_time, generated_at, generated_at_display, parse_time
 
 APP_ROOT = Path(__file__).resolve().parent.parent
@@ -39,6 +39,10 @@ FALLBACK_LIMIT = timedelta(hours=24)  # R6.2
 METHODS = ("feed", "categoryFilter", "keywordFilter")
 FETCHED_BY = ("build", "browser")
 ITEM_FIELDS = ("id", "sourceId", "sourceName", "title", "url", "published", "publishedDisplay")
+
+
+class EmptyFeed(FeedError):
+    """The feed parsed but holds no items (R6.2: a failed fetch)."""
 
 
 class BuildError(Exception):
@@ -150,9 +154,12 @@ def _previous_success(entry):
     return parse_time(text) if isinstance(text, str) else None
 
 
-def _previous_items(previous, source):
-    """Valid previous items of this source, rebuilt with the current rules."""
+def _previous_items(previous, source, now):
+    """Valid previous items of this source, rebuilt with the current rules.
+
+    Items older than 7 days before `now` are dropped (R5.2), as in a fresh build."""
     items = []
+    cutoff = now.astimezone(UTC) - MAX_AGE
     for raw in previous["items"]:
         if not isinstance(raw, dict) or set(raw) != set(ITEM_FIELDS) or raw["sourceId"] != source["id"]:
             continue
@@ -163,7 +170,8 @@ def _previous_items(previous, source):
         if normalised is None:
             continue
         if published is not None:
-            if not isinstance(published, str) or parse_time(published) is None:
+            moment = parse_time(published) if isinstance(published, str) else None
+            if moment is None or moment < cutoff:
                 continue
         try:
             shown = display_time(published)
@@ -196,7 +204,7 @@ class _Robots:
 
     def _read(self, url, allowed_hosts):
         try:
-            return self.fetch(url, allowed_hosts).decode("utf-8")
+            return self.fetch(url, allowed_hosts).decode("utf-8-sig")  # a byte order mark is dropped
         except FetchError as exc:
             if exc.kind == "status" and exc.status is not None and 400 <= exc.status < 500 and exc.status != 429:
                 return ""
@@ -230,7 +238,7 @@ def _fetch_and_select(source, keywords, now, fetch):
         raise FetchError("network", "fetch failed (%s)" % type(exc).__name__) from exc
     entries = parse_rss(body)
     if not entries:
-        raise FeedError("the feed has no items")
+        raise EmptyFeed("the feed has no items")
     return select_items(entries, source, keywords, now)
 
 
@@ -256,10 +264,14 @@ def build_source(source, keywords, now, fetch, robots, previous):
             items = _fetch_and_select(source, keywords, now, fetch)
         except FetchError as exc:
             status, message = "error", "fetch failed: %s" % exc
-        except FeedError as exc:
-            status, message = "error", "feed not usable: %s" % exc
-        except ValueError as exc:  # select_items: unsupported method, such as categoryFilter
-            status, message = "error", "selection failed: %s" % exc
+        except EmptyFeed:
+            status, message = "error", "feed not usable: it has no items"
+        except FeedError:
+            # No detail from the parser: its text may quote the feed.
+            status, message = "error", "feed not usable (FeedError)"
+        except ValueError:  # select_items: unsupported method, such as categoryFilter
+            method = source["politics-sweden"]["method"]
+            status, message = "error", "selection failed (ValueError), politics method %s" % method
 
     if status == "ok":
         entry = {"id": source["id"], "name": source["name"], "status": "ok",
@@ -270,7 +282,7 @@ def build_source(source, keywords, now, fetch, robots, previous):
     if status == "error" and last_success is not None:
         age = now.astimezone(UTC) - last_success
         if timedelta(0) <= age < FALLBACK_LIMIT:  # R6.2: only items under 24 hours old
-            items = _previous_items(previous, source)
+            items = _previous_items(previous, source, now)
     entry = {"id": source["id"], "name": source["name"], "status": status,
              "lastSuccess": last_text, "itemCount": len(items), "message": message}
     return entry, items
@@ -279,13 +291,68 @@ def build_source(source, keywords, now, fetch, robots, previous):
 # ---------------------------------------------------------------------------
 # output
 
+SITE_SKIP_NAMES = ("__pycache__", "node_modules")
+
+
+def _same(a, b):
+    """True if two existing paths are the same file or folder (also across case and links)."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
 def _check_output_folder(out, root):
-    out, root = Path(out).resolve(), Path(root).resolve()
-    site = root / "site"
-    if out == root or out == site or site in out.parents or out in root.parents:
+    out, root = Path(out), Path(root)
+    if out.is_symlink():
+        raise BuildError("the output folder %s is a symbolic link" % out)
+    if out.exists():
+        if not out.is_dir():
+            raise BuildError("the output folder %s is not a folder" % out)
+        site = root / "site"
+        overlaps = (
+            _same(out, root)
+            or any(_same(site, q) for q in [out, *out.resolve().parents])  # out is or lies in site/
+            or any(_same(out, q) for q in root.resolve().parents)          # out holds the project
+        )
+        if overlaps:
+            raise BuildError("the output folder %s overlaps the project folder" % out)
+    # A folder that does not exist yet is created later; compare the resolved text as well.
+    resolved_out, resolved_root = out.resolve(), root.resolve()
+    resolved_site = resolved_root / "site"
+    if resolved_out in (resolved_root, resolved_site) or resolved_site in resolved_out.parents \
+            or resolved_out in resolved_root.parents:
         raise BuildError("the output folder %s overlaps the project folder" % out)
-    if out.exists() and not out.is_dir():
-        raise BuildError("the output folder %s is not a folder" % out)
+
+
+def _planned_files(root):
+    """(source file, path relative to the output folder) for everything that is copied.
+
+    The content of `site/` (without its `tests` folder, `__pycache__` and
+    `node_modules`), `sources.json` and `politics-keywords.json`."""
+    plan = []
+    site = root / "site"
+    if site.is_dir():
+        for path in sorted(site.rglob("*")):
+            relative = path.relative_to(site)
+            if not path.is_file() or relative.parts[0] == "tests" or any(
+                    part in SITE_SKIP_NAMES for part in relative.parts):
+                continue
+            plan.append((path, relative))
+    for name in ("sources.json", "politics-keywords.json"):
+        plan.append((root / name, Path(name)))
+    return plan
+
+
+def _check_targets(out, relatives):
+    """Refuse to write through a symbolic link: no target, and no folder on the way, may be one."""
+    for relative in relatives:
+        target = out / relative
+        if target.is_symlink():
+            raise BuildError("refusing to write through the symbolic link %s" % target)
+        for parent in relative.parents:
+            if (out / parent).is_symlink():
+                raise BuildError("refusing to write through the symbolic link %s" % (out / parent))
 
 
 def _write_json(path, document):
@@ -343,12 +410,12 @@ def build(out, now, fetch, previous_path=None, root=APP_ROOT, user_agent=None):
     }
     _check_document(document, sources)
 
+    plan = _planned_files(root)
+    _check_targets(out, [Path("news.json"), Path("news.json.tmp")] + [rel for _, rel in plan])
     out.mkdir(parents=True, exist_ok=True)
     _write_json(out / "news.json", document)
-    site = root / "site"
-    if site.is_dir():
-        shutil.copytree(site, out, dirs_exist_ok=True,
-                        ignore=shutil.ignore_patterns("__pycache__", "node_modules"))
-    for name in ("sources.json", "politics-keywords.json"):
-        shutil.copyfile(root / name, out / name)
+    for source_file, relative in plan:
+        target = out / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source_file, target)
     return document

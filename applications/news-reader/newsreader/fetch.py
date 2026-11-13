@@ -1,11 +1,13 @@
 """The only network module of the build (R6.2, R6.5, R9.4).
 
 Standard library only (`urllib`). One call fetches one URL and returns the
-undecoded body as bytes, or raises `FetchError`. Rules:
+undecoded body as bytes, or raises `FetchError`, whatever goes wrong inside (an invalid address, a
+broken connection and an incomplete body included). Rules:
 
 * `User-Agent: GithubAutoPlay-news-reader/1.0`, no cookies (no cookie handler
   is installed, and no `Cookie` header is sent).
-* Timeout of 15 seconds per request.
+* Timeout of 15 seconds per network operation, and 60 seconds in total for the
+  whole download (checked while reading).
 * Redirects are followed only to `https` addresses on the source's
   `allowedHosts` (or a subdomain of one); any other redirect is an error.
 * The body is read in chunks and the download stops as soon as it is larger
@@ -16,6 +18,8 @@ undecoded body as bytes, or raises `FetchError`. Rules:
 The build calls `fetch_url` through an injected function, so every test uses a
 fake with the same signature and never touches the network.
 """
+import http.client
+import time
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
@@ -24,6 +28,7 @@ from .parse import MAX_RESPONSE_BYTES
 
 USER_AGENT = "GithubAutoPlay-news-reader/1.0"
 TIMEOUT_SECONDS = 15
+TOTAL_SECONDS = 60  # for the whole request including the download
 CHUNK_BYTES = 64 * 1024
 
 
@@ -60,17 +65,20 @@ def make_opener(allowed_hosts):
     return urllib.request.build_opener(_AllowedHostsRedirects(allowed_hosts))
 
 
-def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONSE_BYTES, opener=None):
+def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONSE_BYTES, opener=None,
+              total_seconds=TOTAL_SECONDS, clock=time.monotonic):
     """GET `url` and return the body as bytes (see the module text).
 
-    `opener` is for tests: any object with `open(request, timeout=...)`.
+    `opener` and `clock` are for tests: any object with `open(request, timeout=...)`,
+    and a function that returns seconds.
     """
     if not host_allowed(url, allowed_hosts):
         raise FetchError("redirect", "the address is not an https address on an allowed host")
     if opener is None:
         opener = make_opener(allowed_hosts)
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT}, method="GET")
+    deadline = clock() + total_seconds
     try:
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT}, method="GET")
         response = opener.open(request, timeout=timeout)
     except FetchError:
         raise
@@ -82,7 +90,9 @@ def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONS
         if isinstance(exc.reason, TimeoutError):
             raise FetchError("timeout", "timeout") from exc
         raise FetchError("network", "network error") from exc
-    except OSError as exc:
+    except (OSError, ValueError, http.client.HTTPException) as exc:
+        # OSError: connection problems; ValueError: includes http.client.InvalidURL;
+        # HTTPException: includes IncompleteRead and BadStatusLine.
         raise FetchError("network", "network error") from exc
     try:
         status = getattr(response, "status", None) or response.getcode()
@@ -97,6 +107,8 @@ def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONS
         chunks, total = [], 0
         try:
             while True:
+                if clock() > deadline:
+                    raise FetchError("timeout", "download took longer than %d seconds" % total_seconds)
                 chunk = response.read(CHUNK_BYTES)
                 if not chunk:
                     break
@@ -106,9 +118,11 @@ def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONS
                 chunks.append(chunk)
         except TimeoutError as exc:
             raise FetchError("timeout", "timeout") from exc
-        except OSError as exc:
+        except (OSError, ValueError, http.client.HTTPException) as exc:
             raise FetchError("network", "network error") from exc
         return b"".join(chunks)
+    except (OSError, ValueError, http.client.HTTPException) as exc:
+        raise FetchError("network", "network error") from exc
     finally:
         close = getattr(response, "close", None)
         if close:

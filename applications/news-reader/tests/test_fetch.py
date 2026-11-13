@@ -1,4 +1,5 @@
 """The real fetch layer with a fake opener: no socket is ever opened."""
+import http.client
 import urllib.error
 import urllib.request
 
@@ -8,6 +9,7 @@ from newsreader import fetch
 from newsreader.fetch import FetchError, fetch_url, make_opener
 from newsreader.parse import MAX_RESPONSE_BYTES
 
+CHUNK = fetch.CHUNK_BYTES
 URL = "https://news.example.invalid/feed.xml"
 HOSTS = ["example.invalid"]
 
@@ -144,3 +146,60 @@ def test_start_url_outside_allowed_hosts_is_not_requested():
     with pytest.raises(FetchError):
         fetch_url("http://news.example.invalid/feed.xml", HOSTS, opener=opener)
     assert opener.requests == []
+
+
+class Clock:
+    """A fake clock that moves on by `step` seconds each time it is read."""
+
+    def __init__(self, step):
+        self.now, self.step = 0.0, step
+
+    def __call__(self):
+        self.now += self.step
+        return self.now
+
+
+def test_total_time_limit_for_a_slow_download():
+    body = b"x" * (CHUNK * 50)
+    response = FakeResponse(body)
+    with pytest.raises(FetchError) as info:
+        fetch_url(URL, HOSTS, opener=FakeOpener(response), clock=Clock(10), total_seconds=60)
+    assert info.value.kind == "timeout" and "60 seconds" in str(info.value)
+    assert response.pos < len(body) and response.closed
+
+
+def test_a_fast_download_is_inside_the_total_limit():
+    assert fetch_url(URL, HOSTS, opener=FakeOpener(FakeResponse(b"ok")), clock=Clock(0.001)) == b"ok"
+
+
+@pytest.mark.parametrize("error", [
+    http.client.InvalidURL("bad"),
+    http.client.BadStatusLine("x"),
+    http.client.IncompleteRead(b"abc", 10),
+    ValueError("odd"),
+    ConnectionAbortedError("abort"),
+])
+def test_other_errors_while_opening_become_fetch_errors(error):
+    with pytest.raises(FetchError) as info:
+        fetch_url(URL, HOSTS, opener=FakeOpener(error=error))
+    assert info.value.kind == "network"
+
+
+class BrokenBody(FakeResponse):
+    def __init__(self, error):
+        super().__init__(b"x" * 10)
+        self.error = error
+
+    def read(self, n):
+        raise self.error
+
+
+@pytest.mark.parametrize("error", [
+    http.client.IncompleteRead(b"abc", 10), http.client.HTTPException("x"), ValueError("v"),
+    ConnectionResetError("r")])
+def test_errors_while_reading_become_fetch_errors(error):
+    response = BrokenBody(error)
+    with pytest.raises(FetchError) as info:
+        fetch_url(URL, HOSTS, opener=FakeOpener(response))
+    assert info.value.kind == "network" and response.closed
+

@@ -75,10 +75,22 @@ def test_output_folder_has_the_copied_files(project):
     run(project, FakeFetch({FEED_URL: GOOD_FEED}))
     out = project.out
     assert (out / "logic.js").read_bytes() == (project.root / "site" / "logic.js").read_bytes()
-    assert (out / "tests" / "logic.test.mjs").exists()  # the whole site folder is copied
+    assert not (out / "tests").exists()  # site/tests is not copied
     for name in ("sources.json", "politics-keywords.json"):
         assert (out / name).read_bytes() == (project.root / name).read_bytes()
     assert (out / "news.json").exists()
+
+
+def test_site_content_is_copied_without_tests_and_cache_folders(project):
+    (project.root / "site" / "css").mkdir()
+    (project.root / "site" / "css" / "a.css").write_text("x", encoding="utf-8")
+    (project.root / "site" / "__pycache__").mkdir()
+    (project.root / "site" / "__pycache__" / "z.pyc").write_bytes(b"x")
+    (project.root / "site" / "css" / "tests").mkdir()  # only the top-level tests folder is skipped
+    (project.root / "site" / "css" / "tests" / "b.css").write_text("y", encoding="utf-8")
+    run(project, FakeFetch({FEED_URL: GOOD_FEED}))
+    assert (project.out / "css" / "a.css").exists() and (project.out / "css" / "tests" / "b.css").exists()
+    assert not (project.out / "__pycache__").exists() and not (project.out / "tests").exists()
 
 
 def test_running_twice_is_repeatable(project):
@@ -234,6 +246,7 @@ def test_category_filter_source_is_marked_failed_with_a_message(project):
     entry = source_entry(document)
     assert entry["status"] == "error"
     assert "categoryFilter" in entry["message"] and "selection failed" in entry["message"]
+    assert "ValueError" in entry["message"]
     assert document["items"] == []
 
 
@@ -515,3 +528,117 @@ def test_python_dash_m_entry_point_with_the_projects_own_files(tmp_path, monkeyp
     assert fake.calls == ["https://www.svt.se/robots.txt", "https://www.svt.se/nyheter/inrikes/rss.xml"]
     assert (out / "sources.json").read_bytes() == (APP / "sources.json").read_bytes()
     assert (out / "politics-keywords.json").exists() and (out / "logic.js").exists()
+
+
+# --- review round 1 -----------------------------------------------------
+
+def test_robots_with_a_byte_order_mark_is_still_read(project):
+    robots = b"\xef\xbb\xbfUser-agent: *\nDisallow: /\n"
+    fetch = FakeFetch({ROBOTS_URL: robots, FEED_URL: GOOD_FEED})
+    document = run(project, fetch)
+    assert source_entry(document)["status"] == "blocked-by-robots"
+    assert FEED_URL not in fetch.calls
+
+
+def test_fallback_items_respect_the_seven_day_limit(project):
+    last = (NOW - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def item(path, published, title):
+        return {"id": "x", "sourceId": "test-news", "sourceName": "x", "title": title,
+                "url": "https://news.example.invalid" + path, "published": published,
+                "publishedDisplay": "x"}
+
+    extra = [item("/o/1", (NOW - timedelta(days=7, seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ"), "För gammal"),
+             item("/o/2", (NOW - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ"), "Exakt sju dagar"),
+             item("/o/3", None, "Utan tid")]
+    previous_file(project.out / "news.json", last, extra_items=extra)
+    document = run(project, failing())
+    titles = [i["title"] for i in document["items"]]
+    assert "För gammal" not in titles
+    assert titles == ["Gammal riksdagsrubrik", "Exakt sju dagar", "Utan tid"]
+    assert document["sources"][0]["itemCount"] == 3
+
+
+SECRET = "SECRETFEEDTEXT"
+
+
+@pytest.mark.parametrize("response", [
+    '<?xml version="1.0" encoding="%s"?><rss/>' % SECRET,
+    "<rss><channel><%s></channel></rss>" % SECRET,
+    "<%s>" % SECRET,
+    SECRET,
+    "<!DOCTYPE x [<!ENTITY %s 'a'>]><rss/>" % SECRET,
+    RuntimeError(SECRET),
+    FetchError("network", "network error"),
+])
+def test_status_message_never_contains_feed_content(project, response):
+    if isinstance(response, str):
+        response = response.encode("utf-8")
+    document = run(project, FakeFetch({FEED_URL: response}))
+    entry = source_entry(document)
+    assert entry["status"] == "error"
+    assert SECRET not in json.dumps(document) and SECRET not in entry["message"]
+
+
+def test_status_message_for_robots_never_contains_content(project):
+    document = run(project, FakeFetch({ROBOTS_URL: RuntimeError(SECRET), FEED_URL: GOOD_FEED}))
+    assert SECRET not in json.dumps(document)
+    document = run(project, FakeFetch({ROBOTS_URL: SECRET.encode() + b"\xff", FEED_URL: GOOD_FEED}))
+    assert SECRET not in json.dumps(document)
+
+
+def test_ok_source_has_no_message_field(project):
+    document = run(project, FakeFetch({FEED_URL: GOOD_FEED}))
+    assert "message" not in source_entry(document)
+
+
+def test_output_folder_given_by_an_indirect_path_cannot_point_at_site(project, tmp_path):
+    for target in (project.root / "site" / ".." / "site", project.root / "." / "site" / "sub"):
+        with pytest.raises(BuildError, match="overlaps"):
+            build(target, NOW, FakeFetch(), root=project.root)
+    link = tmp_path / "link-to-app"
+    link.symlink_to(project.root, target_is_directory=True)
+    for target in (link / "site", link, link / "site" / "sub"):
+        with pytest.raises(BuildError):
+            build(target, NOW, FakeFetch(), root=project.root)
+    with pytest.raises(BuildError, match="overlaps"):  # a folder that holds the project
+        build(tmp_path, NOW, FakeFetch(), root=project.root)
+    assert not (project.root / "site" / "news.json").exists()
+
+
+def test_output_folder_inside_the_project_is_fine(project):
+    build(project.root / "build", NOW, FakeFetch({FEED_URL: GOOD_FEED}), root=project.root)
+    assert (project.root / "build" / "news.json").exists()
+
+
+def test_symlinked_output_folder_is_refused(project, tmp_path):
+    real = tmp_path / "real-out"
+    real.mkdir()
+    project.out.symlink_to(real, target_is_directory=True)
+    with pytest.raises(BuildError, match="symbolic link"):
+        run(project, FakeFetch({FEED_URL: GOOD_FEED}))
+    assert list(real.iterdir()) == []
+
+
+@pytest.mark.parametrize("name", ["news.json", "news.json.tmp", "sources.json", "logic.js"])
+def test_symlinked_targets_are_not_written_through(project, tmp_path, name):
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep me", encoding="utf-8")
+    project.out.mkdir()
+    (project.out / name).symlink_to(victim)
+    with pytest.raises(BuildError, match="symbolic link"):
+        run(project, FakeFetch({FEED_URL: GOOD_FEED}))
+    assert victim.read_text(encoding="utf-8") == "keep me"
+    assert not (project.out / "politics-keywords.json").exists()  # nothing was written at all
+
+
+def test_symlinked_folder_inside_the_output_is_not_written_through(project, tmp_path):
+    (project.root / "site" / "css").mkdir()
+    (project.root / "site" / "css" / "a.css").write_text("x", encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    project.out.mkdir()
+    (project.out / "css").symlink_to(elsewhere, target_is_directory=True)
+    with pytest.raises(BuildError, match="symbolic link"):
+        run(project, FakeFetch({FEED_URL: GOOD_FEED}))
+    assert list(elsewhere.iterdir()) == []
