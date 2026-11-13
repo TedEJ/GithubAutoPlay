@@ -1,6 +1,6 @@
 # News reader: design
 
-Status: design proposal, no code yet. Written 2026-11-13 by the Designer/Developer worker and revised four times the same day with findings and decisions from the manager and the owner (version 5).
+Status: design proposal, no code yet. Written 2026-11-13 by the Designer/Developer worker and revised five times the same day with findings and decisions from the manager and the owner (version 6).
 
 The news reader is a web page that lists headlines about **politics in Sweden** from **a few approved sites**. Each item shows the headline, the source name, the publication time and a link to the original article. The page text and the news are in Swedish.
 
@@ -109,7 +109,7 @@ Every requirement is numbered and testable. "Build" means the Python program tha
 - R4.1 (auto py) A source supplies the category `politics-sweden` with exactly one method in `sources.json`: `feed` (a dedicated politics feed), `categoryFilter` (exact `<category>` values) or `keywordFilter` (the shared keyword list). Both current sources use `keywordFilter`, because neither has a politics feed.
 - R4.2 (auto py) The method is chosen in this order of preference: `feed`, else `categoryFilter`, else `keywordFilter`. A source without a method fails the configuration test.
 - R4.3 (auto py, auto js) The keyword list is **one shared file**, `politics-keywords.json` (section 7.2), read by the Python build and fetched by the page. Neither has its own copy of the terms.
-- R4.4 (auto py, auto js) An item matches when its headline or its description (RSS `description`, Atom `summary`), cleaned as in R1.3, contains at least one `include` term under the rules of section 7.2 and no `exclude` term. Without a description, only the headline is used. The description is then discarded.
+- R4.4 (auto py, auto js) An item matches when its headline or its description (RSS `description`, Atom `summary`), cleaned as in R1.3, contains at least one `include` term under the rules of section 7.2, after the `exclude` phrases and words have been taken out of consideration. Without a description, only the headline is used. The description is then discarded.
 - R4.5 (auto py, auto js) Python and JavaScript give the same match result for every case in `tests/shared-cases.json`.
 - R4.6 (hand) In "Källor", each `keywordFilter` source shows "Urval med nyckelord – ungefärligt".
 
@@ -132,7 +132,7 @@ Every requirement is numbered and testable. "Build" means the Python program tha
 ### R7. Live fetch in the browser (Sveriges Radio and any other `fetchedBy: browser` source)
 - R7.1 (hand) The page fetches the feed URL in `sources.json` directly from the source (for Sveriges Radio `https://api.sr.se/api/rss/program/83`), with `credentials: "omit"` and `cache: "no-store"`, and a timeout of 15 seconds.
 - R7.2 (hand) Call load: one request when the page opens; then at most one request every 10 minutes, and only while the page is visible (paused when the tab is hidden). The "Uppdatera" button fetches again only if at least 5 minutes have passed since the last request to that source; otherwise it only reloads `news.json`. There are never two requests to the same source within 5 minutes from one open page.
-- R7.3 (hand) The items are kept in memory only. They are never written to `localStorage`, `sessionStorage`, IndexedDB, cookies, a file or a server. When the page is closed they are gone.
+- R7.3 (hand) The items are kept in memory only. They are never written to `localStorage`, `sessionStorage`, IndexedDB, cookies, the Cache API, a file or a server, and never logged to the browser console or included in error messages or error reports (an error message names the source and the kind of failure only). When the page is closed they are gone.
 - R7.4 (auto js) The Atom entries are mapped as in R11.2, then filtered and selected with the same rules as the build (R1.3, R1.4, R2, R4.4, R5.1 to R5.4, R9.1).
 - R7.5 (hand) Every Sveriges Radio item shows the source name "Sveriges Radio" visibly next to the headline, and the line at the bottom of the page (R8.7) names Sveriges Radio.
 - R7.6 (hand) If the request fails or the feed cannot be read, the page shows the other sources' items and the status "Sveriges Radio kunde inte hämtas just nu" in "Källor"; it does not retry before the next scheduled fetch (R7.2).
@@ -143,7 +143,7 @@ Every requirement is numbered and testable. "Build" means the Python program tha
 - R8.3 (hand) If `generatedAt` is more than 3 hours old by the reader's clock, the page shows "SVT-nyheterna kan vara gamla – senast uppdaterade <generatedAtDisplay>".
 - R8.4 (hand) If none of the chosen sources has items, the page shows "Inga nyheter från valda källor."
 - R8.5 (hand) The page works on a 360-pixel-wide phone screen without sideways scrolling; long headlines wrap (nothing is cut, R1.3).
-- R8.6 (hand) The page loads no scripts, fonts or styles from other sites. Its only request to another site is the feed request of R7.1.
+- R8.6 (hand) The page loads no scripts, fonts or styles from other sites. Its only request to another site is the feed request of R7.1. It registers no service worker and does not use the Cache API.
 - R8.7 (hand) Below the list: "Rubriker och länkar från SVT och Sveriges Radio. Klicka för att läsa hos källan." The source names in this line come from `sources.json`.
 - R8.8 (hand) All text is in Swedish, with `<html lang="sv">` and `<meta charset="utf-8">`.
 - R8.9 (hand) The page has no advertising, no marketing and no analytics (N11), and carries `<meta name="robots" content="noindex">` so that a published copy is not meant for search engines (K11).
@@ -171,7 +171,7 @@ Every requirement is numbered and testable. "Build" means the Python program tha
 - R11.2 (auto js) The page maps Atom entries as in the table. `<content>` (which may hold article text) is never read. A document whose root is not Atom `<feed>` is a failed fetch. The mapping from an XML document to plain entries (using `DOMParser`) is tested by hand; everything after that is tested by (auto js).
 
 ### R12. Running and hosting (two variants; the owner chooses, Q1)
-- R12.1 (hand) **Local variant:** from `applications/news-reader/`, the owner runs `python -m newsreader --out build` and `python -m http.server 8000 --directory build`, and opens `http://localhost:8000/`. Nothing is published. The build copies `site/*`, `sources.json` and `politics-keywords.json` into `build/`. The folder `build/` is listed in `.gitignore` so `news.json` is never committed.
+- R12.1 (hand) **Local variant:** from `applications/news-reader/`, the owner runs `python -m newsreader --out build` and `python -m http.server 8000 --directory build`. If `build/news.json` exists from an earlier run, the build reads it as the previous file before overwriting it, so the 24-hour fallback of R6.2 works locally too; `--previous <file>` names another file (used by the published variant), and opens `http://localhost:8000/`. Nothing is published. The build copies `site/*`, `sources.json` and `politics-keywords.json` into `build/`. The folder `build/` is listed in `.gitignore` so `news.json` is never committed.
 - R12.2 (hand, owner) **Published variant:** a separate workflow publishes the same `build/` content to GitHub Pages under `<Pages address>/applications/news-reader/` (decision D16). It never commits and is not a required check.
 
 ## 4. Findings about the sources
@@ -179,7 +179,7 @@ Every requirement is numbered and testable. "Build" means the Python program tha
 ### 4.1 How this was checked
 Date of all checks: **2026-11-13**.
 - **Worker's environment:** direct requests to the news hosts (svt.se, api.sr.se, sverigesradio.se and the earlier candidates) were refused by the environment's network proxy (HTTP 403 on connect). The worker used web search and the feed directories Feeder and Feedspot to find candidate addresses.
-- **Manager, in the owner's browser:** checked the feeds, robots.txt files, and Sveriges Radio's terms. Results marked "verified (manager)" come from that check; the worker has not seen the raw responses itself.
+- **Manager, in the owner's browser:** every fact in this section marked "verified (manager)" was **checked by the manager in the owner's browser on 2026-11-13**: the SVT feeds and SVT's robots.txt, the Sveriges Radio feeds and API endpoints, Sveriges Radio's terms page and API documentation, and sverigesradio.se's robots.txt. The worker has not seen the raw responses itself. Everything not marked so is **not verified**.
 - No page contained anything that looked like instructions to the worker.
 
 ### 4.2 SVT (svt.se), fetched by the build
@@ -192,7 +192,7 @@ Date of all checks: **2026-11-13**.
 
 - No CORS header, so a page on another site cannot read the feed; SVT must be fetched by the build.
 - Method: `keywordFilter` on the domestic feed. Because the feed is already limited to domestic news, keyword hits are mostly Swedish politics. Still approximate (K6).
-- **robots.txt** (read by the manager): `User-agent: *` with `Allow: /`, and the content signal `ai-train=no, search=yes, ai-input=yes`: training AI models on the content is not permitted (K7).
+- **robots.txt** (verified (manager)): `User-agent: *` with `Allow: /`, and the content signal `ai-train=no, search=yes, ai-input=yes`: training AI models on the content is not permitted (K7).
 - **SVT's terms of use beyond robots.txt have not been read** (K12, step S1).
 - **Not verified:** the host of the item links (`www.svt.se` expected; Q2), whether items carry `<category>` or images.
 
@@ -200,7 +200,7 @@ Date of all checks: **2026-11-13**.
 
 | URL | Result | Checked by |
 |---|---|---|
-| `https://api.sr.se/api/rss/program/83` | **Ekot text news, Atom (`application/atom+xml`), 20 entries. Fields: `id`, `title`, `summary`, `published`, `updated`, `author`, `link`, `category`, `content`. ISO 8601 times with offset. Links to text articles on `https://www.sverigesradio.se/artikel/<number>`. `Access-Control-Allow-Origin: *`.** | Verified (manager) |
+| `https://api.sr.se/api/rss/program/83` | **Ekot text news, Atom (`application/atom+xml`), 20 entries. Fields: `id`, `title`, `summary`, `published`, `updated`, `author`, `link`, `category`, `content`. `published` and `updated` in ISO 8601 with offset (for example `+01:00`). Links to text articles on `https://www.sverigesradio.se/artikel/<number>`. `Access-Control-Allow-Origin: *`.** | Verified (manager) |
 | `https://api.sr.se/api/rss/group/27511` | "Toppnyheter", Atom, stale (newest entries 2026-11-12 and older), local-news style. | Verified (manager). **Not used.** |
 | `https://api.sr.se/api/v2/news`, `.../news/episodes`, `.../episodes/index?programid=5380` | JSON API with **audio episodes**. | Verified (manager). **Rejected:** audio, not articles; a separate parser; time field not verified. |
 
@@ -208,7 +208,7 @@ Date of all checks: **2026-11-13**.
 - `Access-Control-Allow-Origin: *` means the page can read the feed directly in the browser, which is what makes the live fetch possible.
 - The item link host is verified: `allowedHosts` is `sverigesradio.se`.
 
-**Sveriges Radio's terms** (read by the manager on 2026-11-13 at `https://sverigesradio.se/artikel/api-villkor`, updated 2025-08-29; API documentation `https://api.sr.se/api/documentation/v2/index.html`). In summary, as reported:
+**Sveriges Radio's terms** (verified (manager): read on 2026-11-13 at `https://sverigesradio.se/artikel/api-villkor`, updated 2025-08-29; API documentation `https://api.sr.se/api/documentation/v2/index.html`). In summary, as reported:
 - The open API is no longer maintained but can still be used; no registration; no call limits, but "be kind, few calls".
 - The material may only be used through linking and/or streaming, for reception in Sweden.
 - It may not be stored, downloaded, copied or preserved, other than temporary copies made by the service that uses the API.
@@ -220,7 +220,7 @@ Date of all checks: **2026-11-13**.
 - The use must not harm Sveriges Radio's independence or credibility.
 - The terms may change.
 
-**sverigesradio.se robots.txt** (read by the manager): allows search indexing, disallows AI-training crawlers and some AI user agents. It governs the website, not the api.sr.se API. The page does not crawl the website; the reader's own browser opens an article only when the reader clicks.
+**sverigesradio.se robots.txt** (verified (manager)): allows search indexing, disallows AI-training crawlers and some AI user agents. It governs the website, not the api.sr.se API. The page does not crawl the website; the reader's own browser opens an article only when the reader clicks.
 
 How the design follows these terms (this is a design response, not legal advice):
 
@@ -246,7 +246,7 @@ How the design follows these terms (this is a design response, not legal advice)
 2. The host of SVT's item links, and whether SVT items carry categories or images (Q2).
 3. The `category` values of the Sveriges Radio feed (Q3).
 4. That GitHub's Action runners may fetch svt.se (published variant only; very likely, not tested).
-5. How well the keyword list selects politics (measured in step S7 and on the live page).
+5. How well the keyword list selects politics (measured in step S8 for SVT and on the live page).
 
 ## 5. Options considered and the recommendation
 
@@ -293,7 +293,8 @@ applications/news-reader/
     robots.py               robots.txt decision (R6.6); text in, no network
     fetch.py                the only network module (timeout, size limit, User-Agent)
     build.py                orchestration; fetch and "now" injected; writes build/
-    __main__.py             python -m newsreader --out build [--previous news.json]
+    __main__.py             python -m newsreader --out build [--previous <file>]
+                            (default previous: <out>/news.json if it exists)
   site/                     the page (copied into build/ by the build)
     index.html              skeleton, Swedish text
     logic.js                pure ES module, no DOM, no network: keyword match,
@@ -317,7 +318,7 @@ applications/news-reader/
 - Tested without browser or network: all Python modules except `fetch.py`, and `site/logic.js`.
 - Thin layers, tested by hand: `fetch.py` (network), `site/atom.js` (`DOMParser`), `site/app.js` (DOM, timers, `fetch`, `localStorage`).
 
-### Published variant only (owner-added workflow, step S11)
+### Published variant only (owner-added workflow, step S12)
 A workflow `.github/workflows/news-reader.yml`, separate from `ci.yml`: a schedule every 30 minutes and `workflow_dispatch`; permissions `contents: read`, `pages: write`, `id-token: write`; it downloads the published `news.json` as `--previous`, runs the build into `_site/applications/news-reader/`, and deploys with the official upload-Pages-artifact and deploy-Pages actions. It never commits. A copy goes into `GitRequirements/` in the same change.
 
 ## 7. Data and state
@@ -367,14 +368,22 @@ A workflow `.github/workflows/news-reader.yml`, separate from `ci.yml`: a schedu
               "Miljöpartiet"],
     "caseSensitive": ["(S)", "(M)", "(SD)", "(C)", "(V)", "(KD)", "(L)", "(MP)"]
   },
-  "exclude": { "words": [] }
+  "exclude": {
+    "words": ["moderat", "moderata"],
+    "phrases": ["amerikanska regeringen", "brittiska regeringen", "danska regeringen",
+                "finska regeringen", "franska regeringen", "israeliska regeringen",
+                "kinesiska regeringen", "norska regeringen", "ryska regeringen",
+                "tyska regeringen", "ukrainska regeringen"]
+  }
 }
 ```
 Matching rules, defined so that Python and JavaScript give the same result:
 - The text is Unicode NFC-normalised and split into words: maximal runs of Unicode letters (category L) and decimal digits (category Nd). Python checks `unicodedata.category`; JavaScript uses the regular expression `[\p{L}\p{Nd}]+` with the `u` flag.
-- `words` terms are compared in lower case (Python `str.lower`, JavaScript `toLowerCase`). A term matches a whole word; a term ending in `*` matches any word that starts with the term without the `*`.
+- `words` terms are compared in lower case: both the term and each word of the text are lowercased (Python `str.lower`, JavaScript `toLowerCase`) after NFC normalisation. A term matches a whole word; a term ending in `*` matches any word that starts with the term without the `*`.
 - `caseSensitive` terms match as exact substrings, brackets included.
-- An item that matches an `exclude` term is not selected. The exclude list starts empty and is filled through issues.
+- `exclude.phrases` are removed from the text before the include terms are tested (compared in lower case, as whole words in sequence). So "Tyska regeringen kritiserar riksdagen" still matches through "riksdagen", while "Tyska regeringen sänker skatten" does not match.
+- `exclude.words` are words that never count as a hit, even when an include term would match them. They handle the adjective "moderat" (moderate), which `Moderat*` would otherwise match; "Moderaterna" and "moderatledaren" still match. The consequence is that the rare official name "Moderata samlingspartiet" is not matched.
+- Exclusion never drops a whole item; it only removes words and phrases from consideration. The exclude lists are maintained through issues when false positives are found.
 - "minister", "val" and "parti" are left out on purpose: too broad.
 
 ### 7.3 The reader's state in the browser
@@ -454,18 +463,18 @@ Hand-written, made-up samples in `tests/fixtures/` (not copies of SVT or Sverige
 `site/tests/logic.test.mjs` tests `site/logic.js` with plain objects as input (the output of `atom.js`), and with a hand-written list of entries in the Sveriges Radio shape (`title`, `summary`, `published`, `updated`, `link`, plus `content` that must be ignored). It covers R1.2 to R1.4, R2.3 to R2.6, R4.4, R5.1 to R5.5, R9.1 and R10.2.
 
 ### Shared cases
-`tests/shared-cases.json` holds input and expected output for keyword matching, headline cleaning and time display (including summer and winter time and Swedish letters). Both `pytest` and `node --test` read it, so the two implementations cannot drift apart without a failing test (R4.5).
+`tests/shared-cases.json` holds input and expected output in three sections created empty in S2: headline cleaning (filled in S4), time display including summer and winter time (filled in S5), and keyword matching including the exclude words and phrases and Swedish letters (filled in S6). The Python tests of each step read it from the start, and `node --test` reads all of it in S9, so the two implementations cannot drift apart without a failing test (R4.5).
 
 ### Running the tests
 - Locally: `bash scripts/check.sh applications/news-reader` for Python, and `node --test applications/news-reader/site/tests/` for JavaScript.
 - In the required check `checks`: the owner adds three steps to `ci.yml` (install requirements, `python -m pytest` in `applications/news-reader`, `node --test applications/news-reader/site/tests/`) and updates the copy in `GitRequirements/` (S3).
 
 ### By hand (owner)
-- Local variant (after S10): run the build and the local server, then check list order; the link opens in a new tab; choosing and unchoosing sources; reload keeps the choice; private window; offline (SVT from the saved copy, Sveriges Radio not shown, the right notices); stale warning (edit `generatedAt`); 360 px width; Swedish letters; the source name on every Sveriges Radio item; the bottom line.
-- Storage check: in the browser's developer tools, Application tab, no Sveriges Radio headline appears in local storage, session storage, IndexedDB or cookies.
+- Local variant (after S10 and S11): run the build and the local server, then check list order; the link opens in a new tab; choosing and unchoosing sources; reload keeps the choice; private window; offline (SVT from the saved copy, Sveriges Radio not shown, the right notices); stale warning (edit `generatedAt`); 360 px width; Swedish letters; the source name on every Sveriges Radio item; the bottom line.
+- Storage check: in the browser's developer tools, Application tab, no Sveriges Radio headline appears in local storage, session storage, IndexedDB, cookies or Cache Storage, and no service worker is registered. The Console shows no Sveriges Radio headline, also after a forced failure (for example offline, or a blocked `api.sr.se` request in the Network tab).
 - Call check: in the Network tab, one request to `api.sr.se` on page load; "Uppdatera" within 5 minutes makes no new request; a hidden tab makes no requests.
 - Keyword quality: read the live list for obvious false positives and missing politics news. For Sveriges Radio this is done only by reading the live page; no copy is saved (N10).
-- Published variant (S12): the Pages address shows both sources; a manual run updates the SVT time; two scheduled runs in an hour.
+- Published variant (S13): the Pages address shows both sources; a manual run updates the SVT time; two scheduled runs in an hour.
 
 ## 10. Risks and open questions
 
@@ -495,8 +504,8 @@ K5 (DN's terms) was removed when DN was dropped (D12); the other numbers are kep
 |---|---|---|
 | Q1 | Publish on GitHub Pages, or run locally only? (K11, K12, K13) | Owner decides. Recommendation: local only to start with; publish only after S1 and only if the owner accepts a public page. |
 | Q2 | Which host do SVT's item links use, and do SVT items carry categories? | Manager or owner looks at the feed in S1. |
-| Q3 | Which `category` values do Sveriges Radio's entries carry, and could they replace the keyword filter? | Manager or owner looks at the feed (S13). |
-| Q4 | GitHub settings (Pages source, Actions permissions, `github-pages` environment). | Owner checks them in S11 (published variant only), as the owner has said. |
+| Q3 | Which `category` values do Sveriges Radio's entries carry, and could they replace the keyword filter? | Manager or owner looks at the feed (S14). |
+| Q4 | GitHub settings (Pages source, Actions permissions, `github-pages` environment). | Owner checks them in S12 (published variant only), as the owner has said. |
 
 ### 10.3 What was checked about hosting in the repository
 Checked by the worker on 2026-11-13 on a branch from `origin/main` (commit `4afc4a7`): `.github/workflows/` has only `auto-merge.yml` and `ci.yml`; no `gh-pages` branch on `origin`; no `CNAME`, `.nojekyll` or `_config.yml`; no mention of Pages in `README.md`, `WORKFLOW.md` or `GitRequirements/README.md`; `GitRequirements/` keeps copies of the workflows that must stay identical; `ci.yml` does not run news-reader tests. The GitHub API and the Pages address could not be reached from the worker's environment, so whether Pages is on is not verified; the owner checks the settings (Q4).
@@ -533,22 +542,25 @@ Each step is meant to become one issue. Levels are from WORKFLOW.md section 1. "
 | Step | Title | Level | `no-auto-merge` | Depends on | Covers |
 |---|---|---|---|---|---|
 | S1 | **Manager or owner:** read SVT's terms of use; note the host of SVT's item links and whether items carry categories | Low | no (no pull request) | none | K12, Q2 |
-| S2 | News reader: project folder, README (local run), `requirements.txt`, `pytest.ini`, `.gitignore` with `build/`, `sources.json` with SVT and Sveriges Radio, a placeholder `site/logic.js` with one Node smoke test, entry in `applications/README.md`, and a test that validates `sources.json` | Low | no | S1 | R3.1, R3.2, R4.1, R4.2, R12.1 (`.gitignore`) |
+| S2 | News reader: project folder, README (local run), `requirements.txt`, `pytest.ini`, `.gitignore` with `build/`, `sources.json` with SVT and Sveriges Radio, `tests/shared-cases.json` with empty sections `cleaning`, `time` and `keywords`, a placeholder `site/logic.js` with one Node smoke test, entry in `applications/README.md`, and a test that validates `sources.json` | Low | no | S1 | R3.1, R3.2 (configuration part), R4.1, R4.2, R12.1 (`.gitignore`) |
 | S3 | **Owner only:** add the news-reader steps (pytest and `node --test`) to the `checks` job in `ci.yml`, and update `GitRequirements/ci.yml` | Low | no | S2 | Section 9 (tests in the required check) |
-| S4 | News reader: RSS 2.0 parser for the build, headline cleaning, encoding, with hand-written samples | Medium | no | S2 | R1.1, R1.3 (Python), R1.4 (Python), R9.4, R10.1, R11.1 |
-| S5 | News reader: time handling in Python | Low | no | S2 | R2.1, R2.2, R2.4 (Python), R2.5, R2.6, R2.7 |
-| S6 | News reader: the shared keyword list `politics-keywords.json`, the shared test file `tests/shared-cases.json`, and keyword matching in Python | Medium | no | S4, S5 | R4.3, R4.4 (Python), R4.5 (Python side) |
-| S7 | News reader: selection in Python (URL check, de-duplicate, age, cap, id), with a check of the keyword list against the SVT feed done by the owner or manager on the local build output | Medium | no | S6 | R5.1 to R5.4 (Python), R9.1 (Python), K6 |
-| S8 | News reader: build command (fetch layer, robots.txt rule, `enabled`, skip browser sources, previous file, writes `build/` with `news.json`, `site/`, `sources.json`, `politics-keywords.json`) | Medium | no | S7 | R3.2 (`news.json` part), R3.4 (build), R6.2 to R6.7, R12.1 (build part) |
-| S9 | News reader: `site/logic.js` (cleaning, keyword match, URL check, time display, select, merge, sort) with `node --test`, passing the shared cases | Medium | no | S6 | R1.2, R1.3 (JS), R1.4 (JS), R2.1 (JS), R2.3, R2.4 (JS), R2.5 (JS), R2.6 (JS), R4.4 (JS), R4.5 (JS side), R5.1 to R5.5 (JS), R9.1 (JS), R10.2 |
-| S10 | News reader: the page (`index.html`, `atom.js`, `app.js`, `style.css`): SVT from `news.json`, Sveriges Radio live and in memory, call limits, choices, offline, notices, Swedish text | Medium | **yes** (user-visible; owner tests by hand per section 9, local variant) | S8, S9 | R3.3, R3.4 (page), R3.5, R4.6, R7.1 to R7.6, R8.1 to R8.9, R9.2, R9.3, R11.2 |
-| S11 | **Owner only, published variant only (Q1):** check GitHub Settings > Pages and > Actions (Q4), set the Pages source to "GitHub Actions", and add `.github/workflows/news-reader.yml` with its copy in `GitRequirements/`; the worker of S8 provides a draft in the README if the owner asks | Low | yes if done as a pull request | S1, S10 | R6.1, R12.2, Q4 |
-| S12 | **Owner only, published variant only:** test the live page and two scheduled runs | Low | n/a | S11 | Section 9 (published variant) |
-| S13 | **Manager or owner, optional:** list the `category` values of the Sveriges Radio feed; if they mark Swedish politics, open an issue to switch to `categoryFilter` | Low | no (no pull request) | none | Q3 |
+| S4 | News reader: RSS 2.0 parser for the build (raw entries: title, link, time text, description), headline cleaning with its cases in the `cleaning` section of `tests/shared-cases.json`, encoding, with hand-written samples | Medium | no | S2 | R1.3 (Python), R9.4, R10.1, R11.1 |
+| S5 | News reader: time handling in Python, with its cases in the `time` section of `tests/shared-cases.json` | Low | no | S2 | R2.1, R2.2, R2.4 (Python), R2.5, R2.6, R2.7 |
+| S6 | News reader: the shared keyword list `politics-keywords.json` (include terms, exclude words and exclude phrases), its cases in the `keywords` section of `tests/shared-cases.json`, and keyword matching in Python | Medium | no | S4, S5 | R4.3, R4.4 (Python), R4.5 (Python side) |
+| S7 | News reader: selection in Python (URL check, empty-title and URL drop, de-duplicate, age, cap, `id`), producing items with exactly the R1.1 fields | Medium | no | S6 | R1.1 (item shape), R1.4 (Python), R5.1 to R5.4 (Python), R9.1 (Python) |
+| S8 | News reader: build command (fetch layer, robots.txt rule, `enabled`, skip browser sources, previous file with the local default, writes `build/` with `news.json`, `site/`, `sources.json`, `politics-keywords.json`), and a check of the keyword list against the SVT feed done by the owner or manager on the local build output | Medium | no | S7 | R1.1 (`news.json`), R3.2 (`news.json` part), R3.4 (build), R6.2 to R6.7, R12.1 (build part), K6 (SVT) |
+| S9 | News reader: `site/logic.js` (cleaning, keyword match with excludes, URL check, time display, select, `id`, merge, sort) with `node --test`, passing all shared cases | Medium | no | S6 | R1.2, R1.3 (JS), R1.4 (JS), R2.1 (JS), R2.3, R2.4 (JS), R2.5 (JS), R2.6 (JS), R4.4 (JS), R4.5 (JS side), R5.1 to R5.5 (JS), R9.1 (JS), R10.2 |
+| S10 | News reader: the page, part 1, SVT and choices (`index.html`, `app.js`, `style.css`): `news.json`, merged list, "Källor" with choices, offline copy, stale and empty notices, bottom line, Swedish text, safe links, `noindex`, no service worker and no Cache API | Medium | **yes** (user-visible; owner tests by hand per section 9, local variant) | S8, S9 | R3.3, R3.4 (page), R3.5, R4.6, R8.1 to R8.9, R9.2, R9.3 |
+| S11 | News reader: the page, part 2, Sveriges Radio live fetch (`atom.js`, additions to `app.js`): fetch with `credentials: "omit"` and `cache: "no-store"`, the shared keyword list in the browser, memory only, no logging of content, call limits and pause when hidden, source name, failure status | Medium | **yes** (user-visible; owner does the storage, console and call checks of section 9) | S10 | R4.3 (page), R7.1 to R7.6, R11.2 |
+| S12 | **Owner only, published variant only (Q1):** check GitHub Settings > Pages and > Actions (Q4), set the Pages source to "GitHub Actions", and add `.github/workflows/news-reader.yml` with its copy in `GitRequirements/`; the worker of S8 provides a draft in the README if the owner asks | Low | yes if done as a pull request | S1, S11 | R6.1, R12.2, Q4 |
+| S13 | **Owner only, published variant only:** test the live page and two scheduled runs | Low | n/a | S12 | Section 9 (published variant) |
+| S14 | **Manager or owner, optional:** list the `category` values of the Sveriges Radio feed; if they mark Swedish politics, open an issue to switch to `categoryFilter` | Low | no (no pull request) | none | Q3 |
 
 Notes:
-- In the local variant the plan ends with S10 and the owner's hand test; S11 and S12 are done only if the owner decides to publish (Q1).
+- In the local variant the plan ends with S11 and the owner's hand tests; S12 and S13 are done only if the owner decides to publish (Q1).
 - S2 depends on S1 because `storageAllowed` and `allowedHosts` for SVT come from S1.
-- S4 and S5 can be done in parallel; S8 and S9 can be done in parallel after S6 (S8 also needs S7).
+- S2 creates `tests/shared-cases.json` with empty sections, so S4 and S5 can fill their sections in parallel; S6 fills the keyword section; S9 runs all of it in JavaScript.
+- S8 and S9 can be done in parallel after S6 (S8 also needs S7).
+- The `id` (R5.4) and the final item shape (R1.1) belong to S7; S4 only produces raw entries.
 - S3 should follow S2 directly. Until it is done, each worker runs the Python and Node tests locally and says so in the report.
 - Every requirement in section 3 is listed in the "Covers" column of at least one step.
