@@ -115,6 +115,9 @@ GitHub does not let the author of a pull request approve it, and all work is don
 
 A worker that needs an answer from the owner does not guess: it lists the question in its report and stops as far as that question matters.
 
+### Design documents
+A design document is named `<project-name>-design.md` and lives in the folder of its project, so that several projects can each have their own, for example `applications/news-reader/news-reader-design.md`. A worker that is asked to design writes the document there, on its own branch, and names it in its report.
+
 ### Report formats
 Designer/Developer report: **Summary**; **Files changed**; **Checks run** (the command and the result); **Acceptance criteria** one by one, each with yes or no and the evidence; **Assumptions and open questions**; **Follow-up ideas**.
 
