@@ -19,7 +19,6 @@ fails keeps its items from the previous `news.json` for up to 24 hours (R6.2).
 """
 import json
 import os
-import shutil
 from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -306,36 +305,30 @@ def _check_output_folder(out, root):
     out, root = Path(out), Path(root)
     if out.is_symlink():
         raise BuildError("the output folder %s is a symbolic link" % out)
-    if out.exists():
-        if not out.is_dir():
-            raise BuildError("the output folder %s is not a folder" % out)
-        site = root / "site"
-        overlaps = (
-            _same(out, root)
-            or any(_same(site, q) for q in [out, *out.resolve().parents])  # out is or lies in site/
-            or any(_same(out, q) for q in root.resolve().parents)          # out holds the project
-        )
-        if overlaps:
-            raise BuildError("the output folder %s overlaps the project folder" % out)
-    # A folder that does not exist yet is created later; compare the resolved text as well.
-    resolved_out, resolved_root = out.resolve(), root.resolve()
-    resolved_site = resolved_root / "site"
-    if resolved_out in (resolved_root, resolved_site) or resolved_site in resolved_out.parents \
-            or resolved_out in resolved_root.parents:
+    if out.exists() and not out.is_dir():
+        raise BuildError("the output folder %s is not a folder" % out)
+    site = (root / "site").resolve()  # follows a symbolic link
+    # The nearest folder that exists decides: a new folder inside site/ is refused too.
+    nearest = out
+    while not nearest.exists():
+        nearest = nearest.parent
+    if any(_same(site, q) for q in [nearest, *nearest.resolve().parents]):
+        raise BuildError("the output folder %s overlaps site/" % out)
+    if out.exists() and (_same(out, root) or any(_same(out, q) for q in root.resolve().parents)):
         raise BuildError("the output folder %s overlaps the project folder" % out)
 
 
 def _planned_files(root):
     """(source file, path relative to the output folder) for everything that is copied.
 
-    The content of `site/` (without its `tests` folder, `__pycache__` and
-    `node_modules`), `sources.json` and `politics-keywords.json`."""
+    The content of `site/` (without its `tests` folder, `__pycache__`,
+    `node_modules` and symbolic links), `sources.json` and `politics-keywords.json`."""
     plan = []
-    site = root / "site"
+    site = (root / "site").resolve()
     if site.is_dir():
         for path in sorted(site.rglob("*")):
             relative = path.relative_to(site)
-            if not path.is_file() or relative.parts[0] == "tests" or any(
+            if path.is_symlink() or not path.is_file() or relative.parts[0] == "tests" or any(
                     part in SITE_SKIP_NAMES for part in relative.parts):
                 continue
             plan.append((path, relative))
@@ -345,21 +338,30 @@ def _planned_files(root):
 
 
 def _check_targets(out, relatives):
-    """Refuse to write through a symbolic link: no target, and no folder on the way, may be one."""
+    """Refuse to write through a symbolic link: no target, no temporary file, and no
+    folder on the way may be one."""
     for relative in relatives:
-        target = out / relative
-        if target.is_symlink():
-            raise BuildError("refusing to write through the symbolic link %s" % target)
+        for name in (relative, relative.with_name(relative.name + ".tmp")):
+            if (out / name).is_symlink():
+                raise BuildError("refusing to write through the symbolic link %s" % (out / name))
         for parent in relative.parents:
             if (out / parent).is_symlink():
                 raise BuildError("refusing to write through the symbolic link %s" % (out / parent))
 
 
+def _replace_file(target, data):
+    """Write `data` to a new temporary file next to `target` and rename it onto `target`.
+
+    The old file is replaced, never written into, so a hard link to it keeps its content."""
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.unlink(missing_ok=True)
+    with open(temporary, "xb") as handle:  # exclusive: never follows a link
+        handle.write(data)
+    os.replace(temporary, target)
+
+
 def _write_json(path, document):
-    text = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(text, encoding="utf-8")
-    os.replace(temporary, path)
+    _replace_file(path, (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
 
 
 def _check_document(document, sources):
@@ -411,11 +413,11 @@ def build(out, now, fetch, previous_path=None, root=APP_ROOT, user_agent=None):
     _check_document(document, sources)
 
     plan = _planned_files(root)
-    _check_targets(out, [Path("news.json"), Path("news.json.tmp")] + [rel for _, rel in plan])
+    _check_targets(out, [Path("news.json")] + [rel for _, rel in plan])
     out.mkdir(parents=True, exist_ok=True)
     _write_json(out / "news.json", document)
     for source_file, relative in plan:
         target = out / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source_file, target)
+        _replace_file(target, source_file.read_bytes())
     return document

@@ -70,6 +70,19 @@ def test_percent_encoding_of_unreserved_characters_is_normalised(rule, path, exp
     assert is_allowed("User-agent: *\nDisallow: %s\n" % rule, UA, path) is expected
 
 
+@pytest.mark.parametrize("rule,path,expected", [
+    ("/ä", "/%C3%A4", False),
+    ("/%C3%A4", "/ä", False),
+    ("/%c3%a4", "/ä", False),
+    ("/ä", "/ä", False),
+    ("/ä/*.xml$", "/ä/x.xml", False),
+    ("/ä", "/a", True),
+    ("/€", "/%E2%82%AC", False),
+])
+def test_raw_non_ascii_is_matched_as_utf8_percent_encoding(rule, path, expected):
+    assert is_allowed("User-agent: *\nDisallow: %s\n" % rule, UA, path) is expected
+
+
 def test_urls():
     assert robots_url("https://news.example.invalid/a/b?x=1") == "https://news.example.invalid/robots.txt"
     assert url_path("https://news.example.invalid/a/b?x=1") == "/a/b?x=1"

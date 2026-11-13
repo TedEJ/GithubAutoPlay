@@ -7,7 +7,7 @@ broken connection and an incomplete body included). Rules:
 * `User-Agent: GithubAutoPlay-news-reader/1.0`, no cookies (no cookie handler
   is installed, and no `Cookie` header is sent).
 * Timeout of 15 seconds per network operation, and 60 seconds in total for the
-  whole download (checked while reading).
+  whole download (checked after every piece of data that arrives).
 * Redirects are followed only to `https` addresses on the source's
   `allowedHosts` (or a subdomain of one); any other redirect is an error.
 * The body is read in chunks and the download stops as soon as it is larger
@@ -105,11 +105,15 @@ def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONS
         if length is not None and length.isdigit() and int(length) > max_bytes:
             raise FetchError("too-large", "response larger than 2 MB")
         chunks, total = [], 0
+        # read1 returns as soon as any data has arrived (read would wait for a whole
+        # chunk, and the per-operation timeout starts again on every byte), so the
+        # total time limit below is checked after every piece of data.
+        read = getattr(response, "read1", None) or response.read
         try:
             while True:
                 if clock() > deadline:
                     raise FetchError("timeout", "download took longer than %d seconds" % total_seconds)
-                chunk = response.read(CHUNK_BYTES)
+                chunk = read(CHUNK_BYTES)
                 if not chunk:
                     break
                 total += len(chunk)

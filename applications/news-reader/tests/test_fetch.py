@@ -203,3 +203,35 @@ def test_errors_while_reading_become_fetch_errors(error):
         fetch_url(URL, HOSTS, opener=FakeOpener(response))
     assert info.value.kind == "network" and response.closed
 
+
+
+class SlowSocketResponse(FakeResponse):
+    """Data arrives one byte per `delay` seconds on a fake clock. `read(n)` blocks until it
+    has all n bytes (as a real socket read does); `read1(n)` returns after the first byte."""
+
+    def __init__(self, clock, delay=0.2, size=200000):
+        super().__init__(b"x" * size)
+        self.clock, self.delay = clock, delay
+
+    def _take(self, count):
+        count = min(count, len(self.body) - self.pos)
+        self.clock.now += count * self.delay
+        self.pos += count
+        return b"x" * count
+
+    def read(self, n):
+        return self._take(n)
+
+    def read1(self, n):
+        return self._take(1)
+
+
+def test_total_limit_holds_against_a_server_that_sends_one_byte_at_a_time():
+    clock = Clock(0)
+    response = SlowSocketResponse(clock)
+    with pytest.raises(FetchError) as info:
+        fetch_url(URL, HOSTS, opener=FakeOpener(response), clock=clock, total_seconds=2)
+    assert info.value.kind == "timeout"
+    assert response.pos <= 12  # stopped after about 2 s of data; read() would have waited for 64 KiB
+    assert clock.now < 3
+    assert response.closed

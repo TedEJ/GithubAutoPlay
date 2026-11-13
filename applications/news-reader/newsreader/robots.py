@@ -17,7 +17,8 @@ A small reading of RFC 9309 (the Robots Exclusion Protocol):
   The path that is tested includes the query string.
 * A leading byte order mark is ignored. Percent-encoded unreserved characters
   (`%7E` for `~`) are decoded in the rules and in the tested path before
-  matching, so `/%7Ea` and `/~a` are the same path.
+  matching, so `/%7Ea` and `/~a` are the same path. Raw non-ASCII characters
+  are first turned into their UTF-8 percent-encoded form (`/ä` is `/%C3%A4`).
 """
 import re
 from urllib.parse import urlsplit
@@ -33,7 +34,10 @@ _PERCENT = re.compile(r"%([0-9A-Fa-f]{2})")
 
 
 def normalise_path(path):
-    """Decode percent-encoded unreserved characters; other escapes get upper-case hex."""
+    """UTF-8 percent-encode raw non-ASCII characters, decode percent-encoded
+    unreserved characters; other escapes get upper-case hex."""
+    path = "".join(c if ord(c) < 128 else "".join("%%%02X" % b for b in c.encode("utf-8", "surrogatepass"))
+                   for c in path)
     def decode(match):
         char = chr(int(match.group(1), 16))
         return char if char in _UNRESERVED else "%" + match.group(1).upper()

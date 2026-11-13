@@ -642,3 +642,50 @@ def test_symlinked_folder_inside_the_output_is_not_written_through(project, tmp_
     with pytest.raises(BuildError, match="symbolic link"):
         run(project, FakeFetch({FEED_URL: GOOD_FEED}))
     assert list(elsewhere.iterdir()) == []
+
+
+# --- review round 2 -----------------------------------------------------
+
+def test_symlinked_site_folder_is_followed_for_the_overlap_check(project, tmp_path):
+    real_site = tmp_path / "real-site"
+    (project.root / "site").rename(real_site)
+    (project.root / "site").symlink_to(real_site, target_is_directory=True)
+    for target in (real_site, real_site / "new-folder", real_site / "a" / "b", project.root / "site" / "new"):
+        with pytest.raises(BuildError, match="site/"):
+            build(target, NOW, FakeFetch(), root=project.root)
+    assert not (real_site / "news.json").exists() and not (real_site / "new-folder").exists()
+    # a normal output folder still works, and the files of the linked site/ are copied
+    run(project, FakeFetch({FEED_URL: GOOD_FEED}))
+    assert (project.out / "logic.js").exists()
+
+
+def test_new_output_folder_inside_site_is_refused(project):
+    with pytest.raises(BuildError, match="site/"):
+        build(project.root / "site" / "not-yet", NOW, FakeFetch(), root=project.root)
+    assert not (project.root / "site" / "not-yet").exists()
+
+
+@pytest.mark.parametrize("name", ["news.json", "logic.js", "sources.json"])
+def test_hard_linked_targets_are_replaced_not_written_into(project, tmp_path, name):
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep me", encoding="utf-8")
+    project.out.mkdir()
+    import os
+    os.link(victim, project.out / name)
+    run(project, FakeFetch({FEED_URL: GOOD_FEED}))
+    assert victim.read_text(encoding="utf-8") == "keep me"
+    assert (project.out / name).read_text(encoding="utf-8") != "keep me"
+    assert not list(project.out.glob("*.tmp"))
+
+
+def test_file_symlinks_inside_site_are_not_followed(project, tmp_path):
+    secret = tmp_path / "secret.txt"
+    secret.write_text("private", encoding="utf-8")
+    (project.root / "site" / "link.txt").symlink_to(secret)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "inner.txt").write_text("private", encoding="utf-8")
+    (project.root / "site" / "linked-dir").symlink_to(elsewhere, target_is_directory=True)
+    run(project, FakeFetch({FEED_URL: GOOD_FEED}))
+    assert not (project.out / "link.txt").exists() and not (project.out / "linked-dir").exists()
+    assert (project.out / "logic.js").exists()
