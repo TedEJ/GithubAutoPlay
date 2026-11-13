@@ -302,7 +302,8 @@
     const doc = env.document;
     const storage = getStorage(env.window);
     const el = {};
-    for (const id of ["updated", "refresh", "notices", "headlines", "empty", "sources", "bottom-line"]) {
+    for (const id of ["updated", "refresh", "notices", "headlines", "empty", "sources", "sources-section",
+      "bottom-line"]) {
       el[id] = doc.getElementById(id);
     }
 
@@ -316,6 +317,12 @@
     };
     const sourceEls = new Map();
     let sourcesBuilt = "";
+    // What is on the screen now. A part is only rewritten when its key changes,
+    // so that the keyboard focus stays where it is and a screen reader does not
+    // read the same notice again after every reload.
+    let noticesKey = null;
+    let listKey = null;
+    const linkById = new Map();
 
     function makeText(tag, className, text) {
       const node = doc.createElement(tag);
@@ -325,16 +332,28 @@
     }
 
     function renderNotices() {
-      el.notices.replaceChildren();
       const notices = decideNotices(state.news, state.fromSaved, env.now());
+      const key = JSON.stringify(notices);
+      if (key === noticesKey) return;
+      noticesKey = key;
+      el.notices.replaceChildren();
       for (const notice of notices) {
         el.notices.appendChild(makeText("p", "notice notice-" + notice.kind, notice.text));
       }
     }
 
     function renderList() {
-      el.headlines.replaceChildren();
       const items = visibleItems(state.news, state.selected);
+      const key = JSON.stringify([state.news !== null, items]);
+      if (key === listKey) return;
+      listKey = key;
+      // Keep the focus on a headline link that is still in the list.
+      let focusedId = null;
+      for (const [id, link] of linkById) {
+        if (doc.activeElement === link) focusedId = id;
+      }
+      linkById.clear();
+      el.headlines.replaceChildren();
       for (const item of items) {
         const li = doc.createElement("li");
         li.className = "item";
@@ -342,10 +361,12 @@
         link.setAttribute("href", item.url);
         link.setAttribute("target", "_blank");
         link.setAttribute("rel", "noopener noreferrer");
+        linkById.set(item.id, link);
         li.appendChild(link);
         const meta = doc.createElement("p");
         meta.className = "meta";
         meta.appendChild(makeText("span", "source", item.sourceName));
+        meta.appendChild(makeText("span", "sep", " · "));
         if (item.published !== null) {
           const time = makeText("time", "time", item.publishedDisplay);
           time.setAttribute("datetime", item.published);
@@ -360,6 +381,7 @@
       const showEmpty = state.news !== null && items.length === 0;
       el.empty.textContent = TEXT.empty;
       el.empty.hidden = !showEmpty;
+      if (focusedId !== null && linkById.has(focusedId)) linkById.get(focusedId).focus();
     }
 
     function renderHeader() {
@@ -375,6 +397,7 @@
     // Built once per list of sources, so that a checkbox keeps its focus when
     // the data is reloaded; later calls only update the texts.
     function renderSources() {
+      el["sources-section"].hidden = !state.sources;
       if (!state.sources) return;
       const rows = sourceRows(state.sources, state.news, state.selected);
       const signature = rows.map((r) => r.id).join("|");
@@ -382,18 +405,22 @@
         sourcesBuilt = signature;
         sourceEls.clear();
         el.sources.replaceChildren();
-        for (const row of rows) {
+        rows.forEach((row, index) => {
           const li = doc.createElement("li");
           li.className = "source-row";
+          // Element ids use the position, not the source id, so that they are
+          // always valid and cannot collide.
+          const boxId = "src-cb-" + index;
+          const infoId = "src-info-" + index;
           const input = doc.createElement("input");
           input.setAttribute("type", "checkbox");
-          input.setAttribute("id", "source-" + row.id);
-          input.setAttribute("aria-describedby", "source-info-" + row.id);
+          input.setAttribute("id", boxId);
+          input.setAttribute("aria-describedby", infoId);
           input.addEventListener("change", onChoice);
           const label = makeText("label", "source-name", row.name);
-          label.setAttribute("for", "source-" + row.id);
+          label.setAttribute("for", boxId);
           const info = doc.createElement("span");
-          info.setAttribute("id", "source-info-" + row.id);
+          info.setAttribute("id", infoId);
           info.className = "source-info";
           const note = makeText("span", "source-note", "");
           const status = makeText("span", "source-status", "");
@@ -404,7 +431,7 @@
           li.appendChild(info);
           el.sources.appendChild(li);
           sourceEls.set(row.id, { input, note, status });
-        }
+        });
       }
       for (const row of rows) {
         const parts = sourceEls.get(row.id);
@@ -457,7 +484,8 @@
     async function load() {
       if (state.loading) return;
       state.loading = true;
-      el.refresh.disabled = true;
+      // aria-busy, not the disabled attribute: a disabled button loses the focus.
+      el.refresh.setAttribute("aria-busy", "true");
       state.lastLoad = env.now();
       try {
         if (!state.sources) {
@@ -480,13 +508,17 @@
         state.fromSaved = state.news !== null;
       } finally {
         state.loading = false;
-        el.refresh.disabled = false;
+        el.refresh.setAttribute("aria-busy", "false");
       }
       renderAll();
     }
 
     function start() {
+      const html = doc.documentElement;
+      html.className = html.className ? html.className + " js" : "js";
+      el["sources-section"].hidden = true;
       el.empty.hidden = true;
+      noticesKey = "loading";
       el.notices.replaceChildren();
       el.notices.appendChild(makeText("p", "notice", TEXT.loading));
       el.refresh.addEventListener("click", () => { load(); });

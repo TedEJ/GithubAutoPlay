@@ -242,7 +242,16 @@ class Node_ {
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
   appendChild(c) { this.children.push(c); return c; }
-  replaceChildren() { this.children = []; this._text = ""; }
+  replaceChildren() {
+    // Like a browser: removing the focused element moves the focus to the body.
+    const active = this.doc && this.doc.activeElement;
+    if (active && this.children.some((c) => c === active || c.find((n) => n === active).length)) {
+      this.doc.activeElement = null;
+    }
+    this.children = [];
+    this._text = "";
+  }
+  focus() { if (this.doc) this.doc.activeElement = this; }
   addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); }
   fire(type) { for (const fn of this.listeners[type] || []) fn({ target: this }); }
   set textContent(v) { this.children = []; this._text = String(v); }
@@ -255,13 +264,16 @@ class Node_ {
 }
 
 function fakePage() {
-  const ids = ["updated", "refresh", "notices", "headlines", "empty", "sources", "bottom-line"];
+  const ids = ["updated", "refresh", "notices", "headlines", "empty", "sources", "sources-section", "bottom-line"];
   const byId = {};
-  for (const id of ids) byId[id] = new Node_("x");
   const doc = new Node_("document");
   doc.hidden = false;
+  doc.activeElement = null;
+  doc.documentElement = new Node_("html");
+  const make = (tag) => { const n = new Node_(tag); n.doc = doc; return n; };
+  for (const id of ids) byId[id] = make("x");
   doc.getElementById = (id) => byId[id] || null;
-  doc.createElement = (tag) => new Node_(tag);
+  doc.createElement = make;
   return { doc, byId };
 }
 
@@ -274,25 +286,28 @@ function fakeStorage(initial = {}) {
   };
 }
 
-function setup({ files, storage, window } = {}) {
+function setup({ files, storage, window, gate } = {}) {
   const { doc, byId } = fakePage();
   const calls = [];
+  const intervals = [];
+  const clock = { now: NOW };
   const env = {
     document: doc,
     window: window || { localStorage: storage },
-    now: () => NOW,
-    setInterval: () => 0,
+    now: () => clock.now,
+    setInterval: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
     setTimeout: () => 0,
     clearTimeout: () => {},
     fetch: async (url) => {
       calls.push(url);
+      if (gate) await gate;
       const body = files[url];
       if (body === undefined) return { ok: false, status: 404, text: async () => "" };
       return { ok: true, status: 200, text: async () => (typeof body === "string" ? body : JSON.stringify(body)) };
     },
   };
   const instance = app.createApp(env);
-  return { instance, byId, calls, doc };
+  return { instance, byId, calls, doc, intervals, clock };
 }
 
 function headlinesOf(byId) {
@@ -301,7 +316,7 @@ function headlinesOf(byId) {
 
 test("page: shows SVT headlines newest first with headline, source, time and a safe link", async () => {
   const storage = fakeStorage();
-  const { instance, byId } = setup({ files: { "sources.json": realSources, "news.json": newsFile() }, storage });
+  const { instance, byId, doc } = setup({ files: { "sources.json": realSources, "news.json": newsFile() }, storage });
   await instance.start();
   assert.deepEqual(headlinesOf(byId), ["Nyare rubrik om regeringen", "Äldre rubrik om riksdagen"]);
   const li = byId.headlines.children[0];
@@ -311,11 +326,13 @@ test("page: shows SVT headlines newest first with headline, source, time and a s
   assert.equal(link.attrs.target, "_blank");
   assert.equal(link.attrs.rel, "noopener noreferrer");
   const meta = li.children[1];
-  assert.deepEqual(meta.children.map((c) => c.textContent), ["SVT", "2026-11-13 13:58"]);
-  assert.equal(meta.children[1].attrs.datetime, "2026-11-13T12:58:00Z");
+  assert.deepEqual(meta.children.map((c) => c.textContent), ["SVT", " · ", "2026-11-13 13:58"]);
+  assert.equal(meta.children[2].attrs.datetime, "2026-11-13T12:58:00Z");
   assert.equal(byId.updated.textContent, "SVT uppdaterad 2026-11-13 14:05");
   assert.equal(byId.empty.hidden, true);
   assert.equal(byId.notices.children.length, 0);
+  assert.equal(byId["sources-section"].hidden, false);
+  assert.match(doc.documentElement.className, /\bjs\b/);
   assert.equal(byId["bottom-line"].textContent,
     "Rubriker och länkar från SVT och Sveriges Radio. Klicka för att läsa hos källan.");
   assert.ok(JSON.parse(storage.data["newsReader.lastNews"]).items.length === 2);
@@ -344,6 +361,10 @@ test("page: Källor lists each source with note and status; the Sveriges Radio r
   assert.match(text[1], /Inte tillgänglig ännu/);
   const input = rows[0].children[0];
   const label = rows[0].children[1];
+  const ids = rows.flatMap((r) => [r.children[0].attrs.id, r.children[2].attrs.id]);
+  assert.equal(new Set(ids).size, 4);
+  assert.ok(ids.every((id) => /^src-(cb|info)-[0-9]+$/.test(id)));
+  assert.equal(input.attrs["aria-describedby"], rows[0].children[2].attrs.id);
   assert.equal(input.attrs.type, "checkbox");
   assert.equal(label.tag, "label");
   assert.equal(label.attrs.for, input.attrs.id);
@@ -436,6 +457,7 @@ test("page: sources.json missing gives the error notice and no list", async () =
   await instance.start();
   assert.equal(byId.notices.children[0].textContent, "Kunde inte hämta nyheter. Försök igen senare.");
   assert.equal(byId.headlines.children.length, 0);
+  assert.equal(byId["sources-section"].hidden, true);
 });
 
 test("page: old data gives the stale notice (R8.3)", async () => {
@@ -471,11 +493,168 @@ test("page: an item of a Sveriges Radio in news.json is never shown (N10)", asyn
   assert.ok(!headlinesOf(byId).includes("SR-rubrik"));
 });
 
+test("page: saved copy plus failed sources.json keeps the failure text (nothing to check links against)", async () => {
+  const saved = app.validateNews(newsFile(), SOURCES, NOW);
+  const storage = fakeStorage({ "newsReader.lastNews": JSON.stringify(saved) });
+  const { instance, byId } = setup({ files: { "news.json": newsFile() }, storage });
+  await instance.start();
+  assert.equal(byId.headlines.children.length, 0);
+  assert.equal(byId.notices.children[0].textContent, "Kunde inte hämta nyheter. Försök igen senare.");
+});
+
+// ---------------------------------------------------------------- refresh, focus, notices
+
+test("refresh: an interval of exactly 10 minutes loads again", async () => {
+  const { instance, calls, intervals } = setup({ files: { "sources.json": realSources, "news.json": newsFile() } });
+  await instance.start();
+  assert.equal(intervals.length, 1);
+  assert.equal(intervals[0].ms, 10 * 60 * 1000);
+  assert.equal(app.REFRESH_MS, 10 * 60 * 1000);
+  const before = calls.filter((u) => u === "news.json").length;
+  intervals[0].fn();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(calls.filter((u) => u === "news.json").length, before + 1);
+});
+
+test("refresh: nothing is loaded while the tab is hidden; it loads when visible again", async () => {
+  const { instance, calls, intervals, doc, clock } = setup({
+    files: { "sources.json": realSources, "news.json": newsFile() } });
+  await instance.start();
+  const count = () => calls.filter((u) => u === "news.json").length;
+  const start = count();
+  doc.hidden = true;
+  intervals[0].fn();
+  doc.fire("visibilitychange");
+  await new Promise((r) => setImmediate(r));
+  assert.equal(count(), start);
+  // Visible again, less than 10 minutes after the last load: no load.
+  doc.hidden = false;
+  clock.now += 9 * 60 * 1000;
+  doc.fire("visibilitychange");
+  await new Promise((r) => setImmediate(r));
+  assert.equal(count(), start);
+  // Visible again, 10 minutes after the last load: load.
+  clock.now += 60 * 1000;
+  doc.fire("visibilitychange");
+  await new Promise((r) => setImmediate(r));
+  assert.equal(count(), start + 1);
+  // The timer loads again once the tab is visible.
+  intervals[0].fn();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(count(), start + 2);
+});
+
+test("refresh: a load that is already running is not started twice", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { instance, calls } = setup({ files: { "sources.json": realSources, "news.json": newsFile() }, gate });
+  const first = instance.start();
+  const second = instance.load();
+  const third = instance.load();
+  assert.equal(calls.length, 1, "only one request while a load is running");
+  release();
+  await Promise.all([first, second, third]);
+  assert.deepEqual(calls, ["sources.json", "news.json"]);
+  await instance.load();
+  assert.equal(calls.length, 3);
+});
+
+test("refresh: the button is never disabled (that would drop the focus), it is marked busy", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { instance, byId } = setup({ files: { "sources.json": realSources, "news.json": newsFile() }, gate });
+  const done = instance.start();
+  assert.equal(byId.refresh.attrs["aria-busy"], "true");
+  assert.equal(byId.refresh.disabled, false);
+  release();
+  await done;
+  assert.equal(byId.refresh.attrs["aria-busy"], "false");
+  assert.equal(byId.refresh.disabled, false);
+});
+
+test("focus: a reload of unchanged data does not touch the list or the notices", async () => {
+  const { instance, byId } = setup({ files: { "sources.json": realSources, "news.json": newsFile() } });
+  await instance.start();
+  const link = byId.headlines.children[0].children[0];
+  const firstLi = byId.headlines.children[0];
+  link.focus();
+  byId.refresh.focus();
+  await instance.load();
+  assert.equal(byId.headlines.children[0], firstLi, "same list elements");
+  assert.equal(byId.refresh.doc.activeElement, byId.refresh);
+  link.focus();
+  await instance.load();
+  assert.equal(link.doc.activeElement, link);
+});
+
+test("focus: when the list changes, the focus goes to the same headline if it is still there", async () => {
+  const files = { "sources.json": realSources, "news.json": newsFile() };
+  const { instance, byId, doc } = setup({ files });
+  await instance.start();
+  // Focus the older headline, then a new item appears first.
+  const older = byId.headlines.children[1].children[0];
+  older.focus();
+  const data = newsFile();
+  data.items.push({ ...data.items[0], title: "Helt ny rubrik", url: "https://www.svt.se/nyheter/inrikes/c",
+    published: "2026-11-13T13:20:00Z" });
+  files["news.json"] = data;
+  await instance.load();
+  assert.equal(headlinesOf(byId).length, 3);
+  assert.ok(doc.activeElement);
+  assert.equal(doc.activeElement.textContent, "Äldre rubrik om riksdagen");
+  // The focused headline disappears: no focus is invented.
+  files["news.json"] = newsFile();
+  files["news.json"].items.shift();
+  await instance.load();
+  assert.equal(doc.activeElement, null);
+});
+
+test("notices: a notice that did not change is not rewritten (no new announcement)", async () => {
+  const data = newsFile({ generatedAt: "2026-11-13T09:00:00Z" });
+  const { instance, byId, clock } = setup({ files: { "sources.json": realSources, "news.json": data } });
+  await instance.start();
+  const notice = byId.notices.children[0];
+  assert.match(notice.textContent, /kan vara gamla/);
+  clock.now += 10 * 60 * 1000;
+  await instance.load();
+  assert.equal(byId.notices.children[0], notice, "the same element, not rebuilt");
+});
+
+test("R1.4: an item with an empty or blank headline is dropped", () => {
+  const data = newsFile();
+  data.items[0].title = "";
+  data.items[1].title = " \t\u00a0 ";
+  assert.deepEqual(app.validateNews(data, SOURCES, NOW).items, []);
+});
+
+test("sourceRows: error with no last success says only that it could not be fetched", () => {
+  const file = newsFile({ sources: [{ id: "svt", status: "error", lastSuccess: null, itemCount: 0 }] });
+  const rows = app.sourceRows(SOURCES, app.validateNews(file, SOURCES, NOW), ["svt"]);
+  assert.equal(rows[0].status, "Kunde inte hämtas");
+  assert.ok(!rows[0].status.includes("Tid saknas"));
+});
+
 // ---------------------------------------------------------------- forbidden things
 
 function read(name) {
   return fs.readFileSync(path.join(SITE, name), "utf8");
 }
+
+test("index.html: the Content-Security-Policy is exactly the intended one", () => {
+  const html = read("index.html");
+  const m = /<meta http-equiv="Content-Security-Policy" content="([^"]*)">/.exec(html);
+  assert.ok(m, "CSP meta tag");
+  assert.equal(m[1],
+    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'");
+  assert.ok(!/\*/.test(m[1]) && !/unsafe/.test(m[1]));
+});
+
+test("index.html: the refresh button and Källor need the script", () => {
+  const html = read("index.html");
+  assert.match(html, /<button[^>]*id="refresh"[^>]*class="[^"]*needs-js/);
+  assert.match(html, /<section id="sources-section"[^>]* hidden>/);
+  assert.match(read("style.css"), /html:not\(\.js\) \.needs-js \{ display: none; \}/);
+});
 
 test("index.html: structure, language, noindex, no inline script or handler", () => {
   const html = read("index.html");

@@ -12,7 +12,7 @@
 <header class="page-header">
   <h1>Svensk politik – rubriker</h1>
   <p id="updated" class="updated"></p>
-  <button type="button" id="refresh" class="button">Uppdatera</button>
+  <button type="button" id="refresh" class="button needs-js" aria-busy="false">Uppdatera</button>
 </header>
 <main>
   <div id="notices" role="status"></div>
@@ -21,7 +21,7 @@
     <ol id="headlines" class="headlines"></ol>
     <p id="empty" class="notice" hidden></p>
   </section>
-  <section aria-labelledby="sources-heading" class="sources-section">
+  <section id="sources-section" aria-labelledby="sources-heading" class="sources-section" hidden>
     <h2 id="sources-heading">Källor</h2>
     <ul id="sources" class="sources"></ul>
   </section>
