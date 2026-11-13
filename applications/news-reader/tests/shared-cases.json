@@ -43,7 +43,7 @@
     {
       "id": "numeric-entities-decimal",
       "input": "Skatt p&#229; 5&#160;procent",
-      "expected": "Skatt på 5 procent"
+      "expected": "Skatt på 5 procent"
     },
     {
       "id": "numeric-entities-hex",
@@ -91,9 +91,9 @@
       "expected": "Ny budget klar"
     },
     {
-      "id": "no-break-space-is-kept",
+      "id": "no-break-space-is-white-space",
       "input": "5 000 kronor ",
-      "expected": "5 000 kronor "
+      "expected": "5 000 kronor"
     },
     {
       "id": "unicode-swedish",
@@ -129,6 +129,71 @@
       "id": "very-long-headline",
       "input": "Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten och mer",
       "expected": "Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten och mer"
+    },
+    {
+      "id": "entity-without-semicolon-is-left",
+      "input": "Tom &amp Jerry &aring och &#229",
+      "expected": "Tom &amp Jerry &aring och &#229"
+    },
+    {
+      "id": "entity-unknown-name-is-left",
+      "input": "Fel &unknown; och &Aacute; och &AMP;",
+      "expected": "Fel &unknown; och &Aacute; och &AMP;"
+    },
+    {
+      "id": "entity-name-is-case-sensitive",
+      "input": "&Amp; &NBSP;",
+      "expected": "&Amp; &NBSP;"
+    },
+    {
+      "id": "entity-null-is-left",
+      "input": "a&#0;b&#x0;c",
+      "expected": "a&#0;b&#x0;c"
+    },
+    {
+      "id": "entity-surrogate-is-left",
+      "input": "a&#xD800;b&#55357;c&#xDFFF;d",
+      "expected": "a&#xD800;b&#55357;c&#xDFFF;d"
+    },
+    {
+      "id": "entity-above-unicode-range-is-left",
+      "input": "a&#1114112;b&#x110000;c",
+      "expected": "a&#1114112;b&#x110000;c"
+    },
+    {
+      "id": "entity-c1-is-plain-character",
+      "input": "x&#128;y",
+      "expected": "xy"
+    },
+    {
+      "id": "entity-hex-upper-and-lower-x",
+      "input": "&#xC5;&#XE4;&#x1F600;",
+      "expected": "Åä😀"
+    },
+    {
+      "id": "entity-decimal-leading-zeros",
+      "input": "&#00229;",
+      "expected": "å"
+    },
+    {
+      "id": "entity-named-list",
+      "input": "&laquo;a&raquo; &ndash; &mdash; &hellip; &lsquo;b&rsquo; &ldquo;c&rdquo; &Eacute;&copy;&euro;",
+      "expected": "«a» – — … ‘b’ “c” É©€"
+    },
+    {
+      "id": "entity-nbsp-collapses-as-white-space",
+      "input": "  &nbsp;a&nbsp;&nbsp;b&nbsp; ",
+      "expected": "a b"
+    },
+    {
+      "id": "whitespace-vt-ff-and-nbsp",
+      "input": "\u000b\fa\u000b\f  b \f",
+      "expected": "a b"
+    },
+    {
+      "id": "whitespace-other-unicode-spaces-are-kept",
+      "input": "a b　c",
+      "expected": "a b　c"
     }
   ],
   "time": [],

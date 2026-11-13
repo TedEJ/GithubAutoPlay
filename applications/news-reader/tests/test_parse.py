@@ -16,7 +16,7 @@ def load(name):
 
 
 def test_sample_feed_gives_raw_entries():
-    entries = parse_rss(load("rss_sample.xml"))
+    entries = parse_rss(load("rss_svt_shape.xml"))
     assert [e.link for e in entries] == [
         "https://example.invalid/nyheter/a",
         "https://example.invalid/nyheter/b",
@@ -34,7 +34,7 @@ def test_entry_has_only_the_four_fields():
 
 
 def test_cdata_is_read_as_text_and_cleaning_is_left_to_the_caller():
-    entry = parse_rss(load("rss_sample.xml"))[1]
+    entry = parse_rss(load("rss_svt_shape.xml"))[1]
     assert entry.title == "Fet <b>rubrik</b> &amp; åäö"  # CDATA keeps the text literally
     assert clean_headline(entry.title) == "Fet rubrik & åäö"
     assert entry.description == "<p>Text med <i>markup</i></p>"
@@ -43,14 +43,14 @@ def test_cdata_is_read_as_text_and_cleaning_is_left_to_the_caller():
 
 
 def test_missing_fields_are_empty_strings():
-    entry = parse_rss(load("rss_sample.xml"))[2]
+    entry = parse_rss(load("rss_svt_shape.xml"))[2]
     assert entry.title == "Rubrik utan tid och beskrivning"
     assert entry.time_text == ""
     assert entry.description == ""
 
 
 def test_guid_image_and_category_are_not_read():
-    entry = parse_rss(load("rss_sample.xml"))[0]
+    entry = parse_rss(load("rss_svt_shape.xml"))[0]
     flat = " ".join([entry.title, entry.link, entry.time_text, entry.description])
     assert "thumbnail" not in flat and "bild.jpg" not in flat and "Inrikes" not in flat
 
@@ -166,3 +166,57 @@ def test_response_over_the_limit_is_refused():
 
 def test_limit_is_two_megabytes():
     assert MAX_RESPONSE_BYTES == 2 * 1024 * 1024
+
+
+def _utf16_feed(extra_prolog="", declaration=True, codec="utf-16"):
+    decl = '<?xml version="1.0" encoding="UTF-16"?>' if declaration else ""
+    text = decl + extra_prolog + "<rss><channel><item><title>&e;Åäö</title><link>https://example.invalid/16</link></item></channel></rss>"
+    return text.replace("&e;", "" if not extra_prolog else "&e;").encode(codec)
+
+
+def test_utf_16_feed_is_refused():
+    for data in (
+        _utf16_feed(),
+        _utf16_feed(declaration=False),
+        _utf16_feed(codec="utf-16-le"),
+        _utf16_feed(codec="utf-16-be"),
+        _utf16_feed(declaration=False, codec="utf-32"),
+    ):
+        with pytest.raises(FeedError, match="UTF-8 and ISO-8859-1"):
+            parse_rss(data)
+
+
+def test_utf_16_feed_with_entity_declaration_is_refused():
+    data = _utf16_feed('<!DOCTYPE rss [<!ENTITY e "INJECTED">]>')
+    with pytest.raises(FeedError):
+        parse_rss(data)
+
+
+def test_entity_declaration_is_refused_by_the_parser_not_by_a_byte_search():
+    # The keyword is split by a character reference-free but unusual layout:
+    # a declaration with a parameter entity, and one in upper-case spacing.
+    for decl in (
+        '<!DOCTYPE rss [<!ENTITY % p "x">]>',
+        '<!DOCTYPE rss [<!ENTITY\n e "INJECTED">]>',
+    ):
+        data = ('<?xml version="1.0"?>' + decl + "<rss><channel/></rss>").encode("utf-8")
+        with pytest.raises(FeedError, match="entity"):
+            parse_rss(data)
+
+
+@pytest.mark.parametrize("enc", ["windows-1252", "US-ASCII", "UTF-16", "Shift_JIS"])
+def test_other_declared_encodings_are_refused(enc):
+    data = ('<?xml version="1.0" encoding="%s"?><rss><channel/></rss>' % enc).encode("ascii")
+    with pytest.raises(FeedError, match="not accepted"):
+        parse_rss(data)
+
+
+@pytest.mark.parametrize("enc", ["utf-8", "UTF-8", "iso-8859-1", "ISO-8859-1"])
+def test_the_two_accepted_encodings_in_any_case(enc):
+    data = ('<?xml version="1.0" encoding="%s"?><rss><channel/></rss>' % enc).encode("ascii")
+    assert parse_rss(data) == []
+
+
+def test_size_is_checked_before_anything_else():
+    with pytest.raises(FeedError, match="2 MB"):
+        parse_rss(b" " * (MAX_RESPONSE_BYTES + 1))
