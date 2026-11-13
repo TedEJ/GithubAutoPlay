@@ -1,8 +1,8 @@
 # News reader: design
 
-Status: design proposal, no code yet. Written 2026-11-13 by the Designer/Developer worker; revised twice the same day with findings and decisions from the manager and the owner (version 3).
+Status: design proposal, no code yet. Written 2026-11-13 by the Designer/Developer worker; revised three times the same day with findings and decisions from the manager and the owner (version 4).
 
-The news reader is a web page that lists headlines about **politics in Sweden** from a fixed set of Swedish news sources, starting with DN (dn.se) and SVT (svt.se). Each item shows the headline, the source name, the publication time and a link to the original article. The page text and the news are in Swedish.
+The news reader is a web page that lists headlines about **politics in Sweden** from a fixed set of Swedish news sources, starting with DN (dn.se), SVT (svt.se) and Sveriges Radio Ekot (sverigesradio.se). Each item shows the headline, the source name, the publication time and a link to the original article. The page text and the news are in Swedish.
 
 How the facts in section 4 were established: the worker's own environment cannot reach the news sites (dn.se, svt.se, omni.se, api.sr.se, regeringen.se and data.riksdagen.se are all refused by its network proxy). The feed and API checks were done by the manager in the owner's browser on 2026-11-13 and handed to the worker. Section 4 says for each fact who checked it and what is still not verified.
 
@@ -42,7 +42,7 @@ How the facts in section 4 were established: the worker's own environment cannot
 6. The visitor clicks a headline. The original opens in a new tab.
 
 ### 2.2 Hide a source (visitor)
-1. The visitor opens "Källor" (sources) on the page. It shows every source in `news.json` with a check box and its status. Sources selected by keywords (SVT) carry the note "Urval med nyckelord – ungefärligt".
+1. The visitor opens "Källor" (sources) on the page. It shows every source in `news.json` with a check box and its status. Sources selected by keywords (SVT and Ekot) carry the note "Urval med nyckelord – ungefärligt".
 2. The visitor clears the check box for SVT.
 3. The list updates at once and no longer shows items from SVT. The choice is saved in local storage and is still there after a reload.
 
@@ -53,7 +53,7 @@ How the facts in section 4 were established: the worker's own environment cannot
 ### 2.4 Add a source to the catalogue (owner, through an issue)
 1. The owner opens an issue "Add source X to the news reader", with the site name and, if known, its feed or API.
 2. The manager or the owner checks the feed or API in a browser (format, fields, item count, whether there is a politics feed, categories, CORS header) and the source's robots.txt and terms, because workers cannot reach news sites. The candidates in section 4.6 are examples.
-3. A worker adds one entry to `sources.json` with the right method (section 7.1) and a test with a hand-written sample in the same shape. A source whose format the parser does not read yet needs a parser step first (as S13 for Sveriges Radio).
+3. A worker adds one entry to `sources.json` with the right method (section 7.1) and a test with a hand-written sample in the same shape. The parser reads RSS 2.0 and Atom (R11); a source in any other format needs a parser step first.
 4. After the merge, the next scheduled build reads the new source. It appears in "Källor" for every visitor, not ticked (R3.4).
 
 ### 2.5 Remove a source from the catalogue (owner, through an issue)
@@ -100,7 +100,7 @@ Every requirement is numbered and testable. "Build" means the scheduled job that
   - `keywordFilter`: a general feed, where an item belongs to the category when its headline or description matches the keyword list (R4.4).
 - R4.2 (auto) The method is chosen per source in this order of preference: `feed` if the source has a politics feed, else `categoryFilter` if its items carry usable categories, else `keywordFilter`. Keywords are used only for sources set to `keywordFilter`.
 - R4.3 (auto) A source without any method for the category is a configuration error: the test of `sources.json` fails.
-- R4.4 (auto) The keyword list is the file `politics-keywords.json` (shape and matching rules in section 7.2). An item matches when its headline or its description (after the cleaning of R1.2) contains at least one `include` term and no `exclude` term. When an item has no description, only the headline is used. The description is used only for this test and is then discarded (N1).
+- R4.4 (auto) The keyword list is the file `politics-keywords.json` (shape and matching rules in section 7.2). An item matches when its headline or its description (RSS `description` or Atom `summary`, after the cleaning of R1.2) contains at least one `include` term and no `exclude` term. When an item has no description, only the headline is used. The description is used only for this test and is then discarded (N1).
 - R4.5 (hand) In "Källor", a source using `keywordFilter` shows the note "Urval med nyckelord – ungefärligt", so the visitor knows the selection is approximate.
 
 ### R5. Selection, duplicates and order
@@ -143,10 +143,20 @@ Every requirement is numbered and testable. "Build" means the scheduled job that
 - R10.1 (hand, owner) Everything for the news reader lives in `applications/news-reader/` in the repository, and the page is published under the same path on GitHub Pages: `<Pages address>/applications/news-reader/` (decision D16).
 - R10.2 (hand, owner) The publishing workflow is separate from `ci.yml`, never commits, and is not a required check.
 
-### R11. Optional source: Sveriges Radio episodes (only if the owner says yes to Q1)
-- R11.1 (auto) The build can read episode lists from the Sveriges Radio API (JSON) as a source format `sr-episodes`, mapping the episode title to `title` and the episode page address to `url`. The audio file address and the description are never stored (N1); the description is used only for the keyword match (R4.4).
-- R11.2 (auto) The source's `name` in `sources.json` says that it is audio, for example "Ekot (ljud)", so the visitor can see that the link goes to a radio episode and not to an article.
-- R11.3 (auto) The time field of an episode is read if the API gives one; which field that is has not been verified (section 4.4). Without a usable time, R2.4 applies.
+### R11. Feed formats
+The parser must read both formats, because DN and SVT publish RSS 2.0 and Sveriges Radio publishes Atom. The format is detected from the root element (`<rss>` or Atom `<feed>`), not from the content type.
+
+| Item field | RSS 2.0 (DN, SVT) | Atom (Sveriges Radio Ekot) |
+|---|---|---|
+| `title` | `<item><title>` | `<entry><title>` |
+| `url` | `<item><link>` text | `<entry><link href="…">`: the link with `rel="alternate"` or with no `rel`; the first one if several |
+| `published` | `<pubDate>` | `<published>`, falling back to `<updated>` |
+| used only for the keyword match, then discarded | `<description>` | `<summary>` |
+| never read | `<category>` (except for `categoryFilter`), `<guid>`, image elements | `<content>`, `<author>`, `<id>`, `<category>` (except for `categoryFilter`) |
+
+- R11.1 (auto) The parser maps RSS 2.0 items as in the table above.
+- R11.2 (auto) The parser maps Atom entries as in the table above. Atom `<content>` (which may hold article text) is never read.
+- R11.3 (auto) A document whose root is neither `<rss>` nor Atom `<feed>` is a failed fetch (R6.2).
 
 ## 4. Findings about the sources
 
@@ -190,28 +200,34 @@ Method for SVT: `keywordFilter` on `https://www.svt.se/nyheter/inrikes/rss.xml` 
 
 **What SVT says about use (as read by the manager in `https://www.svt.se/robots.txt`):** `User-agent: *` with `Allow: /`, and a content signal `ai-train=no, search=yes, ai-input=yes`, meaning that training AI models on the content is not permitted. The news reader does not train anything: it makes a list of headlines and links (N9). Real SVT copies used to measure the keyword filter are kept outside the repository and are not used for training (section 9). SVT's terms of use beyond robots.txt were not read: **not verified**.
 
-### 4.4 Sveriges Radio (api.sr.se), optional
+### 4.4 Sveriges Radio Ekot (api.sr.se)
 
 | URL | Result | Checked by |
 |---|---|---|
-| `https://api.sr.se/api/v2/news` and `https://api.sr.se/api/v2/news/index` | Open, JSON, `Access-Control-Allow-Origin: *`. Lists 20 news programmes, among them Ekot senaste nytt (id 5380), Ekot nyhetssändning (id 4540) and the regional P4 channels. | Verified (manager) |
-| `https://api.sr.se/api/v2/news/episodes` and `https://api.sr.se/api/v2/episodes/index?programid=5380` | **Audio episodes**, with fields `id`, `title`, `description`, `url`, `program`. | Verified (manager) |
-| `https://api.sr.se/api/v2/articles` and `https://api.sr.se/api/v2/news/categories` | HTTP 500 | Verified (manager) |
+| `https://api.sr.se/api/rss/program/83` | **Ekot text news feed. Atom (`application/atom+xml`), feed title "Ekot", 20 entries. Fields per entry: `id`, `title`, `summary`, `published`, `updated`, `author`, `link`, `category`, `content`. Times in ISO 8601 with offset. Links to text articles on `www.sverigesradio.se/artikel/<number>`. `Access-Control-Allow-Origin: *`.** | Verified (manager). First found on Feeder `https://feeder.co/sv/discover/site/sverigesradio.se`. |
+| `https://api.sr.se/api/rss/group/27511` | "Toppnyheter", Atom, but stale (newest entries from 2026-11-12 and older) and in the style of local news. | Verified (manager). **Not used.** |
+| `https://api.sr.se/api/v2/news`, `https://api.sr.se/api/v2/news/episodes`, `https://api.sr.se/api/v2/episodes/index?programid=5380` | Open JSON API; lists news programmes and their **audio episodes** (`id`, `title`, `description`, `url`, `program`). | Verified (manager). **Rejected** (see below). |
+| `https://api.sr.se/api/v2/articles`, `https://api.sr.se/api/v2/news/categories` | HTTP 500 | Verified (manager) |
 
-- The API does **not** give text articles by topic. What it gives are radio episodes (Ekot broadcasts), each with a title and a description. A news reader item for SR would therefore be an episode title linking to an episode page, not an article.
-- **Not verified:** which field holds the publication time of an episode and in which form; whether a `format=json` parameter is needed (the manager reported JSON, the exact query was not reported); whether `url` is the episode web page on sverigesradio.se or something else; SR's terms of use for the API.
-- Because the API sends `Access-Control-Allow-Origin: *`, a page could even call it directly from the browser. The design still reads it in the build like every other source, so that the page has one data path and one place for filtering and tests.
-- Method if used: `keywordFilter` on the Ekot senaste nytt episodes (programme id 5380), source name "Ekot (ljud)" (R11). It is **not enabled in version 1**; see Q1 and step S13.
+- The Ekot feed mixes all Ekot news (world, culture, sport), so it has no politics feed and needs the keyword filter like SVT.
+- Entries carry `category`, but its values were not reported: **not verified**. If the values mark Swedish politics reliably, the method could change to `categoryFilter` (R4.2, Q1).
+- `content` may hold the article text; the parser never reads it (R11.2).
+- The item link host is verified as `www.sverigesradio.se`, so `allowedHosts` is `sverigesradio.se`.
+
+Method for Sveriges Radio: `keywordFilter` on `https://api.sr.se/api/rss/program/83`, source name "Ekot", enabled in version 1 (decision D17).
+
+Why the episode API was rejected: it gives radio episodes (audio), not text articles, so a headline would lead to a sound clip rather than an article; it needs a separate JSON parser; and which field holds an episode's time was not verified. The Ekot Atom feed gives the same newsroom's output as text articles in a standard format.
+
+**What Sveriges Radio says about use:** SR's terms of use for its API and feeds have **not been read** by anyone yet (K8, step S1). sverigesradio.se's robots.txt was not reported either.
 
 ### 4.5 Can a browser read the news feeds directly?
-No for SVT (verified: no CORS header). Not checked for DN. Yes for the SR API, but that does not help with the other sources. The recommended design reads every source in the build, so this does not matter for it.
+No for SVT (verified: no CORS header). Not checked for DN. Yes for the Ekot feed and the SR API (`Access-Control-Allow-Origin: *`), but that does not help with the other sources. The recommended design reads every source in the build, so this does not matter for it.
 
 ### 4.6 Candidates not yet verified (for the manager to check)
 These were found by the worker through web search and feed directories. None has been fetched. Each needs the check in flow 2.4 step 2 before it can be added.
 
 | Candidate | What was found | What it is | What must be checked |
 |---|---|---|---|
-| Sveriges Radio RSS | Feeder lists `https://api.sr.se/api/rss/program/83` ("Nyheter (Ekot)") and `http://api.sr.se/api/rss/group/27511` ("Toppnyheter från Sveriges Radio"), and P4 regional feeds of the form `https://api.sr.se/api/rss/program/<id>`. Feeder lists no politics or inrikes feed for SR. | Possibly text news items, not only episodes. | Whether the items are articles or episodes; fields; time; whether any feed is about politics; terms. If one carries text news with times, it may be better than R11. |
 | Regeringen.se press releases | Feeder lists feeds at `https://www.regeringen.se/Filter/RssFeed?...` with long filter parameters, and a page `https://www.regeringen.se/pressmeddelanden/`. | Official government press releases, not news journalism. | That a press-release feed exists and its exact address; fields; whether the owner wants official press releases in a news list. |
 | Riksdagen open data (data.riksdagen.se) | The terms page `https://www.riksdagen.se/sv/dokument-och-lagar/riksdagens-oppna-data/anvandarstod/anvandningsvillkor/` was read by the worker: the data is free to use and share if the source is given as "Källa: Sveriges riksdag"; a service must not suggest that the Riksdag runs or endorses it; copyrighted material such as images needs permission. No licence name or fee is given. | Official data (documents, votes, calendar), not news. | Which endpoint would give a readable list (for example new documents or votes), its format and fields, and whether the owner wants official data in a news list. If used, the page must show "Källa: Sveriges riksdag". |
 
@@ -219,7 +235,7 @@ These were found by the worker through web search and feed directories. None has
 
 ### Option A: pure static page that fetches the feeds in the browser
 - How: `index.html` on GitHub Pages; JavaScript fetches each feed and parses it.
-- Breaks: the browser blocks reading another site's response unless that site allows it (CORS). Verified for SVT: no CORS header, so it cannot work. DN not checked. Only the SR API allows it.
+- Breaks: the browser blocks reading another site's response unless that site allows it (CORS). Verified for SVT: no CORS header, so it cannot work. DN not checked. Only Sveriges Radio allows it.
 - Verdict: rejected. It does not work for SVT, and its logic would be JavaScript that the current check `checks` cannot test (it has only Python).
 
 ### Option B: static page plus a public CORS proxy
@@ -269,8 +285,8 @@ applications/news-reader/
   newsreader/
     __init__.py
     model.py                NewsItem and SourceStatus data classes; no I/O
-    parse.py                RSS 2.0 and Atom bytes -> list of raw entries; no network
-    parse_sr.py             (only with step S13) SR API episode JSON -> raw entries
+    parse.py                RSS 2.0 (DN, SVT) and Atom (Ekot) bytes -> list of raw
+                            entries, mapped as in R11; no network
     timeutil.py             parse dates, convert to UTC, format Europe/Stockholm (R2)
     select.py               feed and categoryFilter rules, URL check, title cleaning,
                             cut to length, de-duplicate, drop old, cap per source,
@@ -300,7 +316,7 @@ applications/news-reader/
 ```
 
 ### Pure logic (tested without browser or network)
-`parse.py`, `parse_sr.py`, `timeutil.py`, `select.py`, `keywords.py`, `robots.py`, `model.py`, and `build.py` with an injected fetch function. These take bytes and values in and give values out. `build.py` gets the fetch function and the current time as parameters, so tests control both.
+`parse.py`, `timeutil.py`, `select.py`, `keywords.py`, `robots.py`, `model.py`, and `build.py` with an injected fetch function. These take bytes and values in and give values out. `build.py` gets the fetch function and the current time as parameters, so tests control both.
 
 ### Network layer
 `fetch.py` only: one function `fetch(url) -> bytes` that applies the timeout and redirect rule (R6.2), the 2 MB limit (R8.4) and the User-Agent (R6.5). It is the only place that imports `urllib.request`.
@@ -337,7 +353,7 @@ A workflow `.github/workflows/news-reader.yml`, separate from `ci.yml`:
       "enabled": true,
       "homepage": "https://www.dn.se/",
       "allowedHosts": ["dn.se"],
-      "format": "rss",
+      "format": "feed",
       "categories": {
         "politics-sweden": { "method": "feed", "url": "https://www.dn.se/rss/om/svensk-politik/" }
       }
@@ -348,9 +364,20 @@ A workflow `.github/workflows/news-reader.yml`, separate from `ci.yml`:
       "enabled": true,
       "homepage": "https://www.svt.se/",
       "allowedHosts": ["svt.se"],
-      "format": "rss",
+      "format": "feed",
       "categories": {
         "politics-sweden": { "method": "keywordFilter", "url": "https://www.svt.se/nyheter/inrikes/rss.xml" }
+      }
+    },
+    {
+      "id": "sr-ekot",
+      "name": "Ekot",
+      "enabled": true,
+      "homepage": "https://www.sverigesradio.se/",
+      "allowedHosts": ["sverigesradio.se"],
+      "format": "feed",
+      "categories": {
+        "politics-sweden": { "method": "keywordFilter", "url": "https://api.sr.se/api/rss/program/83" }
       }
     }
   ]
@@ -358,10 +385,9 @@ A workflow `.github/workflows/news-reader.yml`, separate from `ci.yml`:
 ```
 - `id`: lower-case letters, digits and `-`, unique.
 - `enabled`: `true` or `false` (R3.7).
-- `format`: `rss` (RSS 2.0 or Atom, detected from the content), or `sr-episodes` (only after step S13).
+- `format`: `feed` for every source today; the parser tells RSS 2.0 from Atom by the root element (R11). The field exists so that another format could be added later.
 - A `categoryFilter` method looks like `{ "method": "categoryFilter", "url": "<general feed>", "values": ["Politik"] }`. No source uses it today.
-- `allowedHosts` are the expected hosts; they must be confirmed from the item links (Q5).
-- If step S13 is done, an entry `{ "id": "sr-ekot", "name": "Ekot (ljud)", "format": "sr-episodes", "allowedHosts": ["sverigesradio.se"], ... }` is added with the episode address of section 4.4; its exact URL and host are settled in S12.
+- `allowedHosts` for Ekot is verified (`www.sverigesradio.se`, section 4.4); for DN and SVT it is expected and must be confirmed (Q5).
 - Changes to this file are made only through issues and pull requests (decision D10).
 
 ### 7.2 The keyword list: `politics-keywords.json` (in the repository)
@@ -386,8 +412,8 @@ Matching rules (R4.4):
 - `words`: case-insensitive, compared after Unicode NFC normalisation. A term matches a whole word; a term ending in `*` matches any word that starts with the term without the `*` (so `riksdag*` matches "riksdagen" and "riksdagsledamot"). Word boundaries are letters and digits, including å, ä, ö and é.
 - `caseSensitive`: exact text, including the brackets, so "(S)" after a politician's name matches but the letter "s" does not.
 - `exclude`: an item that matches any exclude term is not selected even if it matches an include term. It starts empty and is filled through issues when false positives are found.
-- The list applies to every source with `keywordFilter`: SVT inrikes now, and SR Ekot episodes if step S13 is done.
-- The lists above are the starting proposal. Step S7 checks them against a saved SVT inrikes copy and adjusts them. Words that are too broad on their own, such as "minister", "val" and "parti", are deliberately left out.
+- The list applies to every source with `keywordFilter`: SVT inrikes and Ekot.
+- The lists above are the starting proposal. Step S7 checks them against saved copies of SVT inrikes and Ekot and adjusts them. Words that are too broad on their own, such as "minister", "val" and "parti", are deliberately left out.
 
 ### 7.3 The visitor's choice (in the browser)
 - `localStorage["newsReader.selectedSources"]` = JSON list of source ids, for example `["dn"]`.
@@ -403,7 +429,8 @@ Matching rules (R4.4):
   "category": "politics-sweden",
   "sources": [
     { "id": "dn", "name": "DN", "method": "feed", "status": "ok", "lastSuccess": "2026-11-13T13:05:12Z", "itemCount": 20 },
-    { "id": "svt", "name": "SVT", "method": "keywordFilter", "status": "ok", "lastSuccess": "2026-11-13T13:05:12Z", "itemCount": 11 }
+    { "id": "svt", "name": "SVT", "method": "keywordFilter", "status": "ok", "lastSuccess": "2026-11-13T13:05:12Z", "itemCount": 11 },
+    { "id": "sr-ekot", "name": "Ekot", "method": "keywordFilter", "status": "ok", "lastSuccess": "2026-11-13T13:05:12Z", "itemCount": 6 }
   ],
   "items": [
     {
@@ -434,7 +461,9 @@ The headline, URL and counts above are made up for illustration.
 | SVT item about Swedish politics without any listed term | Not shown (false negative) | R4.4, K6 |
 | SVT inrikes item that matches a term but is not politics (for example "regeringen" in a crime story) | Shown (false positive) until an exclude term is added | R4.4, K6 |
 | Item without description | Matched on headline only | R4.4 |
-| SR episode (if S13 is done) | Shown with the source name "Ekot (ljud)", links to the episode | R11.1, R11.2 |
+| Ekot item about foreign politics (for example another country's government) | Can be shown (false positive), because the Ekot feed mixes world and domestic news; fixed with exclude terms | R4.4, K6 |
+| Atom entry with `updated` but no `published` | `updated` is used as the time | R2.2, R11.2 |
+| Atom entry with several links | The `alternate` link (or the one without `rel`) is used | R11.2 |
 | The whole scheduled job stops (disabled, error in the workflow) | `news.json` stops changing; the page warns after 3 hours | R7.3 |
 | GitHub disables a scheduled workflow after 60 days without repository activity (applies to this public repository) | Same as above; the owner re-enables it | R7.3, K3 |
 | Same article twice in one feed, or in two sources | Removed by normalised URL | R5.3 |
@@ -467,19 +496,19 @@ Tests live in `applications/news-reader/tests/` and use **hand-written sample fe
 7. `not_a_feed.html` and `broken.xml`: to test the failure path.
 8. `robots_allow.txt`, `robots_disallow_rss.txt`: to test R6.6.
 9. `previous_news.json`: a published file, to test that items of a failing source are kept for under 24 hours and dropped after.
-10. Only with step S13: `sr_episodes.json`, a hand-written file in the shape reported in section 4.4, with and without a time field.
+10. `atom_ekot_shape.xml`: Atom in the shape of the Ekot feed (`id`, `title`, `summary`, `published`, `updated`, `author`, `link`, `category`, `content`), with made-up text in `summary` and `content`, to prove that neither ends up in `news.json` and that `summary` takes part in the keyword match.
 
 What the tests cover: every requirement marked (auto) in section 3, plus a test that `sources.json` and `politics-keywords.json` in the repository are valid. `build.py` is tested with a fake fetch function (returns fixture bytes, or raises a timeout) and a fixed "now", including the time zone examples in R2.3 for both winter and summer time.
 
-How well the keyword list works cannot be proven with made-up data. In step S7 the owner (or the manager in the owner's browser, since workers cannot reach svt.se) saves one real copy of `https://www.svt.se/nyheter/inrikes/rss.xml` **outside the repository**; the worker or the owner runs the filter on it and reports in the pull request how many items matched and, by reading the matched and unmatched headlines, roughly how many false positives and false negatives there were. The copy is not committed and is not used for anything else (N9).
+How well the keyword list works cannot be proven with made-up data. In step S7 the owner (or the manager in the owner's browser, since workers cannot reach svt.se) saves one real copy each of `https://www.svt.se/nyheter/inrikes/rss.xml` and `https://api.sr.se/api/rss/program/83` **outside the repository**; the worker or the owner runs the filter on it and reports in the pull request how many items matched and, by reading the matched and unmatched headlines, roughly how many false positives and false negatives there were. The copy is not committed and is not used for anything else (N9).
 
 How the tests run:
 - Locally: `bash scripts/check.sh applications/news-reader` (the script takes the project folder as an argument) and, as today, `bash scripts/check.sh` for Countdown.
 - In the required check `checks`: `ci.yml` today runs the Countdown tests, the script tests and the Reviewer verdict step. Two steps must be added to the `checks` job (install requirements and run `python -m pytest` in `applications/news-reader`), and the copy in `GitRequirements/ci.yml` updated to match. That is a workflow change only the owner can make (step S3). Until then the news-reader tests do not protect pull requests.
 
 ### By hand (owner)
-- The page (S9): with a locally built `news.json` served by `python -m http.server` in the output folder: list order, link opens in a new tab, choosing and unchoosing sources, reload keeps the choice, private window, offline (browser developer tools "Offline"), stale warning (edit `generatedAt`), "Inga nyheter" message, keyword note on SVT, credit line, phone width 360 px, Swedish letters.
-- After S10 (this is step S11): the live address `<Pages address>/applications/news-reader/` shows news from both sources; a manual run from the Actions tab updates "Senast uppdaterad"; after an hour there have been two scheduled runs; reading the SVT items for obvious false positives.
+- The page (S9): with a locally built `news.json` served by `python -m http.server` in the output folder: list order, link opens in a new tab, choosing and unchoosing sources, reload keeps the choice, private window, offline (browser developer tools "Offline"), stale warning (edit `generatedAt`), "Inga nyheter" message, keyword note on SVT and Ekot, credit line, phone width 360 px, Swedish letters.
+- After S10 (this is step S11): the live address `<Pages address>/applications/news-reader/` shows news from all three sources; a manual run from the Actions tab updates "Senast uppdaterad"; after an hour there have been two scheduled runs; reading the SVT and Ekot items for obvious false positives.
 
 ## 10. Risks and open questions
 
@@ -491,7 +520,8 @@ How the tests run:
 - DN can be switched off with one line, `"enabled": false` (R3.7).
 - **Recommendation: contact Bonnier News / DN and ask whether showing headlines and links from the politics feed on this page is acceptable, before the page address is shared widely** (step S1). Until there is an answer, keep the page for the owner's own use. If the answer is no, set DN to `"enabled": false`.
 
-**K6. The keyword filter is approximate.** SVT has no politics feed (section 4.3), so SVT inrikes items are chosen by keywords in the headline and description (D11); the same applies to SR episodes if they are added. Consequences:
+**K6. The keyword filter is approximate.** SVT has no politics feed (section 4.3), and neither has Ekot (section 4.4), so their items are chosen by keywords in the headline and description or summary (D11, D17). Consequences:
+- The Ekot feed mixes world, culture and sport with domestic news, so terms like "regering*" also match other countries' governments. Expect more false positives from Ekot than from SVT inrikes; exclude terms are the remedy.
 - False positives: a domestic item that mentions the government or a party in passing (for example a crime or weather story quoting a minister) can appear.
 - False negatives: Swedish politics news that uses none of the listed terms, for example a headline that names only a minister by name, will be missed.
 - The list needs care over time: new party leaders, new party names or new topics. It is changed through issues like `sources.json`.
@@ -499,25 +529,29 @@ How the tests run:
 
 **K7. SVT's AI-training signal.** SVT's robots.txt says `ai-train=no` (no training of AI models on its content), `search=yes`, `ai-input=yes`. The news reader is a list of headlines and links and trains nothing (N9). The development process uses Claude: workers only read hand-written fixtures, and the one real SVT copy for measuring the filter (S7) is kept outside the repository. SVT's other terms were not read.
 
+**K8. Sveriges Radio's terms not read.** The Ekot feed is offered openly (with `Access-Control-Allow-Origin: *`), but nobody has read SR's terms of use for its feeds and API, or sverigesradio.se's robots.txt. The owner or the manager reads them in step S1, before the page address is shared widely. If they do not allow a list of headlines and links, Ekot is set to `"enabled": false`.
+
 | # | Risk | Proposed handling |
 |---|---|---|
-| K1 | dn.se or svt.se may block or rate-limit GitHub runners. | Seen in the first runs after S10 (status `error`); then decide on fewer runs or dropping the source. |
+| K1 | dn.se, svt.se or api.sr.se may block or rate-limit GitHub runners. | Seen in the first runs after S10 (status `error`); then decide on fewer runs or dropping the source. |
 | K2 | A feed changes address or format without notice. | `error` status and the stale warning make it visible; fix by issue. |
 | K3 | Scheduled workflows in public repositories are disabled after 60 days without activity. | The stale warning (R7.3) makes it visible; owner re-enables in the Actions tab. |
 | K4 | Scheduled runs can be delayed at busy times. | Accepted; R7.3 uses 3 hours, well above the 30-minute schedule. |
 | K5 | DN's terms prohibit aggregation without written permission. | Contact Bonnier News / DN (S1); `enabled: false` if refused. |
 | K6 | The keyword filter selects approximately. | Measure in S7, maintain the list through issues, show the note. |
 | K7 | SVT does not permit AI training on its content. | Headline-and-link list only; real copies stay outside the repository. |
+| K8 | Sveriges Radio's terms of use for its feeds and API have not been read. | Owner or manager reads them in S1; `enabled: false` for Ekot if they do not allow this use. |
 
 ### 10.2 Remaining open questions
 
 | # | Question | Proposed way to settle it |
 |---|---|---|
-| Q1 | Should Sveriges Radio Ekot **audio episodes** be a source (R11, step S13), given that they are episodes, not articles? | Owner decides after S12. Recommendation: first let the manager check the SR RSS candidates (section 4.6); if none gives text news, add the episodes as "Ekot (ljud)". |
+| Q1 | Which `category` values do Ekot entries carry, and do they mark domestic politics reliably? If yes, Ekot can move from `keywordFilter` to `categoryFilter`. | Manager or owner opens the feed and lists the category values of a few entries (S12). |
 | Q2 | Should official sources (Regeringen press releases, Riksdagen open data) be in a news list at all? | Owner decides. Recommendation: not in version 1; they are official statements and data, not journalism, and would need their own label and, for Riksdagen, the credit "Källa: Sveriges riksdag". |
 | Q3 | Answer from Bonnier News / DN (K5). | Owner contacts them (S1). |
 | Q4 | GitHub settings that only the owner can see (section 10.3). | Owner checks before S10. |
-| Q5 | Which host do the item links of DN and SVT point to? This sets `allowedHosts`. | Manager or owner opens each feed in a browser and reports the host of a few links, before S2 is merged. |
+| Q5 | Which host do the item links of DN and SVT point to? This sets `allowedHosts` (Ekot's is verified). | Manager or owner opens each feed in a browser and reports the host of a few links, before S2 is merged. |
+| Q6 | What do Sveriges Radio's terms of use say about showing Ekot headlines and links on another site (K8)? | Owner or manager reads them in S1. |
 
 ### 10.3 What was checked about hosting (former Q4)
 Checked by the worker in the repository on 2026-11-13, on a fresh branch from `origin/main` (commit `4afc4a7`):
@@ -549,13 +583,13 @@ Only the owner can check, in the repository's settings on GitHub:
 | D8 | 20 items per source, 7 days, build every 30 minutes, page reload every 10 minutes, stale warning after 3 hours. | Worker, recommended; 30 minutes confirmed by the owner (D14) |
 | D9 | The build publishes to Pages and never commits to `main`. | Worker, recommended |
 | D10 | Sources live in the repository (`sources.json`, changed through issues). Visitors cannot add their own sources in version 1; that would need an own proxy because of CORS (option C) and is a possible later step. | Owner |
-| D11 | Omni is removed from the design. Sources are Swedish news sources with officially offered feeds or open APIs: DN (politics feed) and SVT (inrikes feed with the keyword list on headline and description, kept in `politics-keywords.json`). | Owner |
+| D11 | Omni is removed from the design. Sources are Swedish news sources with officially offered feeds or open APIs: DN (politics feed), SVT (inrikes feed with the keyword list on headline and description, kept in `politics-keywords.json`) and Sveriges Radio Ekot (D17). | Owner |
 | D12 | DN uses its politics feed `https://www.dn.se/rss/om/svensk-politik/`; DN Debatt (opinion) is not included. | Manager verified the feed; leaving out opinion is the worker's recommendation |
 | D13 | The DN terms risk is accepted for building, with a recommendation to contact Bonnier News / DN before the page is shared widely. | Owner |
 | D14 | The repository is public, so GitHub Pages and Actions minutes are free; the build runs every 30 minutes. | Owner (former Q1) |
 | D15 | The page text and the news are in Swedish. | Owner (former Q3) |
 | D16 | Everything for the news reader lives in `applications/news-reader/`, and the page is published under the same path on Pages. | Owner (former Q5) |
-| D17 | Sveriges Radio is an optional source of Ekot episode titles, clearly labelled as audio, not enabled in version 1 (Q1). | Owner (via manager), worker's labelling |
+| D17 | Sveriges Radio is a version 1 source through the Ekot Atom text feed `https://api.sr.se/api/rss/program/83` with the keyword filter. The episode API (audio) is rejected, and the stale "Toppnyheter" feed `https://api.sr.se/api/rss/group/27511` is not used. | Owner (via manager) |
 
 ## 12. Step plan
 
@@ -563,24 +597,23 @@ Each step is meant to become one issue. Levels are from WORKFLOW.md section 1. "
 
 | Step | Title | Level | `no-auto-merge` | Depends on | Covers |
 |---|---|---|---|---|---|
-| S1 | **Owner only:** contact Bonnier News / DN about showing headlines and links | Low | no (no pull request) | none | K5, Q3 |
-| S2 | News reader: project folder, README, `requirements.txt`, `pytest.ini`, `sources.json` for DN and SVT (with `allowedHosts` per Q5), entry in `applications/README.md`, and a test that validates `sources.json` | Low | no | none | R3.1, R3.7 (config field), R4.1 and R4.3 (config shape), R10.1 (folder) |
+| S1 | **Owner only:** contact Bonnier News / DN about showing headlines and links; **owner or manager:** read Sveriges Radio's terms of use and sverigesradio.se's robots.txt | Low | no (no pull request) | none | K5, K8, Q3, Q6 |
+| S2 | News reader: project folder, README, `requirements.txt`, `pytest.ini`, `sources.json` for DN, SVT and Ekot (with `allowedHosts` per Q5), entry in `applications/README.md`, and a test that validates `sources.json` | Low | no | none | R3.1, R3.7 (config field), R4.1 and R4.3 (config shape), R10.1 (folder) |
 | S3 | **Owner only:** add the news-reader test steps to the `checks` job in `ci.yml`, and update `GitRequirements/ci.yml` | Low | no | S2 | Section 9 (tests in the required check) |
-| S4 | News reader: feed parser for RSS 2.0 and Atom, title cleaning, encoding, with hand-written sample feeds | Medium | no | S2 | R1.1, R1.2, R1.3, R1.4, R8.4 (parser part), R9.1 |
+| S4 | News reader: feed parser for RSS 2.0 (DN, SVT) and Atom (Ekot) with the mapping in R11, title cleaning, encoding, with hand-written sample feeds | Medium | no | S2 | R1.1, R1.2, R1.3, R1.4, R8.4 (parser part), R9.1, R11.1, R11.2, R11.3 |
 | S5 | News reader: time handling (UTC, Europe/Stockholm, display form) | Low | no | S2 | R2.1, R2.2, R2.3, R2.4, R2.5, R2.6 |
 | S6 | News reader: `feed` and `categoryFilter` methods, URL check, de-duplicate, age limit, cap per source, sort | Medium | no | S4, S5 | R4.1 (feed, categoryFilter), R4.2, R4.3, R5.1, R5.2, R5.3, R5.4, R5.5, R8.1 |
-| S7 | News reader: keyword filter, `politics-keywords.json`, its validation, and a measured check against one saved SVT inrikes copy kept outside the repository | Medium | no | S6 | R4.1 (keywordFilter), R4.4, K6, K7 |
+| S7 | News reader: keyword filter, `politics-keywords.json`, its validation, and a measured check against one saved copy each of SVT inrikes and Ekot, kept outside the repository | Medium | no | S6 | R4.1 (keywordFilter), R4.4, K6, K7 |
 | S8 | News reader: build command with fetch layer, robots.txt rule, `enabled` flag, merge with previous file, `news.json`, and a draft of the publishing workflow in the README for the owner | Medium | no | S7 | R3.7, R6.2, R6.3, R6.4, R6.5, R6.6, R8.4 (size limit), R10.2 (draft), section 6 workflow text |
 | S9 | News reader: the page (`index.html`, `app.js`, `style.css`) in Swedish | Medium | **yes** (user-visible; owner tests by hand per section 9) | S8 | R3.2, R3.3, R3.4, R3.5, R3.6, R4.5, R5.6, R7.1, R7.2, R7.3, R7.4, R7.5, R7.6, R7.7, R7.8, R8.2, R8.3, R9.2 |
 | S10 | **Owner only:** check the settings in section 10.3, set Pages source to "GitHub Actions", and add `.github/workflows/news-reader.yml` from the draft in S8 together with its copy in `GitRequirements/` | Low | yes if done as a pull request | S8, S9 | R6.1, R10.1 (published path), R10.2, Q4 |
-| S11 | **Owner only:** test the live page and two scheduled runs; share the address widely only after S1 has an answer | Low | n/a | S1, S10 | Section 9, hand tests after publishing; K5 |
-| S12 | **Manager or owner:** check the candidate sources in section 4.6 (SR RSS feeds, Regeringen press releases, Riksdagen open data) and the open points about the SR API in section 4.4, and report | Low | no (no pull request) | none | Q1, Q2 (input), section 4.6 |
-| S13 | Optional, only if the owner says yes to Q1: Sveriges Radio Ekot episodes as a source "Ekot (ljud)" (`parse_sr.py`, fixture, `sources.json` entry) | Medium | **yes** (adds a visible source) | S8, S12 | R11.1, R11.2, R11.3 |
+| S11 | **Owner only:** test the live page and two scheduled runs; share the address widely only after S1 has answers | Low | n/a | S1, S10 | Section 9, hand tests after publishing; K5 |
+| S12 | **Manager or owner:** list the Ekot `category` values, and check the candidate sources in section 4.6 (Regeringen press releases, Riksdagen open data), and report | Low | no (no pull request) | none | Q1, Q2 (input), section 4.6 |
 
 Notes on the plan:
 - S1 and S12 do not block the code. S1 blocks only wide sharing of the page (S11).
 - S4 and S5 can be done in parallel after S2.
 - S3 should be done right after S2, so that S4 to S9 are protected by the required check. If S3 is late, each worker runs `bash scripts/check.sh applications/news-reader` locally and says so in the report.
 - Q5 is needed before S2 is merged; Q4 before S10; Q1 and Q2 after S12.
-- A new source found in S12 (other than SR episodes) becomes its own issue through flow 2.4.
+- A changed method for Ekot (Q1) or a new source found in S12 becomes its own issue through flow 2.4.
 - Every requirement in section 3 is listed in the "Covers" column of at least one step.
