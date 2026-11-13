@@ -191,7 +191,7 @@ def test_unreadable_previous_file_is_ignored(project):
 
 
 @pytest.mark.parametrize("response", [
-    FetchError("status", "HTTP status 500"),
+    FetchError("status", "HTTP status 500", 500),
     FetchError("timeout", "timeout"),
     FetchError("too-large", "response larger than 2 MB"),
     FetchError("redirect", "redirect to a host that is not allowed"),
@@ -269,15 +269,59 @@ def test_robots_uses_our_own_user_agent_group(project):
     assert source_entry(document)["status"] == "ok"
 
 
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 410, 451])
+def test_robots_4xx_means_no_rules_and_allowed(project, status):
+    robots = FetchError("status", "HTTP status %d" % status, status)
+    fetch = FakeFetch({ROBOTS_URL: robots, FEED_URL: GOOD_FEED})
+    document = run(project, fetch)
+    assert source_entry(document)["status"] == "ok"
+    assert FEED_URL in fetch.calls
+
+
 @pytest.mark.parametrize("robots", [
-    FetchError("status", "HTTP status 404"),
     FetchError("timeout", "timeout"),
+    FetchError("network", "network error"),
+    FetchError("status", "HTTP status 500", 500),
+    FetchError("status", "HTTP status 503", 503),
+    FetchError("status", "HTTP status 429", 429),
+    FetchError("too-large", "response larger than 2 MB"),
+    FetchError("redirect", "redirect to a host that is not allowed"),
     RuntimeError("boom"),
     b"\xff\xfe garbage",
 ])
-def test_missing_or_unreadable_robots_means_allowed(project, robots):
+def test_unreadable_robots_means_not_fetched_and_status_error(project, robots):
+    fetch = FakeFetch({ROBOTS_URL: robots, FEED_URL: GOOD_FEED})
+    document = run(project, fetch)
+    entry = source_entry(document)
+    assert entry["status"] == "error" and "robots.txt could not be read" in entry["message"]
+    assert FEED_URL not in fetch.calls
+    assert document["items"] == []
+
+
+@pytest.mark.parametrize("robots", [FetchError("timeout", "timeout"), FetchError("status", "HTTP status 500", 500)])
+def test_unreadable_robots_uses_the_24_hour_fallback(project, robots):
+    last = (NOW - timedelta(hours=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    previous_file(project.out / "news.json", last)
     document = run(project, FakeFetch({ROBOTS_URL: robots, FEED_URL: GOOD_FEED}))
-    assert source_entry(document)["status"] == "ok"
+    entry = source_entry(document)
+    assert entry["status"] == "error" and entry["lastSuccess"] == last and entry["itemCount"] == 1
+    assert [i["title"] for i in document["items"]] == ["Gammal riksdagsrubrik"]
+
+
+def test_unreadable_robots_older_than_24_hours_drops_previous_items(project):
+    previous_file(project.out / "news.json", (NOW - timedelta(hours=30)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    document = run(project, FakeFetch({ROBOTS_URL: FetchError("timeout", "timeout"), FEED_URL: GOOD_FEED}))
+    assert document["items"] == [] and source_entry(document)["status"] == "error"
+
+
+def test_unreadable_robots_is_read_once_for_all_sources_of_the_host(project):
+    other = "https://news.example.invalid/other.xml"
+    project.write_sources(source(), source(id="second", name="Second",
+                                           **{"politics-sweden": {"method": "keywordFilter", "url": other}}))
+    fetch = FakeFetch({ROBOTS_URL: FetchError("timeout", "timeout"), FEED_URL: GOOD_FEED, other: GOOD_FEED})
+    document = run(project, fetch)
+    assert [s["status"] for s in document["sources"]] == ["error", "error"]
+    assert fetch.calls == [ROBOTS_URL]
 
 
 def test_robots_is_checked_before_the_feed_is_requested(project):

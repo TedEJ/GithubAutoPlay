@@ -60,7 +60,7 @@ class FakeFetch:
     def __call__(self, url, allowed_hosts):
         self.calls.append(url)
         if url not in self.responses:
-            raise FetchError("status", "HTTP status 404")
+            raise FetchError("status", "HTTP status 404", 404)
         response = self.responses[url]
         if callable(response):
             response = response(url)

@@ -30,9 +30,10 @@ CHUNK_BYTES = 64 * 1024
 class FetchError(Exception):
     """A request failed. `kind` is one of: network, timeout, status, too-large, redirect."""
 
-    def __init__(self, kind, message):
+    def __init__(self, kind, message, status=None):
         super().__init__(message)
         self.kind = kind
+        self.status = status  # the HTTP status for kind "status", else None
 
 
 def host_allowed(url, allowed_hosts):
@@ -74,7 +75,7 @@ def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONS
     except FetchError:
         raise
     except urllib.error.HTTPError as exc:
-        raise FetchError("status", "HTTP status %s" % exc.code) from exc
+        raise FetchError("status", "HTTP status %s" % exc.code, exc.code) from exc
     except TimeoutError as exc:  # socket.timeout is TimeoutError
         raise FetchError("timeout", "timeout") from exc
     except urllib.error.URLError as exc:
@@ -86,7 +87,7 @@ def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONS
     try:
         status = getattr(response, "status", None) or response.getcode()
         if status != 200:
-            raise FetchError("status", "HTTP status %s" % status)
+            raise FetchError("status", "HTTP status %s" % status, status)
         final_url = response.geturl() if hasattr(response, "geturl") else url
         if not host_allowed(final_url, allowed_hosts):
             raise FetchError("redirect", "ended on a host that is not allowed")

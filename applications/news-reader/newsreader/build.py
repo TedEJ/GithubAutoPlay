@@ -176,27 +176,47 @@ def _previous_items(previous, source):
 # ---------------------------------------------------------------------------
 # one source
 
+class RobotsUnreadable(Exception):
+    """robots.txt could not be read, so the source is not fetched (status error)."""
+
+
 class _Robots:
     """robots.txt of each host, read once per run (R6.6).
 
-    A robots.txt that is missing or cannot be read allows the fetch (owner
-    decision for issue #72; the design text of R6.6 said the opposite).
+    Answer 200: the rules are applied. Status 404 or another 4xx except 429:
+    no rules, everything is allowed. Anything else (timeout, network error,
+    5xx, 429, a response over 2 MiB, text that is not UTF-8, a redirect to
+    another host): `RobotsUnreadable`, and the source is not fetched.
     """
 
     def __init__(self, fetch, user_agent):
         self.fetch = fetch
         self.user_agent = user_agent
-        self.cache = {}
+        self.cache = {}  # robots.txt address -> text ("" = no rules) or RobotsUnreadable
+
+    def _read(self, url, allowed_hosts):
+        try:
+            return self.fetch(url, allowed_hosts).decode("utf-8")
+        except FetchError as exc:
+            if exc.kind == "status" and exc.status is not None and 400 <= exc.status < 500 and exc.status != 429:
+                return ""
+            raise RobotsUnreadable("robots.txt could not be read: %s" % exc) from exc
+        except UnicodeDecodeError as exc:
+            raise RobotsUnreadable("robots.txt could not be read: not UTF-8 text") from exc
+        except Exception as exc:  # a fetch layer must not break the build
+            raise RobotsUnreadable("robots.txt could not be read (%s)" % type(exc).__name__) from exc
 
     def allowed(self, feed_url, allowed_hosts):
         url = robots_url(feed_url)
         if url not in self.cache:
             try:
-                self.cache[url] = self.fetch(url, allowed_hosts).decode("utf-8", errors="replace")
-            except Exception:  # any failure: no usable robots.txt
-                self.cache[url] = None
+                self.cache[url] = self._read(url, allowed_hosts)
+            except RobotsUnreadable as exc:
+                self.cache[url] = exc
         text = self.cache[url]
-        return True if text is None else is_allowed(text, self.user_agent, url_path(feed_url))
+        if isinstance(text, RobotsUnreadable):
+            raise text
+        return is_allowed(text, self.user_agent, url_path(feed_url))
 
 
 def _fetch_and_select(source, keywords, now, fetch):
@@ -224,9 +244,14 @@ def build_source(source, keywords, now, fetch, robots, previous):
     url = source["politics-sweden"]["url"]
 
     status, message, items = "ok", None, None
-    if not robots.allowed(url, source["allowedHosts"]):
+    try:
+        robots_ok = robots.allowed(url, source["allowedHosts"])
+    except RobotsUnreadable as exc:
+        robots_ok = None
+        status, message = "error", str(exc)
+    if robots_ok is False:
         status, message = "blocked-by-robots", "robots.txt does not allow this address"
-    else:
+    elif robots_ok:
         try:
             items = _fetch_and_select(source, keywords, now, fetch)
         except FetchError as exc:

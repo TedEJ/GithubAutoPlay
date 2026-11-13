@@ -74,7 +74,7 @@ def test_http_error_is_a_status_failure():
     error = urllib.error.HTTPError(URL, 503, "unavailable", {}, None)
     with pytest.raises(FetchError) as info:
         fetch_url(URL, HOSTS, opener=FakeOpener(error=error))
-    assert info.value.kind == "status" and "503" in str(info.value)
+    assert info.value.kind == "status" and "503" in str(info.value) and info.value.status == 503
 
 
 def test_timeouts():
