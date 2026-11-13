@@ -5,6 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import vm from "node:vm";
 import logic from "../logic.js";
 
 const here = new URL(".", import.meta.url);
@@ -402,8 +403,170 @@ test("merge: selection of two sources end to end", () => {
   assert.deepEqual(merged.map((i) => i.sourceId), ["sveriges-radio", "svt"]);
 });
 
-test("logic.js has no side effects: exports are functions or constants", () => {
+// ---- more checks of rules (each value verified against the Python code) ------
+
+test("url: the host check refuses user info with a colon or on a subdomain", () => {
+  assert.equal(logic.checkUrl("https://x:y@a.svt.se/", ["svt.se"]), null);
+  assert.equal(logic.checkUrl("https://evil@x.svt.se/", ["svt.se"]), null);
+  assert.equal(logic.parseUrl("https://x:y@a.svt.se/"), null);
+});
+
+test("keywords: adjacent and overlapping exclude phrases are all removed together (rule 4)", () => {
+  const make = (include) => logic.validateKeywords({ version: 1, category: "politics-sweden",
+    include: { words: include, caseSensitive: [] }, exclude: { words: [], phrases: ["a b", "b c"] } });
+  const k = make(["c", "d"]);
+  assert.equal(logic.matchesKeywords(k, "a b c"), false);   // "c" is removed with the phrase "b c"
+  assert.equal(logic.matchesKeywords(k, "a b c d"), true);
+  assert.equal(logic.matchesKeywords(k, "a b d"), true);
+  assert.equal(logic.matchesKeywords(make(["b"]), "a b c"), false);
+  const all = make(["a", "b", "c"]);
+  assert.equal(logic.matchesKeywords(all, "a b c"), false);
+  assert.equal(logic.matchesKeywords(all, "a b"), false);
+  assert.equal(logic.matchesKeywords(all, "c b a"), true);  // no phrase in this order
+});
+
+test("keywords: caseSensitive terms are compared with the NFC form of the text", () => {
+  const k = logic.validateKeywords({ version: 1, category: "politics-sweden",
+    include: { words: ["zzz"], caseSensitive: ["\u00e9(S)", "\u00c5(S)"] }, exclude: { words: [], phrases: [] } });
+  assert.equal(logic.matchesKeywords(k, "e\u0301(S)"), true);
+  assert.equal(logic.matchesKeywords(k, "\u00e9(S)"), true);
+  assert.equal(logic.matchesKeywords(k, "A\u030a(S)"), true);
+  assert.equal(logic.matchesKeywords(k, "a\u030a(S)"), false); // case is kept
+  // the description is cleaned and normalised the same way
+  assert.equal(logic.matchesKeywords(k, "x", "e\u0301(S)"), true);
+});
+
+// ---- long inputs must be handled in linear time ------------------------------
+
+function timed(fn) {
+  const start = performance.now();
+  const result = fn();
+  return { result, ms: performance.now() - start };
+}
+const FAST_MS = 500;
+
+test("long input: white space and slash runs around a URL (checkUrl, parseUrl)", () => {
+  for (const n of [100000, 200000]) {
+    const ws = " \t\n\u00a0".repeat(n / 4);
+    const url = ws + "https://www.svt.se/a" + "/".repeat(n) + ws;
+    const r = timed(() => logic.checkUrl(url, ["svt.se"]));
+    assert.equal(r.result, "https://svt.se/a");
+    assert.ok(r.ms < FAST_MS, "checkUrl took " + r.ms + " ms");
+    const p = timed(() => logic.parseUrl(url));
+    assert.equal(p.result.path, "/a" + "/".repeat(n));
+    assert.ok(p.ms < FAST_MS, "parseUrl took " + p.ms + " ms");
+    const only = timed(() => logic.parseUrl(ws));
+    assert.equal(only.result, null);
+    assert.ok(only.ms < FAST_MS);
+    // a run that is NOT at the end (what makes a trim regular expression quadratic)
+    const inner = timed(() => logic.checkUrl("https://svt.se/a" + "/".repeat(n) + "b", ["svt.se"]));
+    assert.equal(inner.result, "https://svt.se/a" + "/".repeat(n) + "b");
+    assert.ok(inner.ms < FAST_MS, "inner slash run took " + inner.ms + " ms");
+    assert.equal(logic.parseUrl("x" + ws.slice(0, n) + "x"), null);
+    const innerWs = timed(() => logic.parseUrl("https://svt.se/a" + " ".repeat(n) + "b"));
+    assert.equal(innerWs.result, null);
+    assert.ok(innerWs.ms < FAST_MS);
+    const slashes = timed(() => logic.checkUrl("https://svt.se" + "/".repeat(n), ["svt.se"]));
+    assert.equal(slashes.result, "https://svt.se");
+    assert.ok(slashes.ms < FAST_MS);
+  }
+});
+
+test("long input: white space around a time text (parseTime, publishedUtc)", () => {
+  for (const n of [100000, 200000]) {
+    const ws = " \t\n\r\f\v".repeat(n / 6);
+    const r = timed(() => logic.publishedUtc(ws + "2026-11-13T12:00:00Z" + ws, NOW));
+    assert.equal(r.result, "2026-11-13T12:00:00Z");
+    assert.ok(r.ms < FAST_MS, "publishedUtc took " + r.ms + " ms");
+    const only = timed(() => logic.parseTime(ws));
+    assert.equal(only.result, null);
+    assert.ok(only.ms < FAST_MS);
+    const inner = timed(() => logic.parseTime("x" + " ".repeat(n) + "x"));
+    assert.equal(inner.result, null);
+    assert.ok(inner.ms < FAST_MS);
+    const inner2 = timed(() => logic.parseTime(" ".repeat(n) + "x" + " ".repeat(n) + "x"));
+    assert.equal(inner2.result, null);
+    assert.ok(inner2.ms < FAST_MS);
+    const junk = timed(() => logic.parseTime("2026-11-13T12:00:00Z" + ws + "x"));
+    assert.equal(junk.result, null);
+    assert.ok(junk.ms < FAST_MS);
+  }
+});
+
+test("long input: selectItems with long link, time and title", () => {
+  const n = 200000;
+  const ws = " \t\n\u00a0".repeat(n / 4);
+  const entries = [
+    { title: ws + "Riksdagen" + ws, link: ws + "https://www.svt.se/nyheter/long" + "/".repeat(n) + ws,
+      timeText: ws.replace(/\u00a0/g, " ") + "2026-11-13T12:00:00Z" + ws.replace(/\u00a0/g, " ") },
+  ];
+  const r = timed(() => logic.selectItems(entries, svt, keywords, SEL_NOW));
+  assert.equal(r.result.length, 1);
+  assert.equal(r.result[0].title, "Riksdagen");
+  assert.equal(r.result[0].id, logic.itemId("https://svt.se/nyheter/long"));
+  assert.equal(r.result[0].published, "2026-11-13T12:00:00Z");
+  assert.equal(r.result[0].url, "https://www.svt.se/nyheter/long" + "/".repeat(n));
+  assert.ok(r.ms < FAST_MS, "selectItems took " + r.ms + " ms");
+});
+
+// ---- a time before 1970 and Atom white space ---------------------------------
+
+test("selection: a time that falls before 1970 is dropped as too old (explicit rule)", () => {
+  // 1970-01-01T00:30:00+01:00 is 1969-12-31T23:30:00Z. The year check is made on
+  // the text (1970 is allowed), so the time is usable and is the year 1969; the
+  // item is then older than 7 days and is dropped.
+  const entries = [rss("Riksdagen gammal", "old", "1970-01-01T00:30:00+01:00"),
+    rss("Riksdagen ny", "new", "2026-11-13T10:00:00Z")];
+  const items = logic.selectItems(entries, svt, keywords, SEL_NOW);
+  assert.deepEqual(items.map((i) => i.title), ["Riksdagen ny"]);
+  // publishedUtc itself still returns the 1969 text (the shared rule: only the year of the text is checked)
+  assert.equal(logic.publishedUtc("1970-01-01T00:30:00+01:00", NOW), "1969-12-31T23:30:00Z");
+  // with a "now" so early that 1969 is within 7 days the item is kept
+  const early = logic.selectItems([rss("Riksdagen tidig", "e", "1970-01-01T00:30:00+01:00")], svt, keywords, "1970-01-02T00:00:00Z");
+  assert.equal(early[0].published, "1969-12-31T23:30:00Z");
+  assert.equal(early[0].publishedDisplay, "1970-01-01 00:30");
+});
+
+test("selection: an Atom published that is only white space falls back to updated", () => {
+  const e = (published, updated) => ({ title: "Riksdagen", link: "https://sverigesradio.se/artikel/9", published, updated });
+  const at = (entry) => logic.selectItems([entry], sr, keywords, SEL_NOW)[0].published;
+  assert.equal(at(e("  \t\n", "2026-11-13T09:00:00Z")), "2026-11-13T09:00:00Z");
+  assert.equal(at(e("", "2026-11-13T09:00:00Z")), "2026-11-13T09:00:00Z");
+  assert.equal(at(e(undefined, "2026-11-13T09:00:00Z")), "2026-11-13T09:00:00Z");
+  assert.equal(at(e("2026-11-13T08:00:00Z", "2026-11-13T09:00:00Z")), "2026-11-13T08:00:00Z");
+  assert.equal(at(e("not a time", "2026-11-13T09:00:00Z")), null); // present but unusable: no fallback
+  assert.equal(at(e("\u00a0", "2026-11-13T09:00:00Z")), null); // U+00A0 is not time white space, as in timeutil.py
+});
+
+// ---- loading as a classic script ---------------------------------------------
+
+test("logic.js loads as a classic script and creates only the global NewsLogic", () => {
+  const source = readFileSync(new URL("../logic.js", here), "utf-8");
+  const context = vm.createContext({ TextEncoder });
+  vm.runInContext(source, context, { filename: "logic.js" });
+  assert.deepEqual(Object.keys(context).sort(), ["NewsLogic", "TextEncoder"]);
+  const api = context.NewsLogic;
+  assert.equal(typeof api.selectItems, "function");
+  assert.equal(api.cleanHeadline("<b>a</b> &amp; b"), "a & b");
+  assert.equal(api.itemId("https://svt.se/x"), "65197a66fb270320");
+  assert.equal(api.displayTime("2026-07-01T10:00:00Z"), "2026-07-01 12:00");
+  // the same functions as under Node
+  assert.deepEqual(Object.keys(api).sort(), Object.keys(logic).sort());
+});
+
+test("logic.js does not use DOM, network, storage, clock, Intl, console or eval", () => {
+  const source = readFileSync(new URL("../logic.js", here), "utf-8");
+  const code = source.split("\n").filter((line) => !line.trim().startsWith("//")).join("\n");
+  for (const name of ["document", "window", "fetch", "XMLHttpRequest", "localStorage", "sessionStorage",
+    "indexedDB", "navigator", "location", "WebSocket", "Intl", "console", "eval", "Function", "setTimeout"]) {
+    assert.ok(!new RegExp("\\b" + name + "\\b").test(code), name + " is used in logic.js");
+  }
+  assert.ok(!/Date\s*\.\s*now|new\s+Date\s*\(\s*\)|performance\.now|Math\.random/.test(code));
+  assert.ok(!/\brequire\s*\(|\bimport\b/.test(code));
+});
+
+test("exports", () => {
   assert.equal(logic.version(), 1);
-  assert.equal(typeof logic.selectItems, "function");
   assert.equal(logic.MAX_ITEMS, 20);
+  assert.equal(logic.MISSING_DISPLAY, "Tid saknas");
 });

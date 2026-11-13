@@ -20,10 +20,21 @@
   // White space: space, tab, LF, CR, FF, VT and U+00A0. Not trim(), not \s.
   const WS_CLASS = " \\t\\n\\r\\f\\v\\u00a0";
   const WS_RUN = new RegExp("[" + WS_CLASS + "]+", "g");
-  const WS_TRIM = new RegExp("^[" + WS_CLASS + "]+|[" + WS_CLASS + "]+$", "g");
+  const WS_CHARS = " \t\n\r\f\v\u00a0";
+  const TIME_WS_CHARS = " \t\n\r\f\v";
+
+  // Remove leading and trailing characters of `chars`. Two linear scans (a
+  // regular expression like /^[ ]+|[ ]+$/ is quadratic on long runs).
+  function trimChars(text, chars) {
+    let start = 0;
+    let end = text.length;
+    while (start < end && chars.indexOf(text.charAt(start)) !== -1) start++;
+    while (end > start && chars.indexOf(text.charAt(end - 1)) !== -1) end--;
+    return text.slice(start, end);
+  }
 
   function stripWs(text) {
-    return text.replace(WS_TRIM, "");
+    return trimChars(text, WS_CHARS);
   }
 
   const TAG = /<\/?[A-Za-z][^<>]*>|<!--[\s\S]*?-->/g;
@@ -77,15 +88,19 @@
   }
 
   // Python's str.strip() white space (str.isspace), for validating the file.
-  const PY_SPACE = "\\t\\n\\v\\f\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";
-  const PY_STRIP = new RegExp("^[" + PY_SPACE + "]+|[" + PY_SPACE + "]+$", "g");
+  const PY_SPACE_CHARS = (function () {
+    let chars = "\t\n\v\f\r \x85\xa0\u1680\u2028\u2029\u202f\u205f\u3000";
+    for (let c = 0x1c; c <= 0x1f; c++) chars += String.fromCharCode(c);
+    for (let c = 0x2000; c <= 0x200a; c++) chars += String.fromCharCode(c);
+    return chars;
+  })();
 
   function stringList(value, where, lowercase) {
     if (!Array.isArray(value)) throw new KeywordsError(where + " must be a list");
     const result = [];
     for (let item of value) {
       if (typeof item !== "string") throw new KeywordsError(where + " must hold only strings");
-      if (item === "" || item !== item.replace(PY_STRIP, "")) {
+      if (item === "" || item !== trimChars(item, PY_SPACE_CHARS)) {
         throw new KeywordsError(where + ": empty term or term with surrounding white space: " + JSON.stringify(item));
       }
       const nfc = item.normalize("NFC");
@@ -235,6 +250,12 @@
     return allowedHosts.some((a) => host === a || host.endsWith("." + a));
   }
 
+  function stripTrailingSlashes(path) {
+    let end = path.length;
+    while (end > 0 && path.charCodeAt(end - 1) === 47) end--;
+    return path.slice(0, end);
+  }
+
   // The normalised URL if usable for a source with these allowedHosts, else null.
   function checkUrl(url, allowedHosts) {
     const parsed = parseUrl(url);
@@ -242,7 +263,7 @@
     let host = parsed.host;
     if (!onAllowedHost(host, allowedHosts)) return null;
     if (host.startsWith("www.")) host = host.slice(4);
-    return parsed.scheme + "://" + host + parsed.path.replace(/\/+$/, "");
+    return parsed.scheme + "://" + host + stripTrailingSlashes(parsed.path);
   }
 
   const SHA_K = new Uint32Array([
@@ -420,11 +441,12 @@
   function parseTime(text) {
     if (typeof text !== "string") return null;
     // The trimming set of timeutil.py: the cleaning set without U+00A0.
-    text = text.replace(/^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g, "");
+    text = trimChars(text, TIME_WS_CHARS);
     let m = RFC822.exec(text);
     if (m) {
-      const month = MONTHS[m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase()];
-      if (month === undefined) return null;
+      const monthName = m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase();
+      if (!Object.prototype.hasOwnProperty.call(MONTHS, monthName)) return null;
+      const month = MONTHS[monthName];
       let offset;
       const zone = m[7];
       if (zone === undefined) offset = null;
@@ -547,11 +569,11 @@
 
   // The fields of a plain entry. Accepted names: `title`, `link`, and the time
   // text as `timeText` (Python RawEntry shape) or `published`, falling back to
-  // `updated` (Atom, R2.3; the fallback is used when the first is missing or
-  // empty); the description as `description` or `summary`. `content` is never
+  // `updated` (Atom, R2.3; the fallback is used when the first is missing, empty or
+  // only white space); the description as `description` or `summary`. `content` is never
   // read.
   function entryFields(entry) {
-    const timeText = [entry.timeText, entry.published, entry.updated].map(text).find((t) => t !== "") || "";
+    const timeText = [entry.timeText, entry.published, entry.updated].map(text).find((t) => trimChars(t, TIME_WS_CHARS) !== "") || "";
     const description = text(entry.description) !== "" ? entry.description : text(entry.summary);
     return { title: text(entry.title), link: entry.link, timeText, description };
   }
@@ -582,8 +604,15 @@
       const normalised = checkUrl(raw.link, source.allowedHosts);
       if (normalised === null || seen.has(normalised)) continue;
       seen.add(normalised);
-      const published = publishedUtc(raw.timeText, nowMs);
-      if (published !== null && parseTime(published) * 1000 < cutoffMs) continue;
+      // Time: unusable or more than 10 minutes ahead -> no time (null). A time
+      // before the cutoff is dropped; this includes a time before 1970 (a
+      // `+hh:mm` offset on 1970-01-01 can give 1969), which is simply old.
+      const seconds = parseTime(raw.timeText);
+      let published = null;
+      if (seconds !== null) {
+        if (seconds * 1000 < cutoffMs) continue;
+        if (seconds * 1000 <= nowMs + FUTURE_LIMIT_MS) published = formatUtc(seconds);
+      }
       items.push({
         id: itemId(normalised),
         sourceId: source.id,
