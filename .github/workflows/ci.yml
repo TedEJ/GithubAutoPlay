@@ -74,7 +74,19 @@ jobs:
       # installed by the step that installs the test dependencies above.
       - name: Run tests of the helper scripts
         run: python -m pytest scripts/tests
- 
+
+      - name: Install news-reader test dependencies
+        working-directory: applications/news-reader
+        run: python -m pip install -r requirements.txt
+
+      - name: Run news-reader tests (Python)
+        working-directory: applications/news-reader
+        run: python -m pytest
+
+      - name: Run news-reader tests (JavaScript)
+        working-directory: applications/news-reader
+        run: node --test
+
       - name: Reviewer verdict is OK
         if: github.event_name == 'pull_request'
         env:
