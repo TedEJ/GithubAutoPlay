@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "svt",
+      "name": "SVT",
+      "enabled": true,
+      "fetchedBy": "build",
+      "storageAllowed": true,
+      "homepage": "https://www.svt.se/",
+      "allowedHosts": ["svt.se"],
+      "politics-sweden": { "method": "keywordFilter", "url": "https://www.svt.se/nyheter/inrikes/rss.xml" }
+    },
+    {
+      "id": "sveriges-radio",
+      "name": "Sveriges Radio",
+      "enabled": true,
+      "fetchedBy": "browser",
+      "storageAllowed": false,
+      "homepage": "https://www.sverigesradio.se/",
+      "allowedHosts": ["sverigesradio.se"],
+      "politics-sweden": { "method": "keywordFilter", "url": "https://api.sr.se/api/rss/program/83" }
+    }
+  ]
+}
