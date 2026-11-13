@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Exempelkanal</title>
+    <link>https://example.invalid/</link>
+    <description>Invented sample feed</description>
+    <item>
+      <title>Exempelrubrik om riksdagen</title>
+      <link>https://example.invalid/nyheter/a</link>
+      <description>Kort exempeltext om en debatt.</description>
+      <pubDate>Fri, 13 Nov 2026 14:05:00 +0100</pubDate>
+      <guid>https://example.invalid/nyheter/a</guid>
+      <media:thumbnail url="https://example.invalid/bild.jpg"/>
+      <category>Inrikes</category>
+    </item>
+    <item>
+      <title><![CDATA[Fet <b>rubrik</b> &amp; åäö]]></title>
+      <link>
+        https://example.invalid/nyheter/b
+      </link>
+      <description><![CDATA[<p>Text med <i>markup</i></p>]]></description>
+      <pubDate>Fri, 03 Jul 2026 10:00:00 +0200</pubDate>
+    </item>
+    <item>
+      <title>Rubrik utan tid och beskrivning</title>
+      <link>https://example.invalid/nyheter/c</link>
+    </item>
+  </channel>
+</rss>

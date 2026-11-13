@@ -1,5 +1,136 @@
 {
-  "cleaning": [],
+  "cleaning": [
+    {
+      "id": "plain",
+      "input": "Ny budget presenteras i riksdagen",
+      "expected": "Ny budget presenteras i riksdagen"
+    },
+    {
+      "id": "tags-simple",
+      "input": "<b>Ny</b> budget i <i>riksdagen</i>",
+      "expected": "Ny budget i riksdagen"
+    },
+    {
+      "id": "tags-with-attributes",
+      "input": "Läs <a href=\"https://example.invalid/x?a=1&b=2\" class='l'>mer</a> här",
+      "expected": "Läs mer här"
+    },
+    {
+      "id": "tags-self-closing-and-comment",
+      "input": "Rubrik<br/> med<!-- dold --> text",
+      "expected": "Rubrik med text"
+    },
+    {
+      "id": "less-than-sign-is-not-a-tag",
+      "input": "Skatten sänks till < 30 procent",
+      "expected": "Skatten sänks till < 30 procent"
+    },
+    {
+      "id": "named-entities",
+      "input": "Tom &amp; Jerry &quot;tar&quot; &lt;makten&gt;",
+      "expected": "Tom & Jerry \"tar\" <makten>"
+    },
+    {
+      "id": "named-entity-apos-and-quote",
+      "input": "Statsministerns &apos;plan&apos;",
+      "expected": "Statsministerns 'plan'"
+    },
+    {
+      "id": "named-entities-swedish",
+      "input": "&aring;&auml;&ouml;&eacute; &Aring;&Auml;&Ouml;",
+      "expected": "åäöé ÅÄÖ"
+    },
+    {
+      "id": "numeric-entities-decimal",
+      "input": "Skatt p&#229; 5&#160;procent",
+      "expected": "Skatt på 5 procent"
+    },
+    {
+      "id": "numeric-entities-hex",
+      "input": "&#xE5;&#xe4;&#xF6; &#x20AC;5",
+      "expected": "åäö €5"
+    },
+    {
+      "id": "double-encoded-entity",
+      "input": "Tom &amp;amp; Jerry",
+      "expected": "Tom &amp; Jerry"
+    },
+    {
+      "id": "double-encoded-tag",
+      "input": "&lt;b&gt;Fet&lt;/b&gt;",
+      "expected": "<b>Fet</b>"
+    },
+    {
+      "id": "entity-tag-after-decoding-is-kept",
+      "input": "&lt;b&gt; och <i>kursiv</i>",
+      "expected": "<b> och kursiv"
+    },
+    {
+      "id": "ampersand-without-entity",
+      "input": "Skatt & avgifter",
+      "expected": "Skatt & avgifter"
+    },
+    {
+      "id": "whitespace-runs",
+      "input": "Ny    budget \t i   riksdagen",
+      "expected": "Ny budget i riksdagen"
+    },
+    {
+      "id": "whitespace-newlines",
+      "input": "\n  Ny budget\r\n  i\nriksdagen  \n",
+      "expected": "Ny budget i riksdagen"
+    },
+    {
+      "id": "whitespace-between-removed-tags",
+      "input": "Ny <b> budget </b> klar",
+      "expected": "Ny budget klar"
+    },
+    {
+      "id": "whitespace-from-entities",
+      "input": "Ny&#32;&#32;budget&#10;klar",
+      "expected": "Ny budget klar"
+    },
+    {
+      "id": "no-break-space-is-kept",
+      "input": "5 000 kronor ",
+      "expected": "5 000 kronor "
+    },
+    {
+      "id": "unicode-swedish",
+      "input": "Åsa Östlund från Västerås möter Zoë Müller i Malmö, café ägs av Åke",
+      "expected": "Åsa Östlund från Västerås möter Zoë Müller i Malmö, café ägs av Åke"
+    },
+    {
+      "id": "unicode-swedish-lowercase",
+      "input": "åäöé",
+      "expected": "åäöé"
+    },
+    {
+      "id": "quotes-and-dashes-untouched",
+      "input": "”Nej” – sa ministern … ‘kanske’",
+      "expected": "”Nej” – sa ministern … ‘kanske’"
+    },
+    {
+      "id": "empty",
+      "input": "",
+      "expected": ""
+    },
+    {
+      "id": "whitespace-only",
+      "input": " \t\r\n  ",
+      "expected": ""
+    },
+    {
+      "id": "only-tags",
+      "input": "<b></b><br/>",
+      "expected": ""
+    },
+    {
+      "id": "very-long-headline",
+      "input": "Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten och mer",
+      "expected": "Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten och mer"
+    }
+  ],
   "time": [],
   "keywords": []
 }
