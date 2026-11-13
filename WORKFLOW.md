@@ -62,7 +62,8 @@ The folder `scripts/` holds small helpers. They are conveniences: the required c
 |--------|-------------|---------|
 | `scripts/check.sh [project folder]` | Before creating a pull request (verification gate 4). It runs the required-files check, the link check, the tests of the project folder (default `applications/Countdown`) and the tests of the scripts, prints a summary and exits with an error code if any step fails. | `scripts/check.sh applications/Countdown` |
 | `scripts/verify_gui.sh script.py [args]` | When a tkinter window must be tested without a screen, for example to start the window with a test script that sends clicks. It runs the given script under `xvfb-run` with a Python that has `tkinter`, or says what is missing. Run it from the folder the script expects. | `scripts/verify_gui.sh my_check.py` |
-| `scripts/pr_body.py` | When writing the pull request description. It prints text in the format of `.github/pull_request_template.md`, with options for the issue number, `Closes` or `Refs`, ticked gates, the workload feedback, and the owner check list for pull requests with `no-auto-merge`. It refuses text that looks like a token and never adds links. Use `--footer` for text that must end the description. | `python3 scripts/pr_body.py --issue 50 --summary "..." --gates-passed --workload right` |
+| `scripts/pr_body.py` | When writing the pull request description. It prints text in the format of `.github/pull_request_template.md`, with options for the issue number, `Closes` or `Refs`, ticked gates, the workload feedback, and the owner check list for pull requests with `no-auto-merge`. It refuses text that looks like a token and never adds links. It requires `--reviewer-verdict ok` (or `must-fix`) with `--reviewer-summary`, or `--docs-only` for a documentation-only change. Use `--footer` for text that must end the description. | `python3 scripts/pr_body.py --issue 50 --summary "..." --gates-passed --workload right --reviewer-verdict ok --reviewer-summary "..."` |
+| `scripts/check_reviewer.py` | Run by the CI job `checks`. It fails unless the pull request description has `Verdict: OK` in its `## Reviewer` section (or `Verdict: Not needed (documentation only)` when every changed file is Markdown). | `python3 scripts/check_reviewer.py --body-file body.txt --changed-files files.txt` |
 
 The link check in `scripts/check.sh` repeats the logic in `.github/workflows/ci.yml`. If one changes, change the other as well. CI does not run the tests in `scripts/tests/`, only `scripts/check.sh` does. Running them in CI needs a new step in `ci.yml`, which is a workflow change for the owner (see `GitRequirements/README.md`).
 
@@ -100,10 +101,10 @@ The manager may start more than one worker in a role when the work needs it. A n
 3. The worker reports. The manager checks the report against the acceptance criteria.
 4. The manager briefs a Reviewer worker on the branch.
 5. If the Reviewer lists things that must be fixed, the manager sends them back to the Designer/Developer. At most two rounds; after that the manager asks the owner.
-6. The manager pushes the branch and creates the pull request with the normal template (section 5), including what the Reviewer found.
+6. The manager pushes the branch and creates the pull request with the normal template (section 5). The `## Reviewer` section of the description holds the Reviewer's verdict (`Verdict: OK`, or `Verdict: Must fix`) and a short summary of what it found. The required check `checks` fails unless the verdict is OK; a pull request that changes only Markdown files may use `Verdict: Not needed (documentation only)`.
 7. The owner tests changes that users see, and merges or the auto-merge does. The owner closes the issue.
 
-GitHub does not let the author of a pull request approve it, and all work is done with the owner's account, so the Reviewer reports to the manager instead of approving on GitHub.
+GitHub does not let the author of a pull request approve it, and all work is done with the owner's account, so the Reviewer reports to the manager instead of approving on GitHub. The verdict check in `checks` is therefore a process rule: it reads what the description says, not who wrote it. A technical guard comes later (level 2): the Reviewer gets its own identity (a separate account or a GitHub App) and the ruleset on `main` requires an approving review from it.
 
 ### Briefing: what every worker gets
 - The full text of the issue, or the task if there is no issue yet.

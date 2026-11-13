@@ -91,13 +91,28 @@ def test_unknown_workload_is_refused():
 
 def test_command_line_prints_the_body(capsys):
     code = pr_body.main(["--issue", "5", "--summary", "Hello", "--gates-passed",
-                         "--workload", "right"])
+                         "--workload", "right", "--reviewer-verdict", "ok"])
     out = capsys.readouterr().out
     assert code == 0
     assert "Refs #5" in out and "Hello" in out
 
 
 def test_command_line_refuses_a_token_with_an_error_code(capsys):
-    code = pr_body.main(["--issue", "5", "--summary", "github_pat_" + "C" * 30])
+    code = pr_body.main(["--issue", "5", "--summary", "github_pat_" + "C" * 30,
+                         "--docs-only"])
     assert code == 2
     assert "token" in capsys.readouterr().err
+
+
+def test_reviewer_section_defaults_to_pending_and_takes_a_verdict():
+    assert "Verdict: pending" in pr_body.build_body(1, "x")
+    body = pr_body.build_body(1, "x", reviewer_verdict="ok", reviewer_summary="Fine.")
+    assert "## Reviewer\nVerdict: OK\n\nFine." in body
+    assert "Verdict: Must fix" in pr_body.build_body(1, "x", reviewer_verdict="must-fix")
+    assert "Verdict: Not needed (documentation only)" in pr_body.build_body(1, "x", docs_only=True)
+
+
+def test_cli_refuses_without_a_verdict_unless_docs_only(capsys):
+    assert pr_body.main(["--issue", "1", "--summary", "x"]) == 2
+    assert pr_body.main(["--issue", "1", "--summary", "x", "--docs-only"]) == 0
+    assert pr_body.main(["--issue", "1", "--summary", "x", "--reviewer-verdict", "ok"]) == 0

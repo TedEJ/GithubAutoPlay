@@ -10,6 +10,10 @@
 - [ ] Documentation: README and WORKFLOW.md are updated if behaviour or process changed
 - [ ] Tests: the required check `checks` is green (and new tests were added for new code)
 
+## Reviewer
+<!-- The Reviewer worker's verdict on the line below: "Verdict: OK" or "Verdict: Must fix". Documentation-only pull requests use "Verdict: Not needed (documentation only)". The required check fails for any other verdict. -->
+Verdict: pending
+
 ## Workload level
 Was the workload label on the issue right?
 
