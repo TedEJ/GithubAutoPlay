@@ -80,3 +80,51 @@ Claude needs write access to this repository to push a branch. The git proxy in 
 Never store a token in the repository, in a script or in an issue, whichever option is used.
 
 Lessons from using this workflow are collected in [RETROSPECTIVE.md](RETROSPECTIVE.md).
+
+## 10. Agents: a manager and workers
+Work can be split between a **manager** and **worker agents**. The manager is the Claude conversation with the owner. Workers are sub-agents that the manager starts for one task at a time. A worker starts with **no knowledge** of earlier conversations: everything it needs must be in the instructions the manager gives it and in this file, `CLAUDE.md` and the issue.
+
+### Roles
+| Role | Does | Must not |
+|------|------|----------|
+| Manager | Talks to the owner and asks the owner's questions, owns the plan, starts workers with a full briefing, reads their reports, decides what happens next, pushes branches and creates pull requests, holds any token the owner pastes. | Skip the verification gates or the owner's manual test. |
+| Designer/Developer (worker) | Takes one issue: designs when asked to, creates a branch from the latest `main`, writes code, tests and documentation, runs `scripts/check.sh`, commits locally, and reports. | Push, create or merge pull requests, receive or store tokens, change repository settings or `.github/workflows/`, or work outside the issue. |
+| Reviewer (worker) | Reads the finished branch with fresh eyes against the issue's acceptance criteria and sections 3 and 4 of this file, runs the tests, and reports findings. | Change files, commit or push. It has read-only work only. |
+| Owner | Gives the ideas, answers questions, tests changes that users see, merges pull requests with `no-auto-merge`, closes issues, and decides about tokens, settings and workflow files. | |
+
+The manager may start more than one worker in a role when the work needs it. A new kind of role is added to this table first.
+
+### Flow for one issue
+1. The owner gives the issue (or the manager and the owner write it together).
+2. The manager briefs a Designer/Developer worker (see "Briefing" below).
+3. The worker reports. The manager checks the report against the acceptance criteria.
+4. The manager briefs a Reviewer worker on the branch.
+5. If the Reviewer lists things that must be fixed, the manager sends them back to the Designer/Developer. At most two rounds; after that the manager asks the owner.
+6. The manager pushes the branch and creates the pull request with the normal template (section 5), including what the Reviewer found.
+7. The owner tests changes that users see, and merges or the auto-merge does. The owner closes the issue.
+
+GitHub does not let the author of a pull request approve it, and all work is done with the owner's account, so the Reviewer reports to the manager instead of approving on GitHub.
+
+### Briefing: what every worker gets
+- The full text of the issue, or the task if there is no issue yet.
+- The folder of the repository (or git worktree) it works in and the branch name to use.
+- An instruction to read `WORKFLOW.md` and `CLAUDE.md` first, and what it must not do (see the table).
+- The deliverable: what the manager expects back and where files go.
+- The report format below.
+- Anything the owner has already decided, and what is out of scope.
+
+A worker that needs an answer from the owner does not guess: it lists the question in its report and stops as far as that question matters.
+
+### Design documents
+A design document is named `<project-name>-design.md` and lives in the folder of its project, so that several projects can each have their own, for example `applications/news-reader/news-reader-design.md`. A worker that is asked to design writes the document there, on its own branch, and names it in its report.
+
+### Report formats
+Designer/Developer report: **Summary**; **Files changed**; **Checks run** (the command and the result); **Acceptance criteria** one by one, each with yes or no and the evidence; **Assumptions and open questions**; **Follow-up ideas**.
+
+Reviewer report: **Verdict** (ready, or needs changes); **Must fix** (each with file and reason); **Should consider**; **Checked** (what was read and which commands were run); **Not checked**.
+
+### How the agents are set up
+- **Now (option A):** the manager starts workers from the conversation, with the role instructions above in the briefing and a model chosen per worker (the strongest model for design work).
+- **Later (option B):** the roles become agent definitions in the repository, `.claude/agents/designer-developer.md` and `.claude/agents/reviewer.md`, each with its instructions, allowed tools (the Reviewer only gets tools that read and run) and model. They are added in a pull request. Whether a definition is picked up in the middle of a session has not been tested, so test it in a new session after the merge.
+- Access to GitHub is shared by all agents for now (see the project document "Decision: GitHub access for agents"). Separate access per role is decided later, when several agents are in use. Workers never receive a token: the manager does the pushing.
+
