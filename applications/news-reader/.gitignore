@@ -1,0 +1,4 @@
+# Output of the build (see README.md); never committed.
+build/
+__pycache__/
+.pytest_cache/
