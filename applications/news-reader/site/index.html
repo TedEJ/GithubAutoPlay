@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex">
+<title>Svensk politik – rubriker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="page-header">
+  <h1>Svensk politik – rubriker</h1>
+  <p id="updated" class="updated"></p>
+  <button type="button" id="refresh" class="button">Uppdatera</button>
+</header>
+<main>
+  <div id="notices" role="status"></div>
+  <section aria-labelledby="headlines-heading">
+    <h2 id="headlines-heading" class="visually-hidden">Rubriker</h2>
+    <ol id="headlines" class="headlines"></ol>
+    <p id="empty" class="notice" hidden></p>
+  </section>
+  <section aria-labelledby="sources-heading" class="sources-section">
+    <h2 id="sources-heading">Källor</h2>
+    <ul id="sources" class="sources"></ul>
+  </section>
+  <noscript><p class="notice">Sidan behöver JavaScript för att visa nyheter.</p></noscript>
+</main>
+<footer>
+  <p id="bottom-line" class="bottom-line"></p>
+</footer>
+<script src="logic.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
