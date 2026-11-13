@@ -196,6 +196,700 @@
       "expected": "a b　c"
     }
   ],
-  "time": [],
+  "time": [
+    {
+      "id": "rfc822-winter-plus0100",
+      "input": {
+        "text": "Fri, 13 Nov 2026 12:05:00 +0100",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T11:05:00Z",
+        "publishedDisplay": "2026-11-13 12:05"
+      }
+    },
+    {
+      "id": "rfc822-summer-plus0200",
+      "input": {
+        "text": "Wed, 01 Jul 2026 12:00:00 +0200",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-07-01T10:00:00Z",
+        "publishedDisplay": "2026-07-01 12:00"
+      }
+    },
+    {
+      "id": "rfc822-design-example",
+      "input": {
+        "text": "Fri, 13 Nov 2026 14:05:00 +0100",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T13:05:00Z",
+        "publishedDisplay": "2026-11-13 14:05"
+      }
+    },
+    {
+      "id": "rfc822-gmt",
+      "input": {
+        "text": "Fri, 13 Nov 2026 12:00:00 GMT",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T12:00:00Z",
+        "publishedDisplay": "2026-11-13 13:00"
+      }
+    },
+    {
+      "id": "rfc822-ut-and-z",
+      "input": {
+        "text": "13 Nov 2026 12:00 Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T12:00:00Z",
+        "publishedDisplay": "2026-11-13 13:00"
+      }
+    },
+    {
+      "id": "rfc822-negative-offset",
+      "input": {
+        "text": "Thu, 12 Nov 2026 08:00:00 -0500",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-12T13:00:00Z",
+        "publishedDisplay": "2026-11-12 14:00"
+      }
+    },
+    {
+      "id": "rfc822-zone-name-est",
+      "input": {
+        "text": "Thu, 12 Nov 2026 08:00:00 EST",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-12T13:00:00Z",
+        "publishedDisplay": "2026-11-12 14:00"
+      }
+    },
+    {
+      "id": "rfc822-offset-crosses-midnight",
+      "input": {
+        "text": "Fri, 13 Nov 2026 00:30:00 +0100",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-12T23:30:00Z",
+        "publishedDisplay": "2026-11-13 00:30"
+      }
+    },
+    {
+      "id": "rfc822-no-seconds-and-no-weekday",
+      "input": {
+        "text": "1 Jul 2026 09:15 +0200",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-07-01T07:15:00Z",
+        "publishedDisplay": "2026-07-01 09:15"
+      }
+    },
+    {
+      "id": "rfc822-weekday-not-checked",
+      "input": {
+        "text": "Mon, 13 Nov 2026 12:00:00 +0100",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T11:00:00Z",
+        "publishedDisplay": "2026-11-13 12:00"
+      }
+    },
+    {
+      "id": "rfc822-missing-zone-winter",
+      "input": {
+        "text": "Fri, 13 Nov 2026 12:00:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T11:00:00Z",
+        "publishedDisplay": "2026-11-13 12:00"
+      }
+    },
+    {
+      "id": "rfc822-missing-zone-summer",
+      "input": {
+        "text": "Wed, 01 Jul 2026 12:00:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-07-01T10:00:00Z",
+        "publishedDisplay": "2026-07-01 12:00"
+      }
+    },
+    {
+      "id": "iso-z-summer",
+      "input": {
+        "text": "2026-07-01T10:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-07-01T10:00:00Z",
+        "publishedDisplay": "2026-07-01 12:00"
+      }
+    },
+    {
+      "id": "iso-z-winter",
+      "input": {
+        "text": "2026-01-15T10:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-01-15T10:00:00Z",
+        "publishedDisplay": "2026-01-15 11:00"
+      }
+    },
+    {
+      "id": "iso-offset-colon",
+      "input": {
+        "text": "2026-11-13T12:00:00+01:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T11:00:00Z",
+        "publishedDisplay": "2026-11-13 12:00"
+      }
+    },
+    {
+      "id": "iso-offset-summer",
+      "input": {
+        "text": "2026-07-01T12:00:00+02:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-07-01T10:00:00Z",
+        "publishedDisplay": "2026-07-01 12:00"
+      }
+    },
+    {
+      "id": "iso-fraction-ignored",
+      "input": {
+        "text": "2026-11-13T12:00:00.987Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T12:00:00Z",
+        "publishedDisplay": "2026-11-13 13:00"
+      }
+    },
+    {
+      "id": "iso-missing-zone-winter",
+      "input": {
+        "text": "2026-11-13T12:00:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T11:00:00Z",
+        "publishedDisplay": "2026-11-13 12:00"
+      }
+    },
+    {
+      "id": "iso-missing-zone-summer",
+      "input": {
+        "text": "2026-07-01T12:00:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-07-01T10:00:00Z",
+        "publishedDisplay": "2026-07-01 12:00"
+      }
+    },
+    {
+      "id": "iso-surrounding-white-space",
+      "input": {
+        "text": "  2026-11-13T12:00:00Z\n",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T12:00:00Z",
+        "publishedDisplay": "2026-11-13 13:00"
+      }
+    },
+    {
+      "id": "switch-spring-last-local-before",
+      "input": {
+        "text": "2026-03-29T01:59:59",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-03-29T00:59:59Z",
+        "publishedDisplay": "2026-03-29 01:59"
+      }
+    },
+    {
+      "id": "switch-spring-missing-hour-start",
+      "input": {
+        "text": "2026-03-29T02:00:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-03-29T01:00:00Z",
+        "publishedDisplay": "2026-03-29 03:00"
+      }
+    },
+    {
+      "id": "switch-spring-missing-hour-middle",
+      "input": {
+        "text": "2026-03-29T02:30:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-03-29T01:30:00Z",
+        "publishedDisplay": "2026-03-29 03:30"
+      }
+    },
+    {
+      "id": "switch-spring-first-local-after",
+      "input": {
+        "text": "2026-03-29T03:00:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-03-29T01:00:00Z",
+        "publishedDisplay": "2026-03-29 03:00"
+      }
+    },
+    {
+      "id": "switch-spring-utc-just-before",
+      "input": {
+        "text": "2026-03-29T00:59:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-03-29T00:59:00Z",
+        "publishedDisplay": "2026-03-29 01:59"
+      }
+    },
+    {
+      "id": "switch-spring-utc-at-switch",
+      "input": {
+        "text": "2026-03-29T01:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-03-29T01:00:00Z",
+        "publishedDisplay": "2026-03-29 03:00"
+      }
+    },
+    {
+      "id": "switch-spring-day-before",
+      "input": {
+        "text": "2026-03-28T12:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-03-28T12:00:00Z",
+        "publishedDisplay": "2026-03-28 13:00"
+      }
+    },
+    {
+      "id": "switch-spring-day-after",
+      "input": {
+        "text": "2026-03-30T12:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-03-30T12:00:00Z",
+        "publishedDisplay": "2026-03-30 14:00"
+      }
+    },
+    {
+      "id": "switch-autumn-last-local-before",
+      "input": {
+        "text": "2026-10-25T01:59:59",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-10-24T23:59:59Z",
+        "publishedDisplay": "2026-10-25 01:59"
+      }
+    },
+    {
+      "id": "switch-autumn-repeated-hour-start",
+      "input": {
+        "text": "2026-10-25T02:00:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-10-25T00:00:00Z",
+        "publishedDisplay": "2026-10-25 02:00"
+      }
+    },
+    {
+      "id": "switch-autumn-repeated-hour-middle",
+      "input": {
+        "text": "2026-10-25T02:30:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-10-25T00:30:00Z",
+        "publishedDisplay": "2026-10-25 02:30"
+      }
+    },
+    {
+      "id": "switch-autumn-first-local-after",
+      "input": {
+        "text": "2026-10-25T03:00:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-10-25T02:00:00Z",
+        "publishedDisplay": "2026-10-25 03:00"
+      }
+    },
+    {
+      "id": "switch-autumn-utc-first-occurrence",
+      "input": {
+        "text": "2026-10-25T00:30:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-10-25T00:30:00Z",
+        "publishedDisplay": "2026-10-25 02:30"
+      }
+    },
+    {
+      "id": "switch-autumn-utc-second-occurrence",
+      "input": {
+        "text": "2026-10-25T01:30:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-10-25T01:30:00Z",
+        "publishedDisplay": "2026-10-25 02:30"
+      }
+    },
+    {
+      "id": "switch-autumn-utc-after-repeat",
+      "input": {
+        "text": "2026-10-25T02:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-10-25T02:00:00Z",
+        "publishedDisplay": "2026-10-25 03:00"
+      }
+    },
+    {
+      "id": "switch-autumn-day-before",
+      "input": {
+        "text": "2026-10-24T12:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-10-24T12:00:00Z",
+        "publishedDisplay": "2026-10-24 14:00"
+      }
+    },
+    {
+      "id": "switch-autumn-day-after",
+      "input": {
+        "text": "2026-10-26T12:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-10-26T12:00:00Z",
+        "publishedDisplay": "2026-10-26 13:00"
+      }
+    },
+    {
+      "id": "leap-day",
+      "input": {
+        "text": "Thu, 29 Feb 2024 12:00:00 +0100",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2024-02-29T11:00:00Z",
+        "publishedDisplay": "2024-02-29 12:00"
+      }
+    },
+    {
+      "id": "leap-day-iso-end-of-day",
+      "input": {
+        "text": "2024-02-29T23:30:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2024-02-29T23:30:00Z",
+        "publishedDisplay": "2024-03-01 00:30"
+      }
+    },
+    {
+      "id": "year-end-display-rolls-over",
+      "input": {
+        "text": "2026-12-31T23:30:00Z",
+        "now": "2027-01-01T00:00:00Z"
+      },
+      "expected": {
+        "published": "2026-12-31T23:30:00Z",
+        "publishedDisplay": "2027-01-01 00:30"
+      }
+    },
+    {
+      "id": "future-9-minutes-kept",
+      "input": {
+        "text": "2026-11-13T13:14:12Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T13:14:12Z",
+        "publishedDisplay": "2026-11-13 14:14"
+      }
+    },
+    {
+      "id": "future-exactly-10-minutes-kept",
+      "input": {
+        "text": "2026-11-13T13:15:12Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2026-11-13T13:15:12Z",
+        "publishedDisplay": "2026-11-13 14:15"
+      }
+    },
+    {
+      "id": "future-11-minutes-is-null",
+      "input": {
+        "text": "2026-11-13T13:16:12Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "future-11-minutes-rfc822-with-offset",
+      "input": {
+        "text": "Fri, 13 Nov 2026 14:16:12 +0100",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "future-one-day-is-null",
+      "input": {
+        "text": "Sat, 14 Nov 2026 12:00:00 GMT",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "past-is-kept",
+      "input": {
+        "text": "2020-01-01T00:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": "2020-01-01T00:00:00Z",
+        "publishedDisplay": "2020-01-01 01:00"
+      }
+    },
+    {
+      "id": "missing-null-text",
+      "input": {
+        "text": null,
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-empty-string",
+      "input": {
+        "text": "",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-white-space-only",
+      "input": {
+        "text": " \t ",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-text",
+      "input": {
+        "text": "inte ett datum",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-date-only",
+      "input": {
+        "text": "2026-11-13",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-day-32",
+      "input": {
+        "text": "Fri, 32 Nov 2026 12:00:00 +0100",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-not-a-leap-year",
+      "input": {
+        "text": "2026-02-29T12:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-century-not-a-leap-year",
+      "input": {
+        "text": "2100-02-29T12:00:00Z",
+        "now": "2100-03-01T00:00:00Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-month-13",
+      "input": {
+        "text": "2026-13-01T00:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-month-name",
+      "input": {
+        "text": "Fri, 13 Foo 2026 12:00:00 +0100",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-hour-24",
+      "input": {
+        "text": "2026-11-13T24:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-minute-60",
+      "input": {
+        "text": "2026-11-13T12:60:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-second-60",
+      "input": {
+        "text": "2026-11-13T12:00:60Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-offset-hours",
+      "input": {
+        "text": "2026-11-13T12:00:00+25:00",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-unknown-zone-name",
+      "input": {
+        "text": "Fri, 13 Nov 2026 12:00:00 CET",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-trailing-text",
+      "input": {
+        "text": "2026-11-13T12:00:00Z extra",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    },
+    {
+      "id": "invalid-arabic-indic-digits",
+      "input": {
+        "text": "2026-11-13T١٢:00:00Z",
+        "now": "2026-11-13T13:05:12Z"
+      },
+      "expected": {
+        "published": null,
+        "publishedDisplay": "Tid saknas"
+      }
+    }
+  ],
   "keywords": []
 }
