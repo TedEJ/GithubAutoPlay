@@ -349,14 +349,14 @@ Source of these facts: the F1 report (issue #87, 2026-11-14). Not seen by this w
 | Document types | `prop` (proposition), `mot` (motion), `bet` (committee report). Motions are by far the most numerous and have very short titles (Q5). |
 | RSS item | `title`, `author` (`riksdagsinformation@riksdagen.se`, not shown), `description` (type, number and date; partly HTML-escaped; must not be shown), `link`, `guid`, `pubDate`. |
 | Links | `link` points to `https://www.riksdagen.se/sv/dokument-och-lagar/dokument/...`, so `allowedHosts` is `riksdagen.se`. `guid` and the JSON links use `data.riksdagen.se`; only the RSS `link` is used. |
-| Time | `pubDate` has the offset +0200 also in November, when Stockholm time is +01:00. This looks wrong in winter (Q6). |
-| robots.txt | `data.riksdagen.se/robots.txt` answers 404, which is allowed under R6.6. `www.riksdagen.se/robots.txt` is checked in F6. |
+| Time | `pubDate` has the offset +0200 also in November, when Stockholm time is +01:00. Compared by hand on 2026-11-14: the clock digits equal the JSON `publicerad` (Swedish local time), only the label is wrong. Decided: read the clock time as Europe/Stockholm (R16.7). |
+| robots.txt | `data.riksdagen.se/robots.txt` answers 404, which is allowed under R6.6. `www.riksdagen.se/robots.txt` was checked on 2026-11-14: no Disallow rules, only `crawl-delay: 1` for Claude bots, so the article links are not blocked (R16.4). |
 | CORS | No CORS header; irrelevant, the build fetches it. |
 | Size | About 365,000 hits in total; the call is capped with `sz` (50 proposed); the 2 MB limit of R9.4 stays. |
 | Call frequency | Not stated. The build runs by hand and makes one call per run. |
 | Credit and terms | Terms: `https://www.riksdagen.se/sv/dokument-och-lagar/riksdagens-oppna-data/anvandarstod/anvandningsvillkor/`. Credit text "Källa: Sveriges riksdag"; the service must not imply that the Riksdag stands behind it; no Riksdag logo or name as branding; images are not republished (R16.5). |
 
-The terms are read again before F6 is merged (R16.8); the result is added here.
+The terms are read again before F6 is merged (R16.8); the result is added here. The owner accepted the name "Riksdagen", the disclaimer line and `storageAllowed: true` in D38, provided R16.8 allows storing. Terms read again on 2026-11-14 (R16.8): "free to use and spread as long as the source is given" as "Källa: Sveriges riksdag"; the service must make clear that the Riksdag does not stand behind it; the Riksdag logo and the name Sveriges riksdag must not be used in the service (the credit text is the required exception); the word "riksdagen" may be part of a service name; copyright-protected material such as images may not be republished; the data contains personal data, so the page shows only headline, source, time and link. Storing the headline, link and time is therefore allowed. Open point for the owner: the disclaimer line "Sidan har inget samband med Sveriges riksdag." also contains the name Sveriges riksdag; it can be changed in F7 to "Sidan har inget samband med riksdagen." if the owner prefers.
 
 ## 5. Options considered and the recommendation
 
@@ -576,7 +576,7 @@ A source whose status is not `ok` has one more field, `message`, for example `{ 
     {
       "id": "riksdagen", "name": "Riksdagen", "enabled": false, "fetchedBy": "build", "storageAllowed": true,
       "homepage": "https://www.riksdagen.se/", "allowedHosts": ["riksdagen.se"],
-      "linkHosts": ["www.riksdagen.se"],
+      "linkHosts": ["www.riksdagen.se"], "timeZone": "Europe/Stockholm",
       "credit": "Källa: Sveriges riksdag",
       "feeds": [
         { "topic": "all-news", "method": "feed",          "url": "https://data.riksdagen.se/dokumentlista/?doktyp=prop,bet&sort=datum&sortorder=desc&utformat=rss&a=s&sz=50" },
@@ -590,7 +590,7 @@ A source whose status is not `ok` has one more field, `message`, for example `{ 
 - Rules: R14. The three SVT topics Alla nyheter, Natur and AI share one address and cost one request (R15.1); Sveriges Radio's four topics cost one request (R15.3).
 - Riksdagen has no `nature` entry (D24). It is `enabled: false` from F6 until F7 shows the credit text (R16.9). The `doktyp` value follows Q5 (`prop,bet` is the recommendation).
 - SVT Natur and AI use `nyheter/rss.xml` with keywords because SVT's own feeds are unconfirmed (Q7); if one is found, its entry changes to method `feed` with the new address, through an issue.
-- `linkHosts` (exact link host) and `matchOn` (title only) are used by Riksdagen only (R16.1, R16.2). The SVT feed entries are a manager proposal (D31). The Sveriges Radio feed is the owner's decision (D27). "storageAllowed: true" for SVT and Riksdagen stays a working assumption (K12, R16.8).
+- `linkHosts` (exact link host), `timeZone` (the clock time of the date text is Stockholm time, R16.7) and `matchOn` (title only) are used by Riksdagen only (R16.1, R16.2). The SVT feed entries are a manager proposal (D31). The Sveriges Radio feed is the owner's decision (D27). "storageAllowed: true" for SVT and Riksdagen stays a working assumption (K12, R16.8).
 
 ### 7.6 Keyword files per topic (F4 writes them, F5 checks them in the build; D23, D33)
 - Files, named `<topic id>-keywords.json` (R14.1): `politics-keywords.json` (name kept), `nature-keywords.json`, `ai-keywords.json`. `all-news` has none.
@@ -701,7 +701,7 @@ All headlines, URLs and counts are made up. A feed that fails has `"status": "er
 | Saved `lastNews` has another version | Not used, as if no copy was saved | R18.4, R8.2 |
 | Short AI term inside another word or name (AIK, Ai Weiwei) | No match: `AI` is a case-sensitive whole word | R17.3, K16 |
 | Riksdag description with HTML or escaped text | Never shown and not used for matching (`matchOn` `title`) | R16.2, N1 |
-| Riksdag time offset looks wrong in winter | Q6 decides; until then the offset is read as given | R16.7, Q6 |
+| Riksdag time offset looks wrong in winter | Decided (F6): `timeZone` makes the build read the clock time as Stockholm time | R16.7, Q6 |
 | Riksdagen switched on without the credit text on the page | Must not happen: the source stays `enabled: false` until F7 | R16.9 |
 | Riksdag API down or changes format | Failed fetch, handled like SVT | R6.2, R11.1 |
 | Riksdag item whose link is on `data.riksdagen.se` or another riksdagen.se host | Dropped; only `www.riksdagen.se` links are kept | R16.2 |
