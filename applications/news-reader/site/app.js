@@ -1,19 +1,27 @@
-// The news reader page, part 1 (step S10): SVT headlines from news.json, the
-// reader's choice of sources, an offline copy, notices.
+// The news reader page: SVT headlines from news.json, the reader's choice of
+// sources, an offline copy, notices (step S10), and the live fetch of the sources
+// that the page reads itself, today Sveriges Radio (step S11).
 //
-// This is a thin layer. The rules (URL check, time display, sorting) live in
-// logic.js. All text is built with createElement and textContent, never by
+// This is a thin layer. The rules (URL check, time display, sorting, the call
+// limits of the live fetch) live in logic.js; the request and the Atom parsing
+// live in atom.js. All text is built with createElement and textContent, never by
 // parsing markup. The pure parts (validation of what is read from the network and
 // from localStorage, the choice of notices, the rows of "Källor") are exported
-// so that `node --test` can test them without a browser. The Sveriges Radio
-// live fetch is step S11 and is not here: its row in "Källor" says that it is
-// not available yet (see browserStatus).
+// so that `node --test` can test them without a browser.
+//
+// Live items (Sveriges Radio) are kept in `state.live`, a variable, and nowhere
+// else (R7.3): they are never given to the code that writes to storage, they are
+// never logged and no error message holds any of their text. The saved copy
+// (KEY_LAST_NEWS) is made from the validated news.json only.
 (function (root) {
   "use strict";
 
   const logic = typeof module !== "undefined" && module.exports
     ? require("./logic.js")
     : root.NewsLogic;
+  const atom = typeof module !== "undefined" && module.exports
+    ? require("./atom.js")
+    : root.NewsAtom;
 
   const KEY_SELECTED = "newsReader.selectedSources";
   const KEY_LAST_NEWS = "newsReader.lastNews";
@@ -68,13 +76,20 @@
       const category = raw["politics-sweden"];
       const method = isObject(category) && typeof category.method === "string" ? category.method : "";
       seen.add(raw.id);
-      result.push({
+      const source = {
         id: raw.id,
         name: raw.name,
         fetchedBy: raw.fetchedBy,
         allowedHosts: hosts.slice(),
         method,
-      });
+      };
+      // The address of a feed that the page fetches itself (R7.1): from
+      // sources.json, never written in this script. Only https is accepted.
+      if (raw.fetchedBy === "browser") {
+        const url = isObject(category) ? category.url : "";
+        source.url = isText(url, MAX_URL) && /^https:\/\/[^\s]+$/.test(url) ? url : "";
+      }
+      result.push(source);
     }
     return result.length > 0 ? result : null;
   }
@@ -208,9 +223,14 @@
   // What the page shows
 
   // The list: the chosen sources' items, merged and sorted by logic.js (R5.5).
-  function visibleItems(news, selected) {
-    if (!news) return [];
-    const lists = selected.map((id) => news.items.filter((item) => item.sourceId === id));
+  // `liveItems` (optional): a Map from the id of a source that the page fetches
+  // itself to its items in memory.
+  function visibleItems(news, selected, liveItems) {
+    const lists = selected.map((id) => {
+      const fromFile = news ? news.items.filter((item) => item.sourceId === id) : [];
+      const live = liveItems && liveItems.get(id);
+      return live ? fromFile.concat(live) : fromFile;
+    });
     return logic.mergeItems(lists);
   }
 
@@ -235,15 +255,25 @@
     return notices;
   }
 
-  // The status text of a source that the page fetches itself. Step S11 (the
-  // Sveriges Radio live fetch) replaces this function; until then such a source
-  // is shown as not available.
-  function browserStatus(source) {
-    return "Inte tillgänglig ännu";
-  }
-
   function countText(n) {
     return n === 1 ? "1 rubrik" : n + " rubriker";
+  }
+
+  // "14:07" in Europe/Stockholm, from epoch milliseconds.
+  function clockTime(ms) {
+    return logic.displayTime(logic.formatUtc(Math.floor(ms / 1000))).slice(11);
+  }
+
+  // The status text of a source that the page fetches itself (R7.6). `live` is
+  // its state ({status: "idle" | "loading" | "ok" | "error", fetchedAt, items})
+  // or undefined; `chosen` is false when the reader has unticked the source (then
+  // nothing is requested). The text of a failure holds the source name only.
+  function browserStatus(source, live, chosen) {
+    if (chosen === false) return "Inte vald – ingen hämtning";
+    if (!live || live.status === "idle") return "Inte hämtad ännu";
+    if (live.status === "error") return source.name + " kunde inte hämtas just nu";
+    if (live.status === "loading") return "Hämtar …";
+    return "Hämtad " + clockTime(live.fetchedAt) + ", " + countText(live.items.length);
   }
 
   function buildStatus(source, news) {
@@ -257,13 +287,15 @@
   }
 
   // The rows of "Källor" (R4.6): name, note and status of each enabled source.
-  function sourceRows(sources, news, selected) {
+  function sourceRows(sources, news, selected, live) {
     return sources.map((source) => ({
       id: source.id,
       name: source.name,
       checked: selected.includes(source.id),
       note: source.method === "keywordFilter" ? TEXT.keywordNote : "",
-      status: source.fetchedBy === "browser" ? browserStatus(source) : buildStatus(source, news),
+      status: source.fetchedBy === "browser"
+        ? browserStatus(source, live && live.get(source.id), selected.includes(source.id))
+        : buildStatus(source, news),
     }));
   }
 
@@ -297,7 +329,8 @@
   // ------------------------------------------------------------------------
   // The page (DOM, timers, fetch)
 
-  // env: document, window (for localStorage), fetch, now (ms), setInterval.
+  // env: document, window (for localStorage), fetch, now (ms), setInterval,
+  // setTimeout, clearTimeout, AbortController, DOMParser (for the live fetch).
   function createApp(env) {
     const doc = env.document;
     const storage = getStorage(env.window);
@@ -314,7 +347,12 @@
       selected: [],
       loading: false,
       lastLoad: 0,
+      // Sveriges Radio and any other source the page fetches itself. Memory
+      // only (R7.3): source id -> {last, inFlight, status, fetchedAt, items}.
+      live: new Map(),
+      keywords: null,
     };
+    const pendingLive = new Set();
     const sourceEls = new Map();
     let sourcesBuilt = "";
     // What is on the screen now. A part is only rewritten when its key changes,
@@ -342,9 +380,22 @@
       }
     }
 
+    function liveItems() {
+      const map = new Map();
+      for (const [id, live] of state.live) map.set(id, live.items);
+      return map;
+    }
+
     function renderList() {
-      const items = visibleItems(state.news, state.selected);
-      const key = JSON.stringify([state.news !== null, items]);
+      const items = visibleItems(state.news, state.selected, liveItems());
+      // R8.4: only when news were loaded, nothing is left to show and no chosen
+      // source is still being fetched.
+      const waiting = state.selected.some((id) => {
+        const live = state.live.get(id);
+        return live !== undefined && live.status === "loading";
+      });
+      const showEmpty = state.news !== null && items.length === 0 && !waiting;
+      const key = JSON.stringify([state.news !== null, showEmpty, items]);
       if (key === listKey) return;
       listKey = key;
       // Keep the focus on a headline link that is still in the list.
@@ -377,8 +428,6 @@
         li.appendChild(meta);
         el.headlines.appendChild(li);
       }
-      // R8.4: only when news were loaded and nothing is left to show.
-      const showEmpty = state.news !== null && items.length === 0;
       el.empty.textContent = TEXT.empty;
       el.empty.hidden = !showEmpty;
       if (focusedId !== null && linkById.has(focusedId)) linkById.get(focusedId).focus();
@@ -386,12 +435,20 @@
 
     function renderHeader() {
       const news = state.news;
-      if (!news || !state.sources) {
-        el.updated.textContent = "";
-        return;
+      const parts = [];
+      if (news && state.sources) {
+        const names = state.sources.filter((s) => s.fetchedBy === "build").map((s) => s.name);
+        parts.push(joinNames(names) + " uppdaterad " + news.generatedAtDisplay);
       }
-      const names = state.sources.filter((s) => s.fetchedBy === "build").map((s) => s.name);
-      el.updated.textContent = joinNames(names) + " uppdaterad " + news.generatedAtDisplay;
+      if (state.sources) {
+        for (const source of state.sources) {
+          const live = state.live.get(source.id);
+          if (source.fetchedBy === "browser" && live && live.status === "ok") {
+            parts.push(source.name + " hämtad " + clockTime(live.fetchedAt));
+          }
+        }
+      }
+      el.updated.textContent = parts.join(" · ");
     }
 
     // Built once per list of sources, so that a checkbox keeps its focus when
@@ -399,7 +456,7 @@
     function renderSources() {
       el["sources-section"].hidden = !state.sources;
       if (!state.sources) return;
-      const rows = sourceRows(state.sources, state.news, state.selected);
+      const rows = sourceRows(state.sources, state.news, state.selected, state.live);
       const signature = rows.map((r) => r.id).join("|");
       if (signature !== sourcesBuilt) {
         sourcesBuilt = signature;
@@ -457,10 +514,24 @@
     function onChoice() {
       // The ids of the ticked boxes, in the order of sources.json. Ids that are
       // no longer approved are not in it, so they are dropped here (R3.5).
+      const before = state.selected;
       state.selected = state.sources
         .filter((s) => sourceEls.get(s.id).input.checked)
         .map((s) => s.id);
+      const ticked = state.selected.filter((id) => !before.includes(id));
       writeKey(storage, KEY_SELECTED, JSON.stringify(state.selected));
+      // An unticked live source keeps nothing in memory. Its time of last request
+      // stays, so the call limits hold across unticking and ticking.
+      for (const source of state.sources) {
+        const live = state.live.get(source.id);
+        if (source.fetchedBy === "browser" && live && !state.selected.includes(source.id)) {
+          live.items = [];
+          if (!live.inFlight) live.status = "idle";
+        }
+      }
+      // Ticking a source fetches it if the limits allow (the first request of the
+      // page at once, later ones only 5 minutes after the last).
+      if (ticked.length > 0) startLive("choose", ticked);
       renderList();
       renderSources();
     }
@@ -481,7 +552,93 @@
       }
     }
 
-    async function load() {
+    // ---- the live fetch (R7.1 to R7.6) ----
+
+    function liveOf(id) {
+      let live = state.live.get(id);
+      if (!live) {
+        live = { last: null, inFlight: false, status: "idle", fetchedAt: null, items: [] };
+        state.live.set(id, live);
+      }
+      return live;
+    }
+
+    // One request to one source, then its items in memory. Every failure ends
+    // in the same status; nothing about the failure is kept or logged, and no
+    // text from the feed leaves this function except as the items.
+    async function fetchLive(source, live) {
+      let controller = null;
+      let timer = null;
+      try {
+        if (!state.keywords) {
+          state.keywords = logic.validateKeywords(await fetchJson("politics-keywords.json"));
+        }
+        if (typeof env.AbortController === "function") {
+          controller = new env.AbortController();
+          timer = env.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+        }
+        const entries = await atom.fetchAtom(env.fetch, source.url, {
+          signal: controller ? controller.signal : undefined,
+          DOMParser: env.DOMParser,
+        });
+        const items = logic.selectItems(entries, {
+          id: source.id,
+          name: source.name,
+          allowedHosts: source.allowedHosts,
+          "politics-sweden": { method: source.method },
+        }, state.keywords, env.now());
+        if (state.selected.includes(source.id)) {
+          live.items = items;
+          live.fetchedAt = env.now();
+          live.status = "ok";
+        } else {
+          // Unticked while the request ran: nothing is kept.
+          live.items = [];
+          live.status = "idle";
+        }
+      } catch (e) {
+        // Nothing from the error is used: not its message, not its type.
+        live.items = [];
+        live.status = "error";
+      } finally {
+        if (timer !== null) env.clearTimeout(timer);
+        live.inFlight = false;
+        // While an SVT load runs, it draws everything when it ends. Drawing
+        // before that would show "Kunde inte hämta nyheter" for a moment.
+        if (!state.loading) renderAll();
+      }
+    }
+
+    // Starts the requests that the call limits allow for this trigger ("open",
+    // "timer", "visible" or "refresh", see logic.liveFetchAllowed). The time of
+    // a request is recorded before anything is awaited, so two triggers at the
+    // same moment, or a request that is still running, cannot make two requests.
+    // The returned promise ends when the requests started now have ended; the
+    // page does not wait for it (an SVT load never waits for Sveriges Radio).
+    function startLive(trigger, only) {
+      if (!state.sources) return Promise.resolve();
+      const jobs = [];
+      for (const source of state.sources) {
+        if (source.fetchedBy !== "browser") continue;
+        if (only && !only.includes(source.id)) continue;
+        const live = liveOf(source.id);
+        if (live.inFlight) continue;
+        // An unticked source is not requested at all (the reader asked not to see it).
+        if (!state.selected.includes(source.id)) continue;
+        const now = env.now();
+        if (!logic.liveFetchAllowed(trigger, live.last, now, doc.hidden === true)) continue;
+        live.last = now;
+        live.inFlight = true;
+        if (live.status !== "ok") live.status = "loading";
+        const job = fetchLive(source, live);
+        pendingLive.add(job);
+        job.then(() => pendingLive.delete(job));
+        jobs.push(job);
+      }
+      return Promise.all(jobs).then(() => undefined);
+    }
+
+    async function load(trigger) {
       if (state.loading) return;
       state.loading = true;
       // aria-busy, not the disabled attribute: a disabled button loses the focus.
@@ -494,6 +651,7 @@
           state.sources = sources;
           state.selected = parseSelected(readKey(storage, KEY_SELECTED), sources);
         }
+        startLive(trigger || "refresh");
         const fresh = validateNews(await fetchJson("news.json"), state.sources, env.now());
         if (!fresh) throw new Error("news.json not usable");
         state.news = fresh;
@@ -521,14 +679,24 @@
       noticesKey = "loading";
       el.notices.replaceChildren();
       el.notices.appendChild(makeText("p", "notice", TEXT.loading));
-      el.refresh.addEventListener("click", () => { load(); });
+      el.refresh.addEventListener("click", () => {
+        load("refresh");
+        startLive("refresh");
+      });
       env.setInterval(() => {
-        if (!doc.hidden) load();
+        if (doc.hidden) return;
+        load("timer");
+        startLive("timer");
       }, REFRESH_MS);
       doc.addEventListener("visibilitychange", () => {
-        if (!doc.hidden && env.now() - state.lastLoad >= REFRESH_MS) load();
+        if (doc.hidden) return;
+        if (env.now() - state.lastLoad >= REFRESH_MS) load("visible");
+        startLive("visible");
       });
-      return load();
+      // The first load starts the first live request once sources.json is read
+      // (if the tab is hidden it waits until the tab is visible). The promise
+      // ends when the requests started by then have ended.
+      return load("open").then(() => Promise.all(Array.from(pendingLive)).then(() => undefined));
     }
 
     return { start, load, state };
@@ -547,6 +715,7 @@
     visibleItems,
     decideNotices,
     sourceRows,
+    browserStatus,
     bottomLine,
     joinNames,
     createApp,
@@ -566,6 +735,7 @@
         setTimeout: root.setTimeout.bind(root),
         clearTimeout: root.clearTimeout.bind(root),
         AbortController: root.AbortController,
+        DOMParser: root.DOMParser,
       }).start();
     }
   }
