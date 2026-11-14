@@ -17,13 +17,25 @@ def main(argv=None, fetch=None, now=None, root=None):
     parser.add_argument("--out", required=True, help="output folder, for example build")
     parser.add_argument("--previous", default=None,
                         help="previous news.json for the 24-hour fallback (default: <out>/news.json if it exists)")
+    parser.add_argument("--ca-file", default=None, metavar="PATH",
+                        help="PEM or DER file with an extra certificate (for example a missing intermediate "
+                             "certificate) to trust in addition to the system store, for every host the build "
+                             "fetches; verification stays on")
     args = parser.parse_args(argv)
+    context = None
+    if args.ca_file is not None:  # checked before anything is fetched or written
+        try:
+            context = fetch_module.make_ssl_context(args.ca_file)
+        except fetch_module.CaFileError as exc:
+            parser.error("--ca-file: %s" % exc)  # exit code 2, like any argument error
+    if fetch is None:
+        fetch = fetch_module.fetch_url if context is None else fetch_module.make_fetch(context)
     kwargs = {} if root is None else {"root": root}
     try:
         document = build(
             args.out,
             now if now is not None else datetime.now(timezone.utc),
-            fetch if fetch is not None else fetch_module.fetch_url,
+            fetch,
             previous_path=args.previous,
             **kwargs,
         )

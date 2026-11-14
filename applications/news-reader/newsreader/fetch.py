@@ -14,11 +14,17 @@ broken connection and an incomplete body included). Rules:
   than `MAX_RESPONSE_BYTES` (2 MiB); a larger `Content-Length` is refused
   before reading.
 * Only status 200 is a success.
+* Certificate verification is always on. A failed verification (or any TLS handshake
+  problem) is the kind `certificate` with a fixed message; nothing from the exception
+  (which can name the host) is copied. `make_ssl_context(ca_file)` builds the context of
+  the command line option `--ca-file`: the default context (CERT_REQUIRED, host name
+  checked, system store) plus the owner's file as an additional trust anchor.
 
 The build calls `fetch_url` through an injected function, so every test uses a
 fake with the same signature and never touches the network.
 """
 import http.client
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -33,7 +39,7 @@ CHUNK_BYTES = 64 * 1024
 
 
 class FetchError(Exception):
-    """A request failed. `kind` is one of: network, timeout, status, too-large, redirect."""
+    """A request failed. `kind` is one of: network, timeout, status, too-large, redirect, certificate."""
 
     def __init__(self, kind, message, status=None):
         super().__init__(message)
@@ -50,6 +56,34 @@ def host_allowed(url, allowed_hosts):
     return any(host == h or host.endswith("." + h) for h in allowed_hosts)
 
 
+CERTIFICATE_MESSAGE = ("certificate could not be verified (the server may not send its full "
+                       "certificate chain; see the README)")
+
+
+class CaFileError(Exception):
+    """The file given to `--ca-file` cannot be used. The message is fixed text (no path, no
+    exception text)."""
+
+
+def make_ssl_context(ca_file):
+    """The default context (verification on, host name checked, system store) with the
+    certificates of `ca_file` trusted in addition. Raises `CaFileError` for a path that is
+    not a readable file or a file with no certificate."""
+    try:
+        context = ssl.create_default_context()
+        context.load_verify_locations(cafile=ca_file)
+    except ssl.SSLError as exc:
+        raise CaFileError("the file has no usable certificate (PEM or DER)") from exc
+    except (OSError, ValueError) as exc:
+        raise CaFileError("the file does not exist or cannot be read") from exc
+    return context
+
+
+def _is_tls_error(exc):
+    """True if `exc`, or the reason it wraps, is an ssl error (certificate or handshake)."""
+    return isinstance(exc, ssl.SSLError) or isinstance(getattr(exc, "reason", None), ssl.SSLError)
+
+
 class _AllowedHostsRedirects(urllib.request.HTTPRedirectHandler):
     def __init__(self, allowed_hosts):
         self.allowed_hosts = tuple(allowed_hosts)
@@ -60,9 +94,20 @@ class _AllowedHostsRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def make_opener(allowed_hosts):
-    """An opener with the redirect rule and without cookie handling."""
-    return urllib.request.build_opener(_AllowedHostsRedirects(allowed_hosts))
+def make_opener(allowed_hosts, context=None):
+    """An opener with the redirect rule and without cookie handling. With `context` (an
+    `ssl.SSLContext`) https requests use it; without, urllib's default (verifying) context."""
+    handlers = [_AllowedHostsRedirects(allowed_hosts)]
+    if context is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=context))
+    return urllib.request.build_opener(*handlers)
+
+
+def make_fetch(context=None):
+    """A function `fetch(url, allowed_hosts) -> bytes` that uses `context` for https."""
+    def fetch(url, allowed_hosts):
+        return fetch_url(url, allowed_hosts, opener=make_opener(allowed_hosts, context))
+    return fetch
 
 
 def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONSE_BYTES, opener=None,
@@ -89,8 +134,12 @@ def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONS
     except urllib.error.URLError as exc:
         if isinstance(exc.reason, TimeoutError):
             raise FetchError("timeout", "timeout") from exc
+        if _is_tls_error(exc):
+            raise FetchError("certificate", CERTIFICATE_MESSAGE) from exc
         raise FetchError("network", "network error") from exc
     except (OSError, ValueError, http.client.HTTPException) as exc:
+        if _is_tls_error(exc):  # ssl.SSLError is an OSError
+            raise FetchError("certificate", CERTIFICATE_MESSAGE) from exc
         # OSError: connection problems; ValueError: includes http.client.InvalidURL;
         # HTTPException: includes IncompleteRead and BadStatusLine.
         raise FetchError("network", "network error") from exc

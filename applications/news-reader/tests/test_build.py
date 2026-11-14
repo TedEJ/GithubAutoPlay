@@ -1244,3 +1244,63 @@ def test_a_version_1_sources_file_fails_the_build_and_writes_nothing(project):
 def test_the_copied_sources_json_is_version_2(project):
     run(project, FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED}))
     assert json.loads((project.out / "sources.json").read_text("utf-8"))["version"] == 2
+
+
+# ---- --ca-file and certificate errors ------------------------------------------
+
+def _ca_file(tmp_path, text=None):
+    from tests.test_fetch import TEST_CERTIFICATE_PEM
+    path = tmp_path / "extra.pem"
+    path.write_text(TEST_CERTIFICATE_PEM if text is None else text, encoding="ascii")
+    return path
+
+
+def test_cli_ca_file_is_accepted_and_the_context_is_passed_on(project, tmp_path, monkeypatch):
+    import ssl
+    seen = []
+
+    def fake_make_fetch(context=None):
+        seen.append(context)
+        return FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED})
+
+    monkeypatch.setattr(fetch_module, "make_fetch", fake_make_fetch)
+    code = main(["--out", str(project.out), "--ca-file", str(_ca_file(tmp_path))], now=NOW, root=project.root)
+    assert code == 0 and len(seen) == 1
+    assert seen[0].verify_mode == ssl.CERT_REQUIRED and seen[0].check_hostname is True
+    assert read_news(project)["sources"][0]["itemCount"] == 2
+
+
+def test_cli_without_ca_file_uses_the_plain_fetch(project, monkeypatch):
+    monkeypatch.setattr(fetch_module, "make_fetch", lambda context=None: pytest.fail("no context expected"))
+    monkeypatch.setattr(fetch_module, "fetch_url", FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED}))
+    assert main(["--out", str(project.out)], now=NOW, root=project.root) == 0
+
+
+@pytest.mark.parametrize("kind", ["missing", "directory", "text"])
+def test_cli_bad_ca_file_fails_early_and_writes_nothing(project, tmp_path, capsys, kind):
+    path = {"missing": tmp_path / "nope.pem", "directory": tmp_path,
+            "text": _ca_file(tmp_path, "just some text\n")}[kind]
+    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED})
+    with pytest.raises(SystemExit) as info:
+        main(["--out", str(project.out), "--ca-file", str(path)], fetch=fetch, now=NOW, root=project.root)
+    assert info.value.code == 2
+    err = capsys.readouterr().err
+    assert "--ca-file" in err and str(tmp_path) not in err.replace("usage", "")
+    assert fetch.calls == [] and not project.out.exists()
+
+
+def test_certificate_failure_shows_the_message_for_riksdagen_and_svt_stays_ok(project, capsys):
+    from tests.test_riksdagen import FEED_URL as RD_FEED, ROBOTS as RD_ROBOTS, real_riksdagen
+    project.write_sources(source(), real_riksdagen())
+    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED,
+                       RD_ROBOTS: FetchError("certificate", fetch_module.CERTIFICATE_MESSAGE)})
+    assert main(["--out", str(project.out)], fetch=fetch, now=NOW, root=project.root) == 0
+    document = read_news(project)
+    assert source_entry(document, "test-news")["status"] == "ok"
+    entry = source_entry(document, "riksdagen")
+    assert entry["status"] == "error" and "certificate could not be verified" in entry["message"]
+    assert "README" in entry["message"] and "http" not in entry["message"]
+    for feed in entry["feeds"]:
+        assert feed["status"] == "error" and "http" not in feed["message"]
+    out = capsys.readouterr().out
+    assert "test-news: ok" in out and "certificate could not be verified" in out
