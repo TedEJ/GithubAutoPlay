@@ -40,7 +40,7 @@
     {
       "id": "riksdagen",
       "name": "Riksdagen",
-      "enabled": false,
+      "enabled": true,
       "fetchedBy": "build",
       "storageAllowed": true,
       "homepage": "https://www.riksdagen.se/",

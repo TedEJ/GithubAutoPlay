@@ -18,6 +18,9 @@ from tests.fakes import (BROWSER_FEED_URL, FEED_URL, GOOD_FEED, NOW, ROBOTS_URL,
 ITEM_FIELDS_V1 = {"id", "sourceId", "sourceName", "title", "url", "published", "publishedDisplay"}
 ITEM_FIELDS = ITEM_FIELDS_V1 | {"topics"}  # R1.5
 ROBOTS_OK = b"User-agent: *\nAllow: /\n"
+RIKSDAGEN_FEED = (
+    "https://data.riksdagen.se/dokumentlista/?doktyp=prop,bet&sort=datum&sortorder=desc"
+    "&utformat=rss&a=s&sz=50")
 
 
 def run(project, fetch, now=NOW, **kwargs):
@@ -378,13 +381,16 @@ def test_real_sources_json_the_build_never_requests_sveriges_radio(project, tmp_
     fetch = FakeFetch({"https://www.svt.se/robots.txt": ROBOTS_OK,
                        "https://www.svt.se/nyheter/rss.xml": svt_feed,
                        "https://www.svt.se/nyheter/inrikes/rss.xml": svt_feed,
+                       "https://data.riksdagen.se/robots.txt": FetchError("status", "HTTP status 404", 404),
+                       RIKSDAGEN_FEED: rss(("Påhittad proposition", "/x", "Fri, 13 Nov 2026 11:00:00 GMT")
+                                           ).replace(b"news.example.invalid", b"www.riksdagen.se"),
                        "https://api.sr.se/api/rss/program/83": rss(
                            ("Riksdagen hos Ekot påhittad", "/artikel/1", "Fri, 13 Nov 2026 11:00:00 GMT"))})
     out = tmp_path / "real-out"
     document = build(out, NOW, fetch)  # the project's own sources.json
-    assert [s["id"] for s in document["sources"]] == ["svt"]
+    assert [s["id"] for s in document["sources"]] == ["svt", "riksdagen"]  # Riksdagen is on since F7
     assert all("api.sr.se" not in c and "sverigesradio" not in c for c in fetch.calls)
-    assert document["items"] and all(i["sourceId"] == "svt" for i in document["items"])
+    assert document["items"] and all(i["sourceId"] in ("svt", "riksdagen") for i in document["items"])
     for path in out.rglob("*"):
         if path.is_file():
             assert "Ekot" not in path.read_text(encoding="utf-8", errors="ignore")
@@ -549,7 +555,9 @@ def test_python_dash_m_entry_point_with_the_projects_own_files(tmp_path, monkeyp
     svt_feed = rss(("Regeringen och riksdagen i en påhittad fråga", "/nyheter/inrikes/exempel",
                     "Fri, 13 Nov 2026 11:00:00 GMT")).replace(b"news.example.invalid", b"www.svt.se")
     fake = FakeFetch({"https://www.svt.se/nyheter/rss.xml": svt_feed,
-                      "https://www.svt.se/nyheter/inrikes/rss.xml": svt_feed})
+                      "https://www.svt.se/nyheter/inrikes/rss.xml": svt_feed,
+                      RIKSDAGEN_FEED: rss(("Påhittad proposition", "/x", "Fri, 13 Nov 2026 11:00:00 GMT")
+                                          ).replace(b"news.example.invalid", b"www.riksdagen.se")})
     monkeypatch.setattr(fetch_module, "fetch_url", fake)
     out = tmp_path / "build"
     monkeypatch.setattr(sys, "argv", ["newsreader", "--out", str(out)])
@@ -558,10 +566,11 @@ def test_python_dash_m_entry_point_with_the_projects_own_files(tmp_path, monkeyp
         runpy.run_module("newsreader", run_name="__main__")
     assert info.value.code == 0
     document = json.loads((out / "news.json").read_text(encoding="utf-8"))
-    assert [s["id"] for s in document["sources"]] == ["svt"]
+    assert [s["id"] for s in document["sources"]] == ["svt", "riksdagen"]
     assert fake.calls == ["https://www.svt.se/robots.txt", "https://www.svt.se/nyheter/rss.xml",
-                          "https://www.svt.se/nyheter/inrikes/rss.xml"]
-    assert document["items"][0]["topics"] == ["all-news", "politics"]
+                          "https://www.svt.se/nyheter/inrikes/rss.xml", "https://data.riksdagen.se/robots.txt",
+                          RIKSDAGEN_FEED]
+    assert next(i for i in document["items"] if i["sourceId"] == "svt")["topics"] == ["all-news", "politics"]
     assert (out / "sources.json").read_bytes() == (APP / "sources.json").read_bytes()
     for name in ("politics-keywords.json", "nature-keywords.json", "ai-keywords.json", "logic.js"):
         assert (out / name).exists()
@@ -1179,9 +1188,13 @@ def test_news_json_of_the_real_sources_has_the_svt_items_with_topics_and_two_fee
         "https://www.svt.se/robots.txt": ROBOTS_OK,
         svt_all: feed(("Naturreservat vid sjön får nya stigar", "/nyheter/a", stamp(11)),
                       ("Regeringen testar ChatGPT", "/nyheter/inrikes/b", stamp(10))),
-        svt_domestic: feed(("Regeringen testar ChatGPT", "/nyheter/inrikes/b", stamp(10)))})
+        svt_domestic: feed(("Regeringen testar ChatGPT", "/nyheter/inrikes/b", stamp(10))),
+        "https://data.riksdagen.se/robots.txt": FetchError("status", "HTTP status 404", 404),
+        RIKSDAGEN_FEED: rss(("Påhittad proposition", "/x", stamp(9))).replace(b"news.example.invalid", b"www.riksdagen.se")})
     document = build(tmp_path / "real", NOW, fetch)
-    assert fetch.calls == ["https://www.svt.se/robots.txt", svt_all, svt_domestic]  # two feed requests (R15.1)
+    # Two SVT feed requests (R15.1) and, since F7, one for Riksdagen.
+    assert fetch.calls == ["https://www.svt.se/robots.txt", svt_all, svt_domestic,
+                           "https://data.riksdagen.se/robots.txt", RIKSDAGEN_FEED]
     items = {i["url"]: i for i in document["items"]}
     assert items["https://www.svt.se/nyheter/a"]["topics"] == ["all-news", "nature"]
     assert items["https://www.svt.se/nyheter/inrikes/b"]["topics"] == ["all-news", "politics", "ai"]

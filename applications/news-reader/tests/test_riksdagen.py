@@ -2,7 +2,7 @@
 
 Uses hand-written, invented samples in the shape of the Riksdag document list and the
 project's own `sources.json` with the Riksdagen entry switched on (the real entry is
-`enabled: false` until F7, R16.9). Nothing touches the network.
+`enabled: false` until F7, R16.9; enabled from F7). Nothing touches the network.
 """
 import json
 from datetime import datetime, timezone
@@ -158,16 +158,21 @@ def test_the_parser_reads_only_title_link_and_pubdate_of_the_items():
 
 # ---- the real file ------------------------------------------------------
 
-def test_the_real_file_has_riksdagen_disabled_so_it_is_not_fetched(project, tmp_path):
-    # R16.9: F7 changes this test to `enabled` true, together with the credit text on the page.
+def test_the_real_file_has_riksdagen_enabled_so_the_build_fetches_it(project, tmp_path):
+    # R16.9 (F7): switched on together with the credit text on the page.
     sources = json.loads((APP / "sources.json").read_text(encoding="utf-8"))["sources"]
-    assert next(s for s in sources if s["id"] == "riksdagen")["enabled"] is False
+    assert next(s for s in sources if s["id"] == "riksdagen")["enabled"] is True
+    svt_body = feed(("Exempelnyhet från SVT", "https://www.svt.se/nyheter/inrikes/a",
+                     "Fri, 13 Nov 2026 11:00:00 GMT"))
     fetch = FakeFetch({"https://www.svt.se/robots.txt": ROBOTS_OK,
+                       "https://www.svt.se/nyheter/rss.xml": svt_body,
+                       "https://www.svt.se/nyheter/inrikes/rss.xml": svt_body,
                        ROBOTS: NOT_FOUND, FEED_URL: SAMPLE})
     document = build(tmp_path / "out", NOW, fetch)  # the project's own sources.json
-    assert all(s["id"] != "riksdagen" for s in document["sources"])
-    assert all(s["sourceId"] != "riksdagen" for s in document["items"])
-    assert all("riksdagen" not in call for call in fetch.calls)
+    assert source_entry(document, "riksdagen")["status"] == "ok"
+    assert any(i["sourceId"] == "riksdagen" for i in document["items"])
+    assert sum(1 for c in fetch.calls if FEED_URL in c) == 1  # one request for the three feed entries
+    assert all("www.riksdagen.se" not in c for c in fetch.calls)  # the build never fetches that host
 
 
 # ---- failure isolation --------------------------------------------------
