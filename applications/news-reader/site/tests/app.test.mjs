@@ -366,10 +366,48 @@ test("visibleItems: live items have no topics and are all shown next to the Poli
     ["Ekot-rubrik", "Nyare rubrik om regeringen", "Äldre rubrik om riksdagen"]);
 });
 
-test("sourceRows: before F7 the count is the source-level itemCount, also when the page hides items (R19.8)", () => {
+test("sourceRows: before F7 the row of a version 2 entry uses the politics feed, so the count is the visible items (R19.8)", () => {
   const news = app.validateNews(newsFileV2(), SOURCES, NOW);
-  assert.equal(app.sourceRows(SOURCES, news, ["svt"])[0].status, "Hämtad, 5 rubriker");
+  assert.equal(app.sourceRows(SOURCES, news, ["svt"])[0].status, "Hämtad, 2 rubriker");
   assert.equal(app.visibleItems(news, ["svt"]).length, 2);
+});
+
+function rowStatus(data) {
+  return app.sourceRows(SOURCES, app.validateNews(data, SOURCES, NOW), ["svt"])[0].status;
+}
+
+function withFeeds(changes) {
+  const data = newsFileV2();
+  data.sources[0].feeds = data.sources[0].feeds.map((f) => (changes[f.topic] ? { ...f, ...changes[f.topic] } : f));
+  return data;
+}
+
+test("sourceRows: only the all-news feed failed, the row stays Hämtad while the politics items are fresh", () => {
+  const failed = { status: "error", lastSuccess: "2026-11-13T09:00:00Z", message: "fetch failed: timeout" };
+  const data = withFeeds({ "all-news": failed, nature: failed, ai: failed });
+  data.sources[0].status = "error";
+  data.sources[0].lastSuccess = "2026-11-13T09:00:00Z";
+  data.sources[0].message = "fetch failed: timeout";
+  assert.equal(rowStatus(data), "Hämtad, 2 rubriker");
+});
+
+test("sourceRows: a failed politics feed shows the failure with its own last success", () => {
+  const data = withFeeds({ politics: { status: "error", lastSuccess: "2026-11-13T09:00:00Z", message: "x", itemCount: 1 } });
+  assert.equal(rowStatus(data), "Kunde inte hämtas sedan 2026-11-13 10:00");
+  assert.equal(rowStatus(withFeeds({ politics: { status: "error", lastSuccess: null, message: "x" } })), "Kunde inte hämtas");
+  assert.equal(rowStatus(withFeeds({ politics: { status: "blocked-by-robots", message: "x" } })),
+    "Blockerad enligt källans robots.txt");
+});
+
+test("sourceRows: without feeds, or without a politics feed entry, the source-level fields are used", () => {
+  const data = newsFileV2();
+  delete data.sources[0].feeds;
+  assert.equal(rowStatus(data), "Hämtad, 5 rubriker");
+  const other = newsFileV2();
+  other.sources[0].feeds = other.sources[0].feeds.filter((f) => f.topic !== "politics");
+  other.sources[0].itemCount = 7;
+  assert.equal(rowStatus(other), "Hämtad, 7 rubriker");
+  assert.equal(rowStatus(newsFile()), "Hämtad, 2 rubriker"); // version 1
 });
 
 test("parseSavedNews: text from storage is validated", () => {
@@ -896,11 +934,11 @@ test("page: a version 2 file without any Politik item gives the empty notice, as
   assert.equal(byId.empty.textContent, "Inga nyheter från valda källor.");
 });
 
-test("page: the Källor row says Hämtad with the source-level count of a version 2 file (R19.8)", async () => {
+test("page: the Källor row says Hämtad with the count of the politics feed of a version 2 file (R19.8)", async () => {
   const { instance, byId } = setup({ files: { "sources.json": realSources, "news.json": newsFileV2() } });
   await instance.start();
   const status = byId.sources.children[0].find((n) => n.className === "source-status")[0];
-  assert.equal(status.textContent, "Hämtad, 5 rubriker");
+  assert.equal(status.textContent, "Hämtad, 2 rubriker");
 });
 
 test("page: news.json fails, a saved version 2 copy shows the Politik items only, with the offline notice", async () => {

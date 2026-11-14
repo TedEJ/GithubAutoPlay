@@ -1045,6 +1045,89 @@ def test_the_worst_status_and_the_message_of_the_first_feed_with_it(project):
     assert feed_of(document, "politics")["message"] == "robots.txt does not allow this address"
 
 
+def test_worst_status_when_the_first_feed_is_ok_and_a_later_one_is_not(project):
+    # politics (second address) fails, all-news (first address) is ok: the source is not ok.
+    project.write_sources(svt_shaped())
+    previous_v2(project.out / "news.json", {t: hours_ago(3) for t in ALL_TOPICS}, [])
+    fetch = full_fetch(**{FEED_URL: FetchError("timeout", "timeout")})
+    document = run(project, fetch)
+    entry = source_entry(document)
+    assert [f["status"] for f in entry["feeds"]] == ["ok", "error", "ok", "ok"]
+    assert entry["status"] == "error" and entry["message"] == "fetch failed: timeout"
+    assert entry["lastSuccess"] == hours_ago(3)  # the oldest: the failed feed's previous success
+    assert "message" not in feed_of(document, "all-news")
+
+
+def test_a_later_blocked_feed_makes_the_source_blocked_and_the_oldest_success_wins(project):
+    project.write_sources(svt_shaped())
+    previous_v2(project.out / "news.json", {t: hours_ago(5) for t in ALL_TOPICS}, [])
+    robots = b"User-agent: *\nDisallow: /politics/\n"
+    document = run(project, full_fetch(**{ROBOTS_URL: robots}))
+    entry = source_entry(document)
+    assert [f["status"] for f in entry["feeds"]] == ["ok", "blocked-by-robots", "ok", "ok"]
+    assert entry["status"] == "blocked-by-robots"
+    assert entry["message"] == "robots.txt does not allow this address"
+    assert entry["lastSuccess"] == hours_ago(5)
+
+
+def test_the_message_is_the_first_one_of_the_worst_status_when_messages_differ(project):
+    # Three more feed addresses: the first error message in sources.json order is the source's.
+    urls = ["https://news.example.invalid/%s.xml" % n for n in ("a", "b", "c")]
+    feeds = [{"topic": "all-news", "method": "feed", "url": urls[0]},
+             {"topic": "politics", "method": "keywordFilter", "url": urls[1]},
+             {"topic": "nature", "method": "keywordFilter", "url": urls[2]},
+             {"topic": "ai", "method": "keywordFilter", "url": FEED_URL}]
+    project.write_sources(source(feeds=feeds))
+    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, urls[0]: GOOD_FEED, urls[1]: FetchError("timeout", "timeout"),
+                       urls[2]: FetchError("status", "HTTP status 500", 500), FEED_URL: GOOD_FEED})
+    document = run(project, fetch)
+    entry = source_entry(document)
+    assert entry["status"] == "error" and entry["message"] == "fetch failed: timeout"
+    assert feed_of(document, "nature")["message"] == "fetch failed: HTTP status 500"
+
+
+def test_an_unrelated_value_error_in_selection_is_a_failed_feed_not_a_crash(project, monkeypatch):
+    def boom(*args, **kwargs):
+        raise ValueError("unrelated")
+    monkeypatch.setattr(build_module, "topics_of", boom)
+    project.write_sources(svt_shaped())
+    document = run(project, full_fetch())
+    entry = source_entry(document)
+    assert entry["status"] == "error" and entry["message"] == "selection failed (ValueError)"
+    assert "unrelated" not in json.dumps(document)
+    assert [f["status"] for f in entry["feeds"]] == ["error"] * 4
+
+
+def test_a_previous_success_in_the_future_gives_no_fallback(project):
+    project.write_sources(svt_shaped())
+    future = (NOW + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    previous_v2(project.out / "news.json", {t: future for t in ALL_TOPICS}, [("Gammal", "/old/1", ["all-news"])])
+    document = run(project, full_fetch(**{OTHER_URL: FetchError("timeout", "timeout")}))
+    assert "/old/1" not in by_url(document)
+    assert feed_of(document, "all-news")["status"] == "error"
+
+
+def test_a_fresh_second_copy_of_an_article_whose_first_copy_is_too_old_gives_the_item(project):
+    project.write_sources(svt_shaped())
+    old = rss(("Riksdagen och ChatGPT, gammal kopia", "/o/1", "Thu, 05 Nov 2026 11:00:00 GMT"))
+    fresh = rss(("Riksdagen debatterar, färsk kopia", "/o/1", stamp(11)))
+    document = run(project, full_fetch(**{OTHER_URL: old, FEED_URL: fresh}))
+    assert [(i["title"], i["topics"]) for i in document["items"]] == [
+        ("Riksdagen debatterar, färsk kopia", ["politics"])]  # nothing from the old copy, not even its topics
+
+
+def test_a_version_3_previous_file_with_version_1_items_is_ignored(project):
+    project.write_sources(svt_shaped())
+    previous_file(project.out / "news.json", hours_ago(1))
+    path = project.out / "news.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["version"] = 3
+    path.write_text(json.dumps(data), encoding="utf-8")
+    document = run(project, full_fetch(**{FEED_URL: FetchError("timeout", "timeout"),
+                                          OTHER_URL: FetchError("timeout", "timeout")}))
+    assert document["items"] == []
+
+
 def test_unreadable_robots_marks_every_feed_of_the_host_as_error(project):
     project.write_sources(svt_shaped())
     fetch = full_fetch(**{ROBOTS_URL: FetchError("timeout", "timeout")})

@@ -439,9 +439,7 @@ def _evaluate_feed(entries, feeds, source, keywords_by_topic, now):
             continue
         published = published_utc(entry.time_text, now)
         if published is not None and parse_time(published) < cutoff:
-            # Dropped, but its normalised URL is remembered by the caller (as `select_items` does).
-            result.append((normalised, None, set(topics)))
-            continue
+            continue  # too old; a fresher copy of the same article from another feed can still count
         result.append((normalised, NewsItem(item_id(normalised), source["id"], source["name"], title,
                                             entry.link.strip(WHITESPACE), published, display_time(published)),
                        set(topics)))
@@ -467,10 +465,9 @@ def build_source(source, keywords_by_topic, now, fetch, robots, previous):
     for url in distinct_feed_urls(source):
         outcomes[url] = _read_feed(url, source["allowedHosts"], fetch, robots)
 
-    # found: normalised URL -> [item, set of topics]; the first occurrence (feed addresses in the
-    # order of sources.json, then feed order) gives headline, link and time. dropped: URLs whose
-    # first occurrence was too old.
-    found, dropped = {}, set()
+    # found: normalised URL -> [item, set of topics]; the first occurrence that is not too old (feed
+    # addresses in the order of sources.json, then feed order) gives headline, link and time.
+    found = {}
     for url, outcome in outcomes.items():
         if outcome.status != "ok":
             continue
@@ -478,17 +475,14 @@ def build_source(source, keywords_by_topic, now, fetch, robots, previous):
         try:
             evaluated = _evaluate_feed(outcome.entries, url_feeds, source, keywords_by_topic, now)
         except ValueError:  # an unsupported method, such as categoryFilter
-            bad = next(f for f in url_feeds if f["method"] not in ("feed", "keywordFilter"))
+            bad = next((f for f in url_feeds if f["method"] not in ("feed", "keywordFilter")), None)
             outcome.status = "error"
-            outcome.message = "selection failed (ValueError), %s method %s" % (bad["topic"], bad["method"])
+            outcome.message = "selection failed (ValueError)" + (
+                ", %s method %s" % (bad["topic"], bad["method"]) if bad else "")
             continue
         for normalised, item, topics in evaluated:
-            if normalised in dropped:
-                continue
             if normalised in found:
                 found[normalised][1] |= topics
-            elif item is None:
-                dropped.add(normalised)
             else:
                 found[normalised] = [item, set(topics)]
 
@@ -508,7 +502,7 @@ def build_source(source, keywords_by_topic, now, fetch, robots, previous):
     if fallback_topics and previous is not None:
         for normalised, item, previous_topics in _previous_items(previous, source, now):
             topics = previous_topics & fallback_topics
-            if not topics or normalised in dropped:
+            if not topics:
                 continue
             if normalised in found:
                 found[normalised][1] |= topics

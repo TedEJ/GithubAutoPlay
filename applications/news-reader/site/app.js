@@ -328,10 +328,16 @@
     if (!news) return "Status okänd";
     const entry = news.sources.find((s) => s.id === source.id);
     if (!entry) return "Status okänd";
-    if (entry.status === "ok") return "Hämtad, " + countText(entry.itemCount);
-    if (entry.status === "blocked-by-robots") return "Blockerad enligt källans robots.txt";
-    if (entry.lastSuccess === null) return "Kunde inte hämtas";
-    return "Kunde inte hämtas sedan " + logic.displayTime(entry.lastSuccess);
+    // Until the topic choice of F7 the page shows Politik only, so the row uses the
+    // status and count of the feed of Politik when the entry has feeds (R19.8); a
+    // failure of another feed does not show here. Without feeds (a version 1 file)
+    // the source-level fields are used.
+    const feed = Array.isArray(entry.feeds) ? entry.feeds.find((f) => f.topic === "politics") : undefined;
+    const shown = feed || entry;
+    if (shown.status === "ok") return "Hämtad, " + countText(shown.itemCount);
+    if (shown.status === "blocked-by-robots") return "Blockerad enligt källans robots.txt";
+    if (shown.lastSuccess === null) return "Kunde inte hämtas";
+    return "Kunde inte hämtas sedan " + logic.displayTime(shown.lastSuccess);
   }
 
   // The rows of "Källor" (R4.6): name, note and status of each enabled source.
