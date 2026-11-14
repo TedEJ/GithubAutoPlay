@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Exempel: dokumentlista</title>
+    <link>https://www.riksdagen.se/</link>
+    <description>Invented sample in the shape of the Riksdag document list</description>
+    <image>
+      <url>https://www.riksdagen.se/logo-exempel.png</url>
+      <title>Exempel</title>
+      <link>https://www.riksdagen.se/</link>
+    </image>
+    <item>
+      <title>Regeringens exempelproposition om skatt</title>
+      <author>riksdagsinformation@riksdagen.se</author>
+      <description>&lt;p&gt;prop. 2026/27:10 &lt;img src="https://www.riksdagen.se/bild-exempel.png"&gt; Proposition&lt;/p&gt;</description>
+      <link>https://www.riksdagen.se/sv/dokument-och-lagar/dokument/proposition/exempelproposition-om-skatt_hc0310</link>
+      <guid>https://data.riksdagen.se/dokument/hc0310</guid>
+      <pubDate>Fri, 13 Nov 2026 10:17:04 +0200</pubDate>
+    </item>
+    <item>
+      <title>Budgetpropositionen f&#xF6;r 2027 &#x2013; Utgiftsomr&#xE5;de 1 Rikets styrelse</title>
+      <author>riksdagsinformation@riksdagen.se</author>
+      <description>prop. 2026/27:1 Proposition</description>
+      <link>https://www.riksdagen.se/sv/dokument-och-lagar/dokument/proposition/budgetpropositionen-for-2027_hc031-uo1</link>
+      <guid>https://data.riksdagen.se/dokument/hc031-uo1</guid>
+      <pubDate>Thu, 12 Nov 2026 09:00:00 +0200</pubDate>
+    </item>
+    <item>
+      <title>Budgetpropositionen f&#xF6;r 2027 &#x2013; Utgiftsomr&#xE5;de 2 Samh&#xE4;llsekonomi</title>
+      <author>riksdagsinformation@riksdagen.se</author>
+      <description>prop. 2026/27:1 Proposition</description>
+      <link>https://www.riksdagen.se/sv/dokument-och-lagar/dokument/proposition/budgetpropositionen-for-2027_hc031-uo2</link>
+      <guid>https://data.riksdagen.se/dokument/hc031-uo2</guid>
+      <pubDate>Thu, 12 Nov 2026 09:00:00 +0200</pubDate>
+    </item>
+    <item>
+      <title>
+        Bet&#xE4;nkande om   AI i offentlig sektor
+      </title>
+      <author>riksdagsinformation@riksdagen.se</author>
+      <description>bet. 2026/27:KU4 Bet&#xE4;nkande</description>
+      <link>https://www.riksdagen.se/sv/dokument-och-lagar/dokument/betankande/ai-i-offentlig-sektor_hc01ku4</link>
+      <guid>https://data.riksdagen.se/dokument/hc01ku4</guid>
+      <pubDate>Wed, 11 Nov 2026 14:30:00 +0200</pubDate>
+    </item>
+    <item>
+      <title>Bet&#xE4;nkande om kommunal vattenf&#xF6;rs&#xF6;rjning</title>
+      <author>riksdagsinformation@riksdagen.se</author>
+      <description>Handlar om artificiell intelligens, maskininl&#xE4;rning och AI. bet. 2026/27:MJU2</description>
+      <link>https://www.riksdagen.se/sv/dokument-och-lagar/dokument/betankande/vattenforsorjning_hc01mju2</link>
+      <guid>https://data.riksdagen.se/dokument/hc01mju2</guid>
+      <pubDate>Wed, 11 Nov 2026 10:00:00 +0200</pubDate>
+    </item>
+    <item>
+      <title>Bet&#xE4;nkande om skydd av vargen och naturreservat</title>
+      <description>bet. 2026/27:MJU3</description>
+      <link>https://www.riksdagen.se/sv/dokument-och-lagar/dokument/betankande/vargen_hc01mju3</link>
+      <guid>https://data.riksdagen.se/dokument/hc01mju3</guid>
+      <pubDate>Tue, 10 Nov 2026 10:00:00 +0200</pubDate>
+    </item>
+  </channel>
+</rss>
