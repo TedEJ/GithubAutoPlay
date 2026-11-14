@@ -670,7 +670,8 @@
     return { title: text(entry.title), link: entry.link, timeText, description };
   }
 
-  // Raw entries of one source -> the items to show (same steps as select_items):
+  // Raw entries of one source -> the items to show for the topic Politik only (same
+  // steps as select_items; the page uses selectTopicItems for all topics):
   // clean, drop empty titles, keyword filter, URL check, de-duplicate by
   // normalised URL (first wins), drop times in the future (R2.6) and items
   // older than 7 days, sort newest first (equal times by title, then feed
@@ -678,7 +679,7 @@
   // sources.json, `keywords` the result of validateKeywords, `now` as above.
   function selectItems(entries, source, keywords, now) {
     const nowMs = toMillis(now);
-    // The feed entry of the topic Politik (R14.7); the page evaluates no other topic until F8.
+    // The feed entry of the topic Politik (R14.7); selectTopicItems evaluates every topic.
     const feed = Array.isArray(source.feeds) ? source.feeds.find((f) => f && f.topic === "politics") : undefined;
     if (!feed) throw new Error("source " + JSON.stringify(source.id) + " has no feed entry for the topic politics");
     const method = feed.method;
@@ -719,6 +720,76 @@
       });
     }
     return sortItems(items, false).slice(0, MAX_ITEMS);
+  }
+
+  // Raw entries of one source -> the items to show for every topic of the source
+  // (step F8; R7.4, R13.3, R13.6, R19.7). The same steps as selectItems, but the topics
+  // of each entry come from topicsOf over all the feed entries of the source, so one
+  // response serves all topics (R15.3). The 20 newest items are kept per topic; an
+  // item keeps only the topics in which it was kept and is dropped when it has none.
+  // Each item has the eight fields of R1.5 (`topics` included) and nothing else.
+  // `source.feeds`: [{topic, method, matchOn?}]; `keywordsByTopic`: a plain object or
+  // a Map from topic id to validateKeywords output, which must hold a list for every
+  // keywordFilter feed (the caller leaves out a feed whose list could not be read).
+  function selectTopicItems(entries, source, keywordsByTopic, now) {
+    const nowMs = toMillis(now);
+    const feeds = Array.isArray(source.feeds) ? source.feeds.filter((f) => f && TOPIC_ORDER.includes(f.topic)) : [];
+    if (feeds.length === 0) throw new Error("source " + JSON.stringify(source.id) + " has no feed entry");
+    for (const feed of feeds) {
+      if (feed.method !== "feed" && feed.method !== "keywordFilter") {
+        throw new Error("unsupported method " + JSON.stringify(feed.method) + " for source " + JSON.stringify(source.id));
+      }
+    }
+    const cutoffMs = nowMs - MAX_AGE_MS;
+    // Like the build (build_source): an entry without a topic or older than 7 days is
+    // dropped before its link counts; a repeated link joins its topics to the first
+    // copy that was kept (that copy gives headline, link and time).
+    const byLink = new Map();
+    const found = [];
+    for (const entry of entries) {
+      const raw = entryFields(entry);
+      const title = cleanHeadline(raw.title);
+      if (title === "") continue;
+      const normalised = checkUrl(raw.link, source.allowedHosts);
+      if (normalised === null) continue;
+      const topics = topicsOf(raw.title, raw.description, feeds, keywordsByTopic);
+      if (topics.length === 0) continue;
+      const seconds = parseTime(raw.timeText);
+      let published = null;
+      if (seconds !== null) {
+        if (seconds * 1000 < cutoffMs) continue;
+        if (seconds * 1000 <= nowMs + FUTURE_LIMIT_MS) published = formatUtc(seconds);
+      }
+      if (byLink.has(normalised)) {
+        const earlier = byLink.get(normalised);
+        earlier.topics = TOPIC_ORDER.filter((t) => earlier.topics.includes(t) || topics.includes(t));
+        continue;
+      }
+      const record = {
+        item: {
+          id: itemId(normalised),
+          sourceId: source.id,
+          sourceName: source.name,
+          title,
+          url: stripWs(raw.link),
+          published,
+          publishedDisplay: displayTime(published),
+        },
+        topics,
+      };
+      byLink.set(normalised, record);
+      found.push(record);
+    }
+    const kept = new Map(); // item id -> topics in which it was kept
+    for (const topic of TOPIC_ORDER) {
+      const own = sortItems(found.filter((f) => f.topics.includes(topic)).map((f) => f.item), false);
+      for (const item of own.slice(0, MAX_ITEMS)) {
+        if (!kept.has(item.id)) kept.set(item.id, new Set());
+        kept.get(item.id).add(topic);
+      }
+    }
+    const items = sortItems(found.filter((f) => kept.has(f.item.id)).map((f) => f.item), false);
+    return items.map((item) => ({ ...item, topics: TOPIC_ORDER.filter((t) => kept.get(item.id).has(t)) }));
   }
 
   // Newest first by `published` (fixed-width UTC text), `null` last. Ties: by
@@ -780,9 +851,9 @@
   // ------------------------------------------------------------------------
   // The reader's topic choice (R18.1 to R18.6, step F7)
 
-  // The topic that is chosen when nothing usable is saved (R18.3, D38). F8 may
-  // change it to "all-news" (Q8): this is the one place.
-  const DEFAULT_TOPIC = "politics";
+  // The topic that is chosen when nothing usable is saved (R18.3). The owner decided
+  // on 2026-11-14 that it is "all-news" (Q8, D43); this is the one place.
+  const DEFAULT_TOPIC = "all-news";
 
   // The Riksdagen source id, for the one-time migration of R18.4. Later sources
   // need their own decision: there is no generic rule.
@@ -868,6 +939,7 @@
     generatedAt,
     generatedAtDisplay,
     selectItems,
+    selectTopicItems,
     sortItems,
     mergeItems,
     liveFetchAllowed,

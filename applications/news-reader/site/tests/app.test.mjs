@@ -46,8 +46,8 @@ function newsFile(overrides = {}) {
 test("validateSources keeps enabled sources and only the fields the page uses", () => {
   assert.deepEqual(SOURCES.map((s) => s.id), ["svt", "sveriges-radio"]); // Riksdagen is off in the real file (D41)
   assert.deepEqual(SOURCES_ON.map((s) => s.id), ["svt", "sveriges-radio", "riksdagen"]);
-  assert.deepEqual(Object.keys(SVT).sort(), ["allowedHosts", "feeds", "fetchedBy", "id", "method", "name"]);
-  assert.equal(SVT.method, "keywordFilter");
+  assert.deepEqual(Object.keys(SVT).sort(), ["allowedHosts", "feeds", "fetchedBy", "id", "name"]);
+  assert.equal("method" in SVT, false, "no method of its own any more");
   const off = JSON.parse(JSON.stringify(riksdagenOn));
   off.sources[1].enabled = false;
   assert.deepEqual(app.validateSources(off).map((s) => s.id), ["svt", "riksdagen"]);
@@ -63,13 +63,12 @@ test("validateSources: the real Riksdagen entry is switched off (D41) and left o
   const riksdagen = SOURCES_ON.find((s) => s.id === "riksdagen");
   // Only the fields the page uses: the topics with their methods and the credit text, but no
   // linkHosts, timeZone or address; a build source has no address.
-  assert.deepEqual(Object.keys(riksdagen).sort(), ["allowedHosts", "credit", "feeds", "fetchedBy", "id", "method", "name"]);
+  assert.deepEqual(Object.keys(riksdagen).sort(), ["allowedHosts", "credit", "feeds", "fetchedBy", "id", "name"]);
   assert.equal(riksdagen.fetchedBy, "build");
-  assert.equal(riksdagen.method, "feed"); // the politics feed entry
   assert.equal(riksdagen.credit, "Källa: Sveriges riksdag");
   assert.deepEqual(riksdagen.feeds, [
     { topic: "all-news", method: "feed" }, { topic: "politics", method: "feed" },
-    { topic: "ai", method: "keywordFilter" }]); // no Natur (D24)
+    { topic: "ai", method: "keywordFilter", matchOn: "title" }]); // no Natur (D24); matchOn is kept for F8
   assert.deepEqual(riksdagen.allowedHosts, ["riksdagen.se"]);
 });
 
@@ -112,10 +111,11 @@ test("validateSources reads version 2: the politics feed entry gives the method 
   const got = app.validateSources(v2File());
   const feeds = [{ topic: "all-news", method: "feed" }, { topic: "politics", method: "keywordFilter" },
     { topic: "nature", method: "keywordFilter" }, { topic: "ai", method: "keywordFilter" }];
+  const withTitle = (list) => list.map((f) => (f.topic === "ai" ? { ...f, matchOn: "title" } : f));
   assert.deepEqual(got, [
-    { id: "b", name: "Build", fetchedBy: "build", allowedHosts: ["example.invalid"], method: "keywordFilter", feeds },
-    { id: "l", name: "Live", fetchedBy: "browser", allowedHosts: ["example.invalid"], method: "keywordFilter", url: LIVE,
-      feeds: feeds.map((f) => (f.topic === "all-news" ? f : { ...f, method: "keywordFilter" })) },
+    { id: "b", name: "Build", fetchedBy: "build", allowedHosts: ["example.invalid"], feeds: withTitle(feeds) },
+    { id: "l", name: "Live", fetchedBy: "browser", allowedHosts: ["example.invalid"], url: LIVE,
+      feeds },
   ]);
 });
 
@@ -123,14 +123,15 @@ test("validateSources: the order of the feed entries does not matter, other topi
   const data = v2File();
   data.sources[0].feeds.reverse();
   data.sources[0].feeds.find((f) => f.topic === "nature").method = "categoryFilter";
-  assert.equal(app.validateSources(data)[0].method, "keywordFilter");
+  assert.equal("method" in app.validateSources(data)[0], false);
+  assert.deepEqual(app.validateSources(data)[0].feeds.map((f) => f.topic), ["all-news", "politics", "nature", "ai"]);
 });
 
 test("validateSources accepts credit, linkHosts and matchOn without showing them", () => {
   const data = v2File({ credit: "Källa: Exempel", linkHosts: ["www.example.invalid"] });
   const got = app.validateSources(data);
   assert.equal(got.length, 2);
-  assert.deepEqual(Object.keys(got[0]).sort(), ["allowedHosts", "credit", "feeds", "fetchedBy", "id", "method", "name"]);
+  assert.deepEqual(Object.keys(got[0]).sort(), ["allowedHosts", "credit", "feeds", "fetchedBy", "id", "name"]);
   assert.equal(got[0].credit, "Källa: Exempel");
   assert.equal("linkHosts" in got[0], false);
 });
@@ -142,29 +143,29 @@ test("validateSources refuses version 1 (R14.6, R14.7)", () => {
   for (const version of ["2", 2.5, null, undefined, 0]) assert.equal(app.validateSources({ ...v2File(), version }), null);
 });
 
-test("validateSources: a source without a politics entry has no method and no address, as a source with a bad one had before", () => {
+test("validateSources: a source without a politics entry still has its other feeds; entries without a method text are ignored", () => {
   const data = v2File();
   data.sources[0].feeds = data.sources[0].feeds.filter((f) => f.topic !== "politics");
   data.sources[1].feeds = data.sources[1].feeds.filter((f) => f.topic !== "politics");
   const [b, l] = app.validateSources(data);
-  assert.equal(b.method, "");
-  assert.equal(l.method, "");
-  assert.equal(l.url, "");
+  assert.equal(b.feeds.some((f) => f.topic === "politics"), false);
+  // F8: the address is the one address of all the feed entries, so it stays without a politics entry.
+  assert.equal(l.url, LIVE);
   for (const feeds of [undefined, null, "x", [], [null, 5, { topic: "politics" }]]) {
     const copy = v2File();
     copy.sources[0].feeds = feeds;
-    assert.equal(app.validateSources(copy)[0].method, "");
+    assert.deepEqual(app.validateSources(copy)[0].feeds, []);
   }
 });
 
 test("validateSources: the real file gives SVT and Sveriges Radio as before F3, with their topics, and nothing else", () => {
   const all = [{ topic: "all-news", method: "feed" }];
   assert.deepEqual(SOURCES, [
-    { id: "svt", name: "SVT", fetchedBy: "build", allowedHosts: ["svt.se"], method: "keywordFilter",
+    { id: "svt", name: "SVT", fetchedBy: "build", allowedHosts: ["svt.se"],
       feeds: [...all, { topic: "politics", method: "keywordFilter" }, { topic: "nature", method: "keywordFilter" },
         { topic: "ai", method: "keywordFilter" }] },
     { id: "sveriges-radio", name: "Sveriges Radio", fetchedBy: "browser", allowedHosts: ["sverigesradio.se"],
-      method: "keywordFilter", url: "https://api.sr.se/api/rss/program/83",
+      url: "https://api.sr.se/api/rss/program/83",
       feeds: [...all, { topic: "politics", method: "keywordFilter" }, { topic: "nature", method: "keywordFilter" },
         { topic: "ai", method: "keywordFilter" }] },
   ]);
@@ -397,31 +398,31 @@ test("validateNews never reads a Sveriges Radio item from a version 2 file eithe
 
 test("visibleItems: until F7 only the items of Politik are shown, so the list is as before (R19.8)", () => {
   const news = app.validateNews(newsFileV2(), SOURCES, NOW);
-  assert.deepEqual(app.visibleItems(news, ["svt"]).map((i) => i.title),
+  assert.deepEqual(app.visibleItems(news, ["svt"], undefined, "politics").map((i) => i.title),
     ["Nyare rubrik om regeringen", "Äldre rubrik om riksdagen"]);
   // The very same list as from the version 1 file that had only these two items.
-  const fromV1 = app.visibleItems(app.validateNews(newsFile(), SOURCES, NOW), ["svt"]);
-  assert.deepEqual(app.visibleItems(news, ["svt"]).map(({ topics, ...rest }) => rest), fromV1.map(({ topics, ...rest }) => rest));
-  assert.deepEqual(app.visibleItems(news, []), []);
+  const fromV1 = app.visibleItems(app.validateNews(newsFile(), SOURCES, NOW), ["svt"], undefined, "politics");
+  assert.deepEqual(app.visibleItems(news, ["svt"], undefined, "politics").map(({ topics, ...rest }) => rest), fromV1.map(({ topics, ...rest }) => rest));
+  assert.deepEqual(app.visibleItems(news, [], undefined, "politics"), []);
 });
 
-test("visibleItems: live items have no topics and are all shown next to the Politik items of the file", () => {
+test("visibleItems: live items with topics are shown by topic next to the Politik items of the file", () => {
   const news = app.validateNews(newsFileV2(), SOURCES, NOW);
   const live = new Map([["sveriges-radio", [{ id: "l1", sourceId: "sveriges-radio", sourceName: "Sveriges Radio",
     title: "Ekot-rubrik", url: "https://www.sverigesradio.se/artikel/9", published: "2026-11-13T13:20:00Z",
-    publishedDisplay: "2026-11-13 14:20" }]]]);
-  assert.deepEqual(app.visibleItems(news, ["svt", "sveriges-radio"], live).map((i) => i.title),
+    publishedDisplay: "2026-11-13 14:20", topics: ["all-news", "politics"] }]]]);
+  assert.deepEqual(app.visibleItems(news, ["svt", "sveriges-radio"], live, "politics").map((i) => i.title),
     ["Ekot-rubrik", "Nyare rubrik om regeringen", "Äldre rubrik om riksdagen"]);
 });
 
 test("sourceRows: before F7 the row of a version 2 entry uses the politics feed, so the count is the visible items (R19.8)", () => {
   const news = app.validateNews(newsFileV2(), SOURCES, NOW);
-  assert.equal(app.sourceRows(SOURCES, news, ["svt"])[0].status, "Hämtad, 2 rubriker");
-  assert.equal(app.visibleItems(news, ["svt"]).length, 2);
+  assert.equal(app.sourceRows(SOURCES, news, ["svt"], undefined, "politics")[0].status, "Hämtad, 2 rubriker");
+  assert.equal(app.visibleItems(news, ["svt"], undefined, "politics").length, 2);
 });
 
 function rowStatus(data) {
-  return app.sourceRows(SOURCES, app.validateNews(data, SOURCES, NOW), ["svt"])[0].status;
+  return app.sourceRows(SOURCES, app.validateNews(data, SOURCES, NOW), ["svt"], undefined, "politics")[0].status;
 }
 
 function withFeeds(changes) {
@@ -517,7 +518,7 @@ test("decideNotices: error, offline and stale", () => {
 
 test("sourceRows: note, checkbox and status (R4.6, R6.2)", () => {
   const news = app.validateNews(newsFile(), SOURCES, NOW);
-  let rows = app.sourceRows(SOURCES, news, ["svt"]);
+  let rows = app.sourceRows(SOURCES, news, ["svt"], undefined, "politics");
   assert.deepEqual(rows[0], {
     id: "svt", name: "SVT", checked: true, topics: "", note: "Urval med nyckelord – ungefärligt", credit: "",
     status: "Hämtad, 2 rubriker",
@@ -525,11 +526,11 @@ test("sourceRows: note, checkbox and status (R4.6, R6.2)", () => {
   assert.equal(rows[1].checked, false);
   assert.equal(rows[1].note, "Urval med nyckelord – ungefärligt");
   assert.equal(rows[1].status, "Inte vald – ingen hämtning"); // unticked (S11)
-  assert.equal(app.sourceRows(SOURCES, news, ["svt", "sveriges-radio"])[1].status, "Inte hämtad ännu");
+  assert.equal(app.sourceRows(SOURCES, news, ["svt", "sveriges-radio"], undefined, "politics")[1].status, "Inte hämtad ännu");
   const failed = newsFile({ sources: [{ id: "svt", status: "error", lastSuccess: "2026-11-13T09:00:00Z", itemCount: 1 }] });
-  rows = app.sourceRows(SOURCES, app.validateNews(failed, SOURCES, NOW), ["svt"]);
+  rows = app.sourceRows(SOURCES, app.validateNews(failed, SOURCES, NOW), ["svt"], undefined, "politics");
   assert.equal(rows[0].status, "Kunde inte hämtas sedan 2026-11-13 10:00");
-  assert.equal(app.sourceRows(SOURCES, null, [])[0].status, "Status okänd");
+  assert.equal(app.sourceRows(SOURCES, null, [], undefined, "politics")[0].status, "Status okänd");
 });
 
 // ---------------------------------------------------------------- fake DOM
@@ -585,8 +586,12 @@ function fakePage() {
   return { doc, byId };
 }
 
-function fakeStorage(initial = {}) {
-  const data = { ...initial };
+// Q8/D43: the default topic is Alla nyheter. Most tests were written for the list of
+// Politik, so a storage made here already holds that choice; `fresh: true` leaves out
+// the topic, for the tests of the default and of the migration.
+const POLITICS = { "newsReader.selectedTopic": "politics" };
+function fakeStorage(initial = {}, { fresh = false } = {}) {
+  const data = fresh ? { ...initial } : { ...POLITICS, ...initial };
   return {
     data,
     getItem: (k) => (k in data ? data[k] : null),
@@ -595,6 +600,7 @@ function fakeStorage(initial = {}) {
 }
 
 function setup({ files, storage, window, gate } = {}) {
+  if (!storage && !window) storage = fakeStorage(); // holds the topic Politik (see POLITICS)
   const { doc, byId } = fakePage();
   const calls = [];
   const intervals = [];
@@ -880,7 +886,7 @@ test("refresh: a load that is already running is not started twice", async () =>
   release();
   await Promise.all([first, second, third]);
   assert.deepEqual(calls.filter((u) => u.endsWith(".json")).sort(),
-    ["news.json", "politics-keywords.json", "sources.json"]);
+    ["ai-keywords.json", "nature-keywords.json", "news.json", "politics-keywords.json", "sources.json"]);
   await instance.load();
   assert.equal(calls.filter((u) => u === "news.json").length, 2);
 });
@@ -1090,17 +1096,17 @@ function f7Setup(extra = {}) {
   return setup({ files: { "sources.json": riksdagenOn, "news.json": newsFileF7() }, storage: fakeStorage(), ...extra });
 }
 
-test("topics: one radio button per topic from sources.json, in order, Politik chosen the first time (R18.1, R18.3)", async () => {
-  const { instance, byId } = f7Setup();
+test("topics: one radio button per topic from sources.json, in order, Alla nyheter chosen the first time (R18.1, R18.3, D43)", async () => {
+  const { instance, byId } = f7Setup({ storage: fakeStorage({}, { fresh: true }) });
   await instance.start();
   assert.equal(byId["topics-section"].hidden, false);
   const rows = byId.topics.children;
   assert.deepEqual(rows.map((r) => r.children[1].textContent), ["Alla nyheter", "Politik", "Natur", "AI"]);
   assert.ok(rows.every((r) => r.children[0].attrs.type === "radio" && r.children[0].attrs.name === "topic"));
   assert.ok(rows.every((r) => r.children[1].tag === "label" && r.children[1].attrs.for === r.children[0].attrs.id));
-  assert.deepEqual(rows.map((r) => r.children[0].checked), [false, true, false, false]);
+  assert.deepEqual(rows.map((r) => r.children[0].checked), [true, false, false, false]);
   assert.equal(new Set(rows.map((r) => r.children[0].attrs.id)).size, 4);
-  assert.deepEqual(titlesOf(byId), ["SVT politik", "Riksdagen proposition", "Riksdagen AI-betänkande"]);
+  assert.deepEqual(titlesOf(byId), ["SVT politik", "SVT natur", "SVT AI och natur", "SVT övrigt", "Riksdagen proposition", "Riksdagen AI-betänkande"]);
 });
 
 test("topics: switching shows the items of that topic at once, an item with several topics under each, and makes no request (R18.2, R15.3)", async () => {
@@ -1120,7 +1126,7 @@ test("topics: switching shows the items of that topic at once, an item with seve
   assert.equal(byId.empty.hidden, true);
 });
 
-test("topics: the source rows follow the topic: offered topics, Erbjuder inte ämnet, Visas inte än, the count of the visible items (R18.5)", async () => {
+test("topics: the source rows follow the topic: offered topics, Erbjuder inte ämnet, the count of the visible items (R18.5)", async () => {
   const { instance, byId } = f7Setup();
   await instance.start();
   const rd = () => rowOf(byId, "Riksdagen").textContent;
@@ -1133,7 +1139,7 @@ test("topics: the source rows follow the topic: offered topics, Erbjuder inte ä
   pick(byId, "Natur");
   assert.equal(statusOf(byId, "SVT"), "Hämtad, 2 rubriker");
   assert.equal(statusOf(byId, "Riksdagen"), "Erbjuder inte ämnet Natur");
-  assert.equal(statusOf(byId, "Sveriges Radio"), "Visas inte än");
+  assert.doesNotMatch(statusOf(byId, "Sveriges Radio"), /Visas inte än/); // F8: no stopgap any more
   pick(byId, "AI");
   assert.match(rd(), /Urval med nyckelord – ungefärligt/); // ai: keywordFilter
   assert.equal(statusOf(byId, "Riksdagen"), "Hämtad, 1 rubrik");
@@ -1215,7 +1221,7 @@ test("topics: the saved topic is only an id, survives a reload, and an unknown o
   for (const bad of ["sport", "", "AI", "Natur", '"ai"', "{}", "x".repeat(5000)]) {
     const t = f7Setup({ storage: fakeStorage({ "newsReader.selectedTopic": bad }) });
     await t.instance.start();
-    assert.deepEqual(t.byId.topics.children.map((r) => r.children[0].checked), [false, true, false, false], bad);
+    assert.deepEqual(t.byId.topics.children.map((r) => r.children[0].checked), [true, false, false, false], bad);
   }
 });
 
@@ -1233,14 +1239,14 @@ test("topics: only the allowed keys are written, with ids and nothing else (R18.
   assert.equal(storage.data["newsReader.selectedSources"], '["sveriges-radio","riksdagen"]');
 });
 
-test("migration: an old saved choice gets Riksdagen once, together with the topic Politik (R18.4, R16.9)", async () => {
-  const storage = fakeStorage({ "newsReader.selectedSources": '["svt"]' });
+test("migration: an old saved choice gets Riksdagen once, together with the default topic Alla nyheter (R18.4, R16.9, D43)", async () => {
+  const storage = fakeStorage({ "newsReader.selectedSources": '["svt"]' }, { fresh: true });
   const { instance, byId } = f7Setup({ storage });
   await instance.start();
   assert.equal(storage.data["newsReader.selectedSources"], '["svt","riksdagen"]');
-  assert.equal(storage.data["newsReader.selectedTopic"], "politics");
+  assert.equal(storage.data["newsReader.selectedTopic"], "all-news");
   assert.deepEqual(byId.sources.children.map((r) => r.children[0].checked), [true, false, true]);
-  assert.deepEqual(titlesOf(byId), ["SVT politik", "Riksdagen proposition", "Riksdagen AI-betänkande"]);
+  assert.deepEqual(titlesOf(byId), ["SVT politik", "SVT natur", "SVT AI och natur", "SVT övrigt", "Riksdagen proposition", "Riksdagen AI-betänkande"]);
   // The reader unticks Riksdagen: it stays unticked after a reload.
   const box = rowOf(byId, "Riksdagen").children[0];
   box.checked = false;
@@ -1253,7 +1259,7 @@ test("migration: an old saved choice gets Riksdagen once, together with the topi
 
 test("migration: an unticked Riksdagen stays unticked when the page is opened again before any other change", async () => {
   // The migration wrote both keys at once, so a second visit sees a saved topic and does nothing.
-  const storage = fakeStorage({ "newsReader.selectedSources": '["svt","sveriges-radio"]' });
+  const storage = fakeStorage({ "newsReader.selectedSources": '["svt","sveriges-radio"]' }, { fresh: true });
   await f7Setup({ storage }).instance.start();
   storage.setItem("newsReader.selectedSources", '["svt","sveriges-radio"]');
   await f7Setup({ storage }).instance.start();
@@ -1269,7 +1275,7 @@ test("migration: skipped for an empty saved list, a list that has Riksdagen, a s
     [{ "newsReader.selectedSources": "not json" }, "not json", undefined],
   ];
   for (const [initial, selected, topic] of cases) {
-    const storage = fakeStorage(initial);
+    const storage = fakeStorage(initial, { fresh: true });
     await f7Setup({ storage }).instance.start();
     assert.equal(storage.data["newsReader.selectedSources"], selected, JSON.stringify(initial));
     assert.equal(storage.data["newsReader.selectedTopic"], topic, JSON.stringify(initial));
@@ -1279,14 +1285,14 @@ test("migration: skipped for an empty saved list, a list that has Riksdagen, a s
 test("migration: nothing is added when Riksdagen is not an enabled source", async () => {
   const off = JSON.parse(JSON.stringify(riksdagenOn));
   off.sources.find((s) => s.id === "riksdagen").enabled = false;
-  const storage = fakeStorage({ "newsReader.selectedSources": '["svt"]' });
+  const storage = fakeStorage({ "newsReader.selectedSources": '["svt"]' }, { fresh: true });
   const { instance, byId } = setup({ files: { "sources.json": off, "news.json": newsFileF7() }, storage });
   await instance.start();
   assert.equal(storage.data["newsReader.selectedSources"], '["svt"]');
   assert.equal(storage.data["newsReader.selectedTopic"], undefined);
   assert.equal(byId.sources.children.length, 2);
   // Riksdagen items in the file are not shown when the source is off.
-  assert.deepEqual(titlesOf(byId), ["SVT politik"]);
+  assert.deepEqual(titlesOf(byId), ["SVT politik", "SVT natur", "SVT AI och natur", "SVT övrigt"]);
 });
 
 test("old state: a version 1 saved copy is read with Alla nyheter and Politik and works with the topic choice", async () => {
@@ -1345,27 +1351,33 @@ test("topics: a failing or blocked storage does not stop the choice", async () =
   assert.equal(titlesOf(other.byId).length, 2);
 });
 
-test("topics: a sources.json without a topics list gives no choice and keeps Politik", async () => {
+test("topics: a sources.json without a topics list gives no choice and keeps Alla nyheter", async () => {
   const noTopics = JSON.parse(JSON.stringify(riksdagenOn));
   delete noTopics.topics;
-  const { instance, byId } = setup({ files: { "sources.json": noTopics, "news.json": newsFileF7() }, storage: fakeStorage() });
+  const { instance, byId } = setup({ files: { "sources.json": noTopics, "news.json": newsFileF7() }, storage: fakeStorage({}, { fresh: true }) });
   await instance.start();
   assert.equal(byId["topics-section"].hidden, true);
-  assert.deepEqual(titlesOf(byId), ["SVT politik", "Riksdagen proposition", "Riksdagen AI-betänkande"]);
+  assert.deepEqual(titlesOf(byId), ["SVT politik", "SVT natur", "SVT AI och natur", "SVT övrigt", "Riksdagen proposition", "Riksdagen AI-betänkande"]);
 });
 
 // The pure parts.
 
-test("visibleItems: by topic membership, live items count as Politik only until F8 (R18.2, R18.9)", () => {
+test("visibleItems: by topic membership, live items by their own topics (R18.2, F8)", () => {
   const news = app.validateNews(newsFileF7(), SOURCES_ON, NOW);
   const live = new Map([["sveriges-radio", [{ id: "l1", sourceId: "sveriges-radio", sourceName: "Sveriges Radio",
     title: "Ekot", url: "https://www.sverigesradio.se/artikel/9", published: "2026-11-13T13:20:00Z",
-    publishedDisplay: "x" }]]]);
+    publishedDisplay: "x", topics: ["all-news", "politics"] }]]]);
   const all = ["svt", "sveriges-radio", "riksdagen"];
   assert.deepEqual(app.visibleItems(news, all, live, "politics").map((i) => i.title),
     ["Ekot", "SVT politik", "Riksdagen proposition", "Riksdagen AI-betänkande"]);
-  for (const topic of ["all-news", "nature", "ai"]) {
+  assert.ok(app.visibleItems(news, all, live, "all-news").some((i) => i.title === "Ekot"));
+  for (const topic of ["nature", "ai"]) {
     assert.ok(!app.visibleItems(news, all, live, topic).some((i) => i.title === "Ekot"), topic);
+  }
+  // An item without a list of topics is in no topic.
+  const bare = new Map([["sveriges-radio", [{ ...live.get("sveriges-radio")[0], topics: undefined }]]]);
+  for (const topic of ["all-news", "politics", "nature", "ai"]) {
+    assert.ok(!app.visibleItems(news, all, bare, topic).some((i) => i.title === "Ekot"), topic);
   }
   assert.deepEqual(app.visibleItems(news, all, live, "nature").map((i) => i.title), ["SVT natur", "SVT AI och natur"]);
   assert.deepEqual(app.visibleItems(news, ["riksdagen"], live, "nature"), []);
@@ -1380,7 +1392,7 @@ test("sourceRows: topics, credit and status by chosen topic", () => {
   assert.equal(rows[2].credit, "Källa: Sveriges riksdag");
   assert.equal(rows[2].topics, "Ämnen: Alla nyheter, Politik, AI");
   assert.equal(rows[0].credit, "");
-  assert.equal(app.sourceRows(SOURCES_ON, news, ["sveriges-radio"], undefined, "ai", topics)[1].status, "Visas inte än");
+  assert.equal(app.sourceRows(SOURCES_ON, news, ["sveriges-radio"], undefined, "ai", topics)[1].status, "Inte hämtad ännu");
 });
 
 test("buildStatus: a failed feed of the chosen topic shows its own failure, other topics stay Hämtad", () => {
@@ -1471,8 +1483,11 @@ for (const name of ["index.html", "app.js", "atom.js", "style.css"]) {
 test("app.js: only the own files are fetched by name; the feed address comes from sources.json", () => {
   const text = read("app.js");
   const calls = text.match(/fetchJson\("[^"]*"\)/g) || [];
-  assert.deepEqual(calls.sort(),
-    ['fetchJson("news.json")', 'fetchJson("politics-keywords.json")', 'fetchJson("sources.json")']);
+  assert.deepEqual(calls.sort(), ['fetchJson("news.json")', 'fetchJson("sources.json")']);
+  // The keyword files are fetched under the names that sources.json gives (F8), never by a name in the script.
+  assert.deepEqual(text.match(/fetchJson\(entry\.keywords\)/g), ["fetchJson(entry.keywords)"]);
+  assert.ok(!/-keywords\.json/.test(text.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n").replace(/"-keywords\.json"/g, "")),
+    "no keyword file name in app.js except the name rule");
   // One call of fetch for the own files, and the feed request goes through atom.js.
   assert.equal((text.match(/env\.fetch\(/g) || []).length, 1);
   assert.equal((text.match(/atom\.fetchAtom\(/g) || []).length, 1);
@@ -1491,7 +1506,7 @@ test("atom.js: no DOM rendering, no storage, no timers, no console", () => {
 // ---------------------------------------------------------------- the real file: Riksdagen switched off (D41)
 
 test("real sources.json (Riksdagen off, D41): all four topics are offered, no Riksdagen row, no migration, no credit", async () => {
-  const storage = fakeStorage({ "newsReader.selectedSources": '["svt"]' });
+  const storage = fakeStorage({ "newsReader.selectedSources": '["svt"]' }, { fresh: true });
   const { instance, byId } = setup({ files: { "sources.json": realSources, "news.json": newsFileF7() }, storage });
   await instance.start();
   // SVT offers every topic, so the choice stays Alla nyheter, Politik, Natur, AI.
