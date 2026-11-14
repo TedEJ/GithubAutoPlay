@@ -768,3 +768,85 @@ test("exports", () => {
   assert.equal(logic.MAX_ITEMS, 20);
   assert.equal(logic.MISSING_DISPLAY, "Tid saknas");
 });
+
+// ---- the topic choice (F7) ----------------------------------------------------
+
+const TOPIC_LIST = [{ id: "all-news", label: "Alla nyheter" }, { id: "politics", label: "Politik" },
+  { id: "nature", label: "Natur" }, { id: "ai", label: "AI" }];
+
+test("readSavedTopic: a saved offered id is used; missing, unknown or not offered gives Politik (R18.3, D38)", () => {
+  const all = TOPIC_LIST.map((t) => t.id);
+  assert.equal(logic.DEFAULT_TOPIC, "politics");
+  for (const id of all) assert.equal(logic.readSavedTopic(id, all), id);
+  for (const bad of [null, undefined, "", "sport", "AI", " ai", '"ai"', "ai\n", 5, {}, ["ai"]]) {
+    assert.equal(logic.readSavedTopic(bad, all), "politics", String(bad));
+  }
+  // A saved topic that the sources do not offer (any more) is ignored.
+  assert.equal(logic.readSavedTopic("nature", ["all-news", "politics"]), "politics");
+  // When the default is not offered either, the first offered topic; none at all gives null.
+  assert.equal(logic.readSavedTopic(null, ["ai", "nature"]), "ai");
+  assert.equal(logic.readSavedTopic("ai", []), null);
+});
+
+test("offeredTopics and offersTopic: a topic is listed when some source has a feed entry for it (R18.1, R13.7)", () => {
+  const svt = { feeds: [{ topic: "all-news" }, { topic: "politics" }, { topic: "nature" }, { topic: "ai" }] };
+  const riksdagen = { feeds: [{ topic: "all-news" }, { topic: "politics" }, { topic: "ai" }] };
+  assert.deepEqual(logic.offeredTopics(TOPIC_LIST, [svt, riksdagen]).map((t) => t.id), ["all-news", "politics", "nature", "ai"]);
+  assert.deepEqual(logic.offeredTopics(TOPIC_LIST, [riksdagen]).map((t) => t.id), ["all-news", "politics", "ai"]);
+  assert.deepEqual(logic.offeredTopics(TOPIC_LIST, []), []);
+  assert.equal(logic.offersTopic(riksdagen, "nature"), false);
+  assert.equal(logic.offersTopic(svt, "nature"), true);
+});
+
+test("filterByTopic: membership, an item with several topics is in each, no list means none (R18.2)", () => {
+  const items = [{ n: 1, topics: ["all-news", "politics"] }, { n: 2, topics: ["all-news", "nature", "ai"] },
+    { n: 3, topics: [] }, { n: 4 }, { n: 5, topics: "ai" }];
+  const pick = (topic) => logic.filterByTopic(items, topic).map((i) => i.n);
+  assert.deepEqual(pick("all-news"), [1, 2]);
+  assert.deepEqual(pick("nature"), [2]);
+  assert.deepEqual(pick("ai"), [2]);
+  assert.deepEqual(pick("politics"), [1]);
+  assert.deepEqual(pick("sport"), []);
+  const copy = JSON.stringify(items);
+  logic.filterByTopic(items, "ai");
+  assert.equal(JSON.stringify(items), copy, "the input is not changed");
+});
+
+test("migrateSavedChoice: Riksdagen is added once to a saved non-empty choice, with the topic Politik (R18.4, R16.9)", () => {
+  const enabled = [{ id: "svt" }, { id: "sveriges-radio" }, { id: "riksdagen" }];
+  assert.deepEqual(logic.migrateSavedChoice('["svt"]', null, enabled), { selected: ["svt", "riksdagen"], topic: "politics" });
+  assert.deepEqual(logic.migrateSavedChoice('["sveriges-radio","svt"]', undefined, enabled),
+    { selected: ["sveriges-radio", "svt", "riksdagen"], topic: "politics" });
+  // Unknown saved ids are kept as they are (parseSelected drops them later).
+  assert.deepEqual(logic.migrateSavedChoice('["gone"]', null, enabled), { selected: ["gone", "riksdagen"], topic: "politics" });
+});
+
+test("migrateSavedChoice: skipped when there is nothing to do (R18.4)", () => {
+  const enabled = [{ id: "svt" }, { id: "riksdagen" }];
+  const skip = (selected, topic, sources = enabled) => assert.equal(logic.migrateSavedChoice(selected, topic, sources), null,
+    JSON.stringify([selected, topic]));
+  skip("[]", null); // an empty list is a valid choice
+  skip('["riksdagen"]', null); // already there
+  skip('["svt","riksdagen"]', null);
+  skip('["svt"]', "politics"); // a topic is saved: done before
+  skip('["svt"]', ""); // saved, even if unusable: not missing
+  skip(null, null); // no saved choice: all enabled sources are chosen anyway
+  skip(undefined, null);
+  skip("", null);
+  skip("not json", null);
+  skip("{}", null);
+  skip('"svt"', null);
+  skip('["svt", 2]', null);
+  skip("x".repeat(10001), null);
+  skip('["svt"]', null, [{ id: "svt" }]); // Riksdagen not (or no longer) an enabled source
+  skip('["svt"]', null, []);
+});
+
+test("emptyNoticeText: no source, no offer, no items (R8.4, R18.6)", () => {
+  const svt = { feeds: [{ topic: "politics" }, { topic: "nature" }] };
+  const riksdagen = { feeds: [{ topic: "politics" }] };
+  assert.equal(logic.emptyNoticeText([], "nature", "Natur"), "Inga nyheter från valda källor.");
+  assert.equal(logic.emptyNoticeText([riksdagen], "nature", "Natur"), "Valda källor erbjuder inte ämnet Natur.");
+  assert.equal(logic.emptyNoticeText([riksdagen, svt], "nature", "Natur"), "Inga nyheter i ämnet Natur från valda källor.");
+  assert.equal(logic.emptyNoticeText([svt], "politics", "Politik"), "Inga nyheter i ämnet Politik från valda källor.");
+});

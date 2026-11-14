@@ -38,7 +38,7 @@ export class Node_ {
 }
 
 export function fakePage() {
-  const ids = ["updated", "refresh", "notices", "headlines", "empty", "sources", "sources-section", "bottom-line"];
+  const ids = ["updated", "refresh", "notices", "headlines", "empty", "sources", "sources-section", "topics", "topics-section", "bottom-line"];
   const byId = {};
   const doc = new Node_("document");
   doc.hidden = false;
