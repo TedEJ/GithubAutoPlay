@@ -522,7 +522,9 @@
       const items = currentItems();
       // R8.4: only when news were loaded, nothing is left to show and no chosen
       // source is still being fetched.
-      const waiting = state.selected.some((id) => {
+      // A live source contributes nothing under other topics until F8, so it is
+      // waited for under Politik only.
+      const waiting = state.topic === "politics" && state.selected.some((id) => {
         const live = state.live.get(id);
         return live !== undefined && live.status === "loading";
       });

@@ -238,6 +238,23 @@ test("unticking Sveriges Radio hides and drops its items; ticking again within 5
   assert.equal(headlines(t.byId).length, 5);
 });
 
+test("only Sveriges Radio chosen, topic Natur, live fetch pending: the empty notice shows at once (R18.9)", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["sveriges-radio"]',
+    "newsReader.selectedTopic": "nature" }) });
+  t.state.feed.gate = gate;
+  const started = t.instance.start();
+  await t.wait();
+  await t.wait();
+  assert.match(srRow(t.byId), /Visas inte än/);
+  assert.equal(t.byId.empty.hidden, false, "SR gives nothing under Natur, so nothing is waited for");
+  assert.equal(t.byId.empty.textContent, "Inga nyheter i ämnet Natur från valda källor.");
+  release();
+  await started;
+  assert.equal(t.byId.empty.hidden, false);
+});
+
 test("only Sveriges Radio chosen: its items alone; nothing matching gives the empty notice, not while it loads", async () => {
   let release;
   const gate = new Promise((r) => { release = r; });
