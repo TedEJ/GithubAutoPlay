@@ -29,7 +29,7 @@ from .keywords import KeywordsError, load_keywords
 from .model import NewsItem
 from .parse import FeedError, parse_rss
 from .robots import is_allowed, robots_url, url_path
-from .select import MAX_AGE, MAX_ITEMS, POLITICS, check_url, feed_entry, item_id, select_items
+from .select import MAX_AGE, MAX_ITEMS, POLITICS, check_url, feed_entry, item_id, parse_url, select_items
 from .timeutil import UTC, display_time, generated_at, generated_at_display, parse_time
 
 APP_ROOT = Path(__file__).resolve().parent.parent
@@ -69,14 +69,12 @@ def _is_text(value):
 
 
 def _https_host(url):
-    """The lower-case host of an https address, or None."""
-    if not _is_text(url):
+    """The lower-case host of an https address, or None. As strict as `select.check_url`
+    (`parse_url`): no port, user information, backslash, control character or white space."""
+    if not isinstance(url, str) or url != url.strip():
         return None
-    try:
-        parts = urlsplit(url)
-        return parts.hostname.lower() if parts.scheme == "https" and parts.hostname else None
-    except ValueError:
-        return None
+    parsed = parse_url(url)
+    return parsed[1] if parsed is not None and parsed[0] == "https" else None
 
 
 def _on_hosts(host, hosts):
@@ -133,8 +131,8 @@ def validate_sources(data):
     """
     _require(isinstance(data, dict), "the file must be an object")
     version = data.get("version")
-    _require(not (version == 1 and type(version) is int),
-             "version 1 is no longer supported (R14.6)")
+    if version == 1 and type(version) is int:
+        raise BuildError("sources.json version 1 is no longer supported")  # R14.6, exact wording
     _require(version == SOURCES_VERSION and type(version) is int, "version must be 2")
     _validate_topics(data.get("topics"))
     sources = data.get("sources")

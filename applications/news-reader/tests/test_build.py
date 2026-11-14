@@ -791,7 +791,7 @@ def test_a_version_1_sources_file_fails_the_build_and_writes_nothing(project):
     (project.root / "sources.json").write_text(json.dumps({"version": 1, "sources": [
         dict({k: v for k, v in source().items() if k != "feeds"},
              **{"politics-sweden": {"method": "keywordFilter", "url": FEED_URL}})]}), encoding="utf-8")
-    with pytest.raises(BuildError, match="version 1 is no longer supported"):
+    with pytest.raises(BuildError, match="^sources.json version 1 is no longer supported$"):
         run(project, FakeFetch())
     assert not project.out.exists()
 

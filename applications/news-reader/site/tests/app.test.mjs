@@ -534,6 +534,16 @@ test("page: an unusable news.json counts as a failed load", async () => {
   assert.equal(byId.notices.children[0].textContent, "Kunde inte hämta nyheter. Försök igen senare.");
 });
 
+test("page: a version 1 sources.json gives the same generic failure text and no list (R14.6)", async () => {
+  const v1 = { version: 1, sources: [{ id: "svt", name: "SVT", enabled: true, fetchedBy: "build",
+    allowedHosts: ["svt.se"], "politics-sweden": { method: "keywordFilter", url: "https://www.svt.se/x.xml" } }] };
+  const { instance, byId } = setup({ files: { "sources.json": v1, "news.json": newsFile() } });
+  await instance.start();
+  assert.equal(byId.notices.children[0].textContent, "Kunde inte hämta nyheter. Försök igen senare.");
+  assert.equal(byId.headlines.children.length, 0);
+  assert.equal(byId["sources-section"].hidden, true);
+});
+
 test("page: sources.json missing gives the error notice and no list", async () => {
   const { instance, byId } = setup({ files: { "news.json": newsFile() } });
   await instance.start();

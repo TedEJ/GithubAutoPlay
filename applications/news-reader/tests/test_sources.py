@@ -242,8 +242,34 @@ def test_version_1_is_refused_with_the_documented_message(config):
         "id": "svt", "name": "SVT", "enabled": True, "fetchedBy": "build", "storageAllowed": True,
         "homepage": "https://www.svt.se/", "allowedHosts": ["svt.se"],
         "politics-sweden": {"method": "keywordFilter", "url": SVT_INRIKES}}]}
-    with pytest.raises(BuildError, match="version 1 is no longer supported"):
+    with pytest.raises(BuildError) as error:
         validate_sources(version_1)
+    assert str(error.value) == "sources.json version 1 is no longer supported"
+
+
+@pytest.mark.parametrize("version", [2.0, True, "2", 3, None])
+def test_only_the_integer_2_is_accepted_as_version(config, version):
+    # type(version) is int: 2.0 and True are not versions (JSON "2.0" is a float in Python).
+    with pytest.raises(BuildError, match="version must be 2"):
+        validate_sources({**config, "version": version})
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.svt.se:443/nyheter/rss.xml",
+    "https://user@www.svt.se/nyheter/rss.xml",
+    "https://www.svt.se\\nyheter/rss.xml",
+    "https://www.svt.se/nyheter/rs s.xml",
+    "https://www.svt.se/nyheter/rss.xml\n",
+    " https://www.svt.se/nyheter/rss.xml",
+    "https://www.svt.se/ny\theter/rss.xml",
+    "https://www.svt.se./nyheter/rss.xml",
+    "https://www.svt.se@evil.example.org/x",
+    "https://www.svt.se/nyheter/\u00e5.xml",
+    "https:///nyheter/rss.xml",
+])
+def test_feed_url_is_as_strict_as_the_link_check(config, url):
+    with pytest.raises(BuildError, match="https address"):
+        validate_sources(mutated(config, lambda d: svt(d)["feeds"][1].update(url=url)))
 
 
 def test_optional_fields_credit_linkhosts_and_matchon_are_accepted(config):
