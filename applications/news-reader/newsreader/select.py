@@ -116,12 +116,14 @@ def _on_allowed_host(host, allowed_hosts):
     return False
 
 
-def check_url(url, allowed_hosts):
+def check_url(url, allowed_hosts, link_hosts=None):
     """The normalised URL (R5.3) if `url` is usable for a source with these
     `allowedHosts` (R9.1), else None.
 
     The host is accepted when it equals an allowed host or ends with `.` plus
-    one (so `www.svt.se` is accepted and `evilsvt.se` is not).
+    one (so `www.svt.se` is accepted and `evilsvt.se` is not). When `link_hosts` is
+    given (R9.1 from F6, R16.2), the host must in addition equal one of them exactly
+    (compared before `www.` is removed), so a subdomain that is not listed is refused.
 
     Normalised: lower-case scheme and host, one leading `www.` removed from the
     host, query string and fragment removed, trailing `/` characters removed
@@ -133,6 +135,8 @@ def check_url(url, allowed_hosts):
         return None
     scheme, host, path = parsed
     if not _on_allowed_host(host, allowed_hosts):
+        return None
+    if link_hosts and host not in link_hosts:
         return None
     if host.startswith("www."):
         host = host[4:]
@@ -206,7 +210,7 @@ def select_items(entries, source, keywords, now):
             continue
         if use_keywords and not keywords.matches(entry.title, entry.description):
             continue
-        normalised = check_url(entry.link, source["allowedHosts"])
+        normalised = check_url(entry.link, source["allowedHosts"], source.get("linkHosts"))
         if normalised is None or normalised in seen:
             continue
         seen.add(normalised)
