@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 from . import fetch as fetch_module
 from .build import BuildError, build
 
-DESCRIPTION = ("Fetch the approved build sources, select the politics items and write "
-               "news.json and the page files into the output folder.")
+DESCRIPTION = ("Fetch the approved build sources, sort their items into topics and write "
+               "news.json (version 2) and the page files into the output folder.")
 
 
 def main(argv=None, fetch=None, now=None, root=None):
@@ -35,6 +35,11 @@ def main(argv=None, fetch=None, now=None, root=None):
         if source.get("message"):
             line += " (%s)" % source["message"]
         print(line)
+        for feed in source["feeds"]:  # the status of each feed (R19.3)
+            line = "  %s: %s, %d items" % (feed["topic"], feed["status"], feed["itemCount"])
+            if feed.get("message"):
+                line += " (%s)" % feed["message"]
+            print(line)
     print("wrote %s" % (args.out.rstrip("/\\") + "/news.json"))
     return 0
 

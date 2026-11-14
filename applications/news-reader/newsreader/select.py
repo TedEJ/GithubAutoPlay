@@ -148,7 +148,7 @@ def item_id(normalised_url):
 # ---------------------------------------------------------------------------
 # Selection
 
-POLITICS = "politics"  # the topic the build evaluates until F5 (R14.7)
+POLITICS = "politics"  # the topic that `select_items` and the page (until F8) evaluate (R14.7)
 
 
 def feed_entry(source, topic):
@@ -223,10 +223,16 @@ def select_items(entries, source, keywords, now):
             publishedDisplay=display_time(published),
         ))
 
+    return sort_items(items)[:MAX_ITEMS]
+
+
+def sort_items(items):
+    """Newest `published` first, items without time last; equal times by title
+    (Unicode code point), then in the order given (R5.5 for one source)."""
     dated = [i for i in items if i.published is not None]
     undated = [i for i in items if i.published is None]
-    # Python's sort is stable, also with reverse=True: equal elements keep feed order.
+    # Python's sort is stable, also with reverse=True: equal elements keep their order.
     dated.sort(key=lambda i: i.title)
     dated.sort(key=lambda i: i.published, reverse=True)  # fixed-width UTC text
     undated.sort(key=lambda i: i.title)
-    return (dated + undated)[:MAX_ITEMS]
+    return dated + undated

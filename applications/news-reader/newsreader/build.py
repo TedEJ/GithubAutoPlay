@@ -1,21 +1,26 @@
-"""The build: orchestration and output (R3.2, R3.4, R6.2 to R6.7, R12.1).
+"""The build: orchestration and output (R3.2, R3.4, R6.2 to R6.7, R12.1, R13 to R15, R19).
 
-`build(...)` reads `sources.json` and `politics-keywords.json`, fetches every
-enabled `fetchedBy: build` source through an injected fetch function, selects
-the items and writes the output folder:
+`build(...)` reads `sources.json` and the keyword file of every topic that it names,
+fetches every enabled `fetchedBy: build` source through an injected fetch function,
+selects the items and writes the output folder:
 
-    <out>/news.json              the items and the status of each build source
+    <out>/news.json              version 2: items with their topics, status per source and feed
     <out>/<content of site/>     the page (index.html, logic.js, ...)
     <out>/sources.json           copy
-    <out>/politics-keywords.json copy
+    <out>/<topic>-keywords.json  copy of each keyword file named in sources.json
 
 Both "now" and the fetch function are injected, so the tests need neither a
 clock nor a network. A fetch function has the signature
 `fetch(url, allowed_hosts) -> bytes` and raises `FetchError` on failure.
 
-Failure rules: a failing source never fails the build (R6.4); only an invalid
-`sources.json` or `politics-keywords.json` does (`BuildError`). A source that
-fails keeps its items from the previous `news.json` for up to 24 hours (R6.2).
+Each distinct feed address of a source is checked against robots.txt, fetched and
+parsed once, however many feed entries (topics) use it (R15.1). A failing address
+marks only the feed entries that use it and never stops the other addresses or the
+build (R15.2, R19.3). A feed that fails keeps, for up to 24 hours, the items of the
+source that have its topic from the previous `news.json` (R19.4).
+
+Failure rules: a failing feed never fails the build (R6.4); only an invalid
+`sources.json` or an invalid or missing keyword file does (`BuildError`).
 """
 import json
 import os
@@ -25,27 +30,30 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .fetch import FetchError
-from .keywords import KeywordsError, load_keywords
-from .model import NewsItem
+from .keywords import KeywordsError, load_keywords, topics_of
+from .model import NewsItem, TopicItem
 from .parse import FeedError, parse_rss
 from .robots import is_allowed, robots_url, url_path
-from .select import MAX_AGE, MAX_ITEMS, POLITICS, check_url, feed_entry, item_id, parse_url, select_items
-from .timeutil import UTC, display_time, generated_at, generated_at_display, parse_time
+from .select import (MAX_AGE, MAX_ITEMS, POLITICS, WHITESPACE, check_url, clean_headline, item_id,
+                     parse_url, sort_items)
+from .timeutil import (UTC, display_time, generated_at, generated_at_display, parse_time,
+                       published_utc)
 
 APP_ROOT = Path(__file__).resolve().parent.parent
-CATEGORY = "politics-sweden"
-VERSION = 1
+VERSION = 2  # news.json (R19.1)
 FALLBACK_LIMIT = timedelta(hours=24)  # R6.2
 METHODS = ("feed", "categoryFilter", "keywordFilter")
 SOURCES_VERSION = 2  # R14.1
 ALL_NEWS = "all-news"
 TOPIC_IDS = (ALL_NEWS, POLITICS, "nature", "ai")  # R13.1, in this order
-KEYWORDS_NAME = "{}-keywords.json"  # R14.1; only the name is checked here, not the file (F5)
+KEYWORDS_NAME = "{}-keywords.json"  # R14.1; the files are loaded and checked by `load_keyword_files` (R14.5)
 KEYWORDS_RE = re.compile(r"^[a-z0-9-]+-keywords\.json$")
-# The topics whose feed entries the build fetches and evaluates. Only Politik until F5 (R14.7).
-BUILD_TOPICS = (POLITICS,)
+# The topics whose feed entries the build fetches and evaluates: all four from F5 (D31, D38).
+BUILD_TOPICS = TOPIC_IDS
 FETCHED_BY = ("build", "browser")
-ITEM_FIELDS = ("id", "sourceId", "sourceName", "title", "url", "published", "publishedDisplay")
+ITEM_FIELDS = ("id", "sourceId", "sourceName", "title", "url", "published", "publishedDisplay")  # R1.1
+ITEM_FIELDS_V2 = ITEM_FIELDS + ("topics",)  # R1.5
+STATUS_RANK = {"ok": 0, "blocked-by-robots": 1, "error": 2}  # R19.3: the worst status wins
 
 
 class EmptyFeed(FeedError):
@@ -182,12 +190,38 @@ def distinct_feed_urls(source, topics=None):
     return urls
 
 
-def load_sources(path):
+def load_configuration(path):
+    """Read and validate `sources.json`: returns (topics, sources), `topics` being the
+    list of topic objects (`id`, `label`, optional `keywords`) in order (R14.1)."""
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise BuildError("sources.json: cannot read: %s" % exc) from exc
-    return validate_sources(data)
+    sources = validate_sources(data)
+    return data["topics"], sources
+
+
+def load_sources(path):
+    return load_configuration(path)[1]
+
+
+def load_keyword_files(root, topics):
+    """The keyword list of every topic that names a file (R14.5, R17.5): topic id -> `Keywords`.
+
+    The file must exist in `root`, belong to the topic and be valid; otherwise the
+    build fails with a message that names the file (R6.4). `all-news` has none."""
+    keywords = {}
+    for topic in topics:
+        name = topic.get("keywords")
+        if name is None:
+            continue
+        if not (Path(root) / name).is_file():
+            raise BuildError("%s: file not found (sources.json names it for the topic %s)" % (name, topic["id"]))
+        try:
+            keywords[topic["id"]] = load_keywords(Path(root) / name, topic["id"])
+        except KeywordsError as exc:
+            raise BuildError("%s: %s" % (name, exc)) from exc
+    return keywords
 
 
 def build_sources(sources):
@@ -205,15 +239,15 @@ def assert_storable(source):
 # previous news.json (the 24-hour fallback)
 
 def load_previous(path):
-    """The previous `news.json` as a dict, or None if it is missing or unusable."""
+    """The previous `news.json` as a dict (version 1 or 2), or None if it is missing or unusable."""
     if path is None:
         return None
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    if not isinstance(data, dict) or not isinstance(data.get("sources"), list) \
-            or not isinstance(data.get("items"), list):
+    if not isinstance(data, dict) or type(data.get("version")) is not int or data["version"] not in (1, 2) \
+            or not isinstance(data.get("sources"), list) or not isinstance(data.get("items"), list):
         return None
     return data
 
@@ -227,23 +261,55 @@ def _previous_entry(previous, source_id):
     return None
 
 
-def _previous_success(entry):
-    """The last-success time (aware datetime) of a previous source entry, or None."""
-    text = entry.get("lastSuccess") if entry else None
-    return parse_time(text) if isinstance(text, str) else None
+def _success_of(entry):
+    """(aware datetime, original text) of the `lastSuccess` of a previous source or feed
+    entry, or (None, None)."""
+    text = entry.get("lastSuccess") if isinstance(entry, dict) else None
+    moment = parse_time(text) if isinstance(text, str) else None
+    return (moment, text) if moment is not None else (None, None)
+
+
+def _previous_feed_success(previous, source_id, topic):
+    """The previous `lastSuccess` of the feed of `topic` of this source (R19.4), or (None, None).
+
+    A version 1 file has no feeds: its source entry stands for the feed `politics`, and the
+    other feeds have no previous items."""
+    entry = _previous_entry(previous, source_id)
+    if entry is None:
+        return None, None
+    if previous["version"] == 1:
+        return _success_of(entry) if topic == POLITICS else (None, None)
+    feeds = entry.get("feeds")
+    if isinstance(feeds, list):
+        for feed in feeds:
+            if isinstance(feed, dict) and feed.get("topic") == topic:
+                return _success_of(feed)
+    return None, None
+
+
+def _read_topics(value):
+    """A non-empty list of known topic ids -> the tuple in the order of R13.1 without
+    duplicates, else None."""
+    if not isinstance(value, list) or not value or not all(isinstance(t, str) and t in TOPIC_IDS for t in value):
+        return None
+    return tuple(t for t in TOPIC_IDS if t in value)
 
 
 def _previous_items(previous, source, now):
-    """Valid previous items of this source, rebuilt with the current rules.
+    """Valid previous items of this source as (normalised URL, `NewsItem`, set of topics), rebuilt
+    with the current rules.
 
-    Items older than 7 days before `now` are dropped (R5.2), as in a fresh build."""
+    Items older than 7 days before `now` are dropped (R5.2), as in a fresh build. A version 1
+    item has the topic `politics` only (R19.4). The cap is applied later, per topic (R13.6)."""
     items = []
     cutoff = now.astimezone(UTC) - MAX_AGE
+    fields = set(ITEM_FIELDS_V2 if previous["version"] == 2 else ITEM_FIELDS)
     for raw in previous["items"]:
-        if not isinstance(raw, dict) or set(raw) != set(ITEM_FIELDS) or raw["sourceId"] != source["id"]:
+        if not isinstance(raw, dict) or set(raw) != fields or raw["sourceId"] != source["id"]:
             continue
+        topics = _read_topics(raw["topics"]) if previous["version"] == 2 else (POLITICS,)
         title, url, published = raw["title"], raw["url"], raw["published"]
-        if not (isinstance(title, str) and title.strip() and isinstance(url, str)):
+        if topics is None or not (isinstance(title, str) and title.strip() and isinstance(url, str)):
             continue
         normalised = check_url(url, source["allowedHosts"])
         if normalised is None:
@@ -256,8 +322,9 @@ def _previous_items(previous, source, now):
             shown = display_time(published)
         except ValueError:
             continue
-        items.append(NewsItem(item_id(normalised), source["id"], source["name"], title, url.strip(), published, shown))
-    return items[:MAX_ITEMS]
+        items.append((normalised, NewsItem(item_id(normalised), source["id"], source["name"], title,
+                                           url.strip(), published, shown), set(topics)))
+    return items
 
 
 # ---------------------------------------------------------------------------
@@ -320,61 +387,157 @@ def _fetch_entries(url, allowed_hosts, fetch):
     return entries
 
 
-def build_source(source, keywords, now, fetch, robots, previous):
-    """Handle one build source. Returns (status entry for `news.json`, list of NewsItem).
+class _Outcome:
+    """What happened to one feed address: its status, a message (never feed content) and,
+    when it was read, its raw entries."""
 
-    Each distinct feed address of the topics in `BUILD_TOPICS` is checked against
-    robots.txt, fetched and parsed once, however many feed entries use it (R15.1).
-    Until F5 only the `politics` feed entry is evaluated (R14.7); a source without one
-    gives no items and no request (R13.7)."""
+    def __init__(self, status, message=None, entries=None):
+        self.status, self.message, self.entries = status, message, entries
+
+
+def _read_feed(url, allowed_hosts, fetch, robots):
+    """Check robots.txt, fetch and parse one feed address (R6.2, R6.6). Never raises."""
+    try:
+        robots_ok = robots.allowed(url, allowed_hosts)
+    except RobotsUnreadable as exc:
+        return _Outcome("error", str(exc))
+    if robots_ok is False:
+        return _Outcome("blocked-by-robots", "robots.txt does not allow this address")
+    try:
+        return _Outcome("ok", entries=_fetch_entries(url, allowed_hosts, fetch))
+    except FetchError as exc:
+        return _Outcome("error", "fetch failed: %s" % exc)
+    except EmptyFeed:
+        return _Outcome("error", "feed not usable: it has no items")
+    except FeedError:
+        # No detail from the parser: its text may quote the feed.
+        return _Outcome("error", "feed not usable (FeedError)")
+
+
+def _evaluate_feed(entries, feeds, source, keywords_by_topic, now):
+    """The items of one parsed feed address for the feed entries that use it.
+
+    Returns a list of (normalised URL, `NewsItem` without topics, set of topics) in feed order. An
+    entry is dropped for an empty headline (R1.4), an unusable link (R1.4, R9.1), no topic (R13.3)
+    or a time more than 7 days back (R5.2). `topics_of` takes the raw texts and cleans them itself
+    (R13.4). Raises ValueError for an unsupported method (`categoryFilter`) before anything is
+    evaluated."""
+    for feed in feeds:
+        if feed["method"] not in ("feed", "keywordFilter"):
+            raise ValueError("unsupported method %r for topic %s" % (feed["method"], feed["topic"]))
+    cutoff = now.astimezone(UTC) - MAX_AGE
+    result = []
+    for entry in entries:
+        title = clean_headline(entry.title)
+        if title == "":
+            continue
+        normalised = check_url(entry.link, source["allowedHosts"])
+        if normalised is None:
+            continue
+        topics = topics_of(entry.title, entry.description, feeds, keywords_by_topic)
+        if not topics:
+            continue
+        published = published_utc(entry.time_text, now)
+        if published is not None and parse_time(published) < cutoff:
+            continue  # too old; a fresher copy of the same article from another feed can still count
+        result.append((normalised, NewsItem(item_id(normalised), source["id"], source["name"], title,
+                                            entry.link.strip(WHITESPACE), published, display_time(published)),
+                       set(topics)))
+    return result
+
+
+def build_source(source, keywords_by_topic, now, fetch, robots, previous):
+    """Handle one build source. Returns (status entry for `news.json`, list of `TopicItem`).
+
+    Each distinct feed address of the topics in `BUILD_TOPICS` is checked against robots.txt,
+    fetched and parsed once, however many feed entries use it (R15.1), and a failing address
+    does not stop the others (R15.2). Every feed entry is evaluated on the response of its
+    address (R13.3); an item that comes from several addresses, or matches several topics,
+    becomes one item with all its topics (R13.5). The age limit and the cap of 20 are applied per
+    topic (R13.6). A feed that failed with status `error` keeps the items of this source that
+    have its topic from the previous file, if its previous `lastSuccess` is under 24 hours old
+    (R19.4); a blocked feed keeps nothing."""
     assert_storable(source)
     ok_time = generated_at(now)
-    previous_entry = _previous_entry(previous, source["id"])
-    last_success = _previous_success(previous_entry)
-    last_text = previous_entry["lastSuccess"] if last_success is not None else None
+    feeds = [f for f in source["feeds"] if f["topic"] in BUILD_TOPICS]
 
-    status, message, items = "ok", None, None
-    responses = {}
+    outcomes = {}
     for url in distinct_feed_urls(source):
-        try:
-            robots_ok = robots.allowed(url, source["allowedHosts"])
-        except RobotsUnreadable as exc:
-            status, message = "error", str(exc)
-            break
-        if robots_ok is False:
-            status, message = "blocked-by-robots", "robots.txt does not allow this address"
-            break
-        try:
-            responses[url] = _fetch_entries(url, source["allowedHosts"], fetch)
-        except FetchError as exc:
-            status, message = "error", "fetch failed: %s" % exc
-            break
-        except EmptyFeed:
-            status, message = "error", "feed not usable: it has no items"
-            break
-        except FeedError:
-            # No detail from the parser: its text may quote the feed.
-            status, message = "error", "feed not usable (FeedError)"
-            break
-    if status == "ok":
-        politics = feed_entry(source, POLITICS)
-        try:
-            items = select_items(responses[politics["url"]], source, keywords, now) if politics else []
-        except ValueError:  # select_items: unsupported method, such as categoryFilter
-            status, message = "error", "selection failed (ValueError), politics method %s" % politics["method"]
+        outcomes[url] = _read_feed(url, source["allowedHosts"], fetch, robots)
 
-    if status == "ok":
-        entry = {"id": source["id"], "name": source["name"], "status": "ok",
-                 "lastSuccess": ok_time, "itemCount": len(items)}
-        return entry, items
+    # found: normalised URL -> [item, set of topics]; the first occurrence that is not too old (feed
+    # addresses in the order of sources.json, then feed order) gives headline, link and time.
+    found = {}
+    for url, outcome in outcomes.items():
+        if outcome.status != "ok":
+            continue
+        url_feeds = [f for f in feeds if f["url"] == url]
+        try:
+            evaluated = _evaluate_feed(outcome.entries, url_feeds, source, keywords_by_topic, now)
+        except ValueError:  # an unsupported method, such as categoryFilter
+            bad = next((f for f in url_feeds if f["method"] not in ("feed", "keywordFilter")), None)
+            outcome.status = "error"
+            outcome.message = "selection failed (ValueError)" + (
+                ", %s method %s" % (bad["topic"], bad["method"]) if bad else "")
+            continue
+        for normalised, item, topics in evaluated:
+            if normalised in found:
+                found[normalised][1] |= topics
+            else:
+                found[normalised] = [item, set(topics)]
 
-    items = []
-    if status == "error" and last_success is not None:
-        age = now.astimezone(UTC) - last_success
-        if timedelta(0) <= age < FALLBACK_LIMIT:  # R6.2: only items under 24 hours old
-            items = _previous_items(previous, source, now)
-    entry = {"id": source["id"], "name": source["name"], "status": status,
-             "lastSuccess": last_text, "itemCount": len(items), "message": message}
+    # The status and the fallback of each feed entry (R19.3, R19.4).
+    feed_info = []  # (feed entry, status, message, lastSuccess datetime, lastSuccess text)
+    fallback_topics = set()
+    for feed in feeds:
+        outcome = outcomes[feed["url"]]
+        if outcome.status == "ok":
+            feed_info.append((feed, "ok", None, parse_time(ok_time), ok_time))
+            continue
+        moment, text = _previous_feed_success(previous, source["id"], feed["topic"])
+        feed_info.append((feed, outcome.status, outcome.message, moment, text))
+        if outcome.status == "error" and moment is not None:
+            if timedelta(0) <= now.astimezone(UTC) - moment < FALLBACK_LIMIT:  # R19.4
+                fallback_topics.add(feed["topic"])
+    if fallback_topics and previous is not None:
+        for normalised, item, previous_topics in _previous_items(previous, source, now):
+            topics = previous_topics & fallback_topics
+            if not topics:
+                continue
+            if normalised in found:
+                found[normalised][1] |= topics
+            else:
+                found[normalised] = [item, topics]
+
+    # The age limit is applied above; now the cap per topic (R13.6).
+    kept = {}  # item id -> topics in which the item was kept
+    for topic in TOPIC_IDS:
+        for item in sort_items([entry[0] for entry in found.values() if topic in entry[1]])[:MAX_ITEMS]:
+            kept.setdefault(item.id, set()).add(topic)
+    ordered = sort_items([entry[0] for entry in found.values() if entry[0].id in kept])
+    items = [TopicItem.of(item, [t for t in TOPIC_IDS if t in kept[item.id]]) for item in ordered]
+
+    feed_entries = []
+    for feed, status, message, _moment, text in feed_info:
+        entry = {"topic": feed["topic"], "status": status, "lastSuccess": text,
+                 "itemCount": sum(1 for item in items if feed["topic"] in item.topics)}
+        if status != "ok":
+            entry["message"] = message
+        feed_entries.append(entry)
+
+    # The source: the worst status, the oldest lastSuccess, the first message of that status (R19.3).
+    worst = max((info[1] for info in feed_info), key=STATUS_RANK.__getitem__, default="ok")
+    moments = [info[3] for info in feed_info]
+    oldest = None
+    if feed_info and all(m is not None for m in moments):
+        oldest = min(feed_info, key=lambda info: info[3])[4]
+    elif not feed_info:
+        oldest = ok_time
+    entry = {"id": source["id"], "name": source["name"], "status": worst, "lastSuccess": oldest,
+             "itemCount": len(items)}
+    if worst != "ok":
+        entry["message"] = next(info[2] for info in feed_info if info[1] == worst)
+    entry["feeds"] = feed_entries
     return entry, items
 
 
@@ -409,11 +572,11 @@ def _check_output_folder(out, root):
         raise BuildError("the output folder %s overlaps the project folder" % out)
 
 
-def _planned_files(root):
+def _planned_files(root, keyword_names):
     """(source file, path relative to the output folder) for everything that is copied.
 
     The content of `site/` (without its `tests` folder, `__pycache__`,
-    `node_modules` and symbolic links), `sources.json` and `politics-keywords.json`."""
+    `node_modules` and symbolic links), `sources.json` and the keyword files named in it (R14.5)."""
     plan = []
     site = (root / "site").resolve()
     if site.is_dir():
@@ -423,7 +586,7 @@ def _planned_files(root):
                     part in SITE_SKIP_NAMES for part in relative.parts):
                 continue
             plan.append((path, relative))
-    for name in ("sources.json", "politics-keywords.json"):
+    for name in ("sources.json", *keyword_names):
         plan.append((root / name, Path(name)))
     return plan
 
@@ -455,8 +618,9 @@ def _write_json(path, document):
     _replace_file(path, (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
 
 
-def _check_document(document, sources):
-    """Last guard before writing: only storable build sources, nothing else (N10, R3.2)."""
+def _check_document(document, sources, topic_ids):
+    """Last guard before writing (R19.6): only storable build sources (N10, R3.2), and the shape
+    of R19.1 to R19.3, so a bug in the build cannot write a file that the page refuses."""
     storable = {s["id"] for s in sources if s["fetchedBy"] == "build" and s["storageAllowed"] is True}
     for entry in document["sources"]:
         if entry["id"] not in storable:
@@ -464,6 +628,27 @@ def _check_document(document, sources):
     for item in document["items"]:
         if item["sourceId"] not in storable:
             raise BuildError("refusing to write an item of source %r to news.json" % item["sourceId"])
+    problem = None
+    if document.get("version") != VERSION or document.get("topics") != list(topic_ids):
+        problem = "version or topics"
+    for entry in document["sources"]:
+        if entry.get("status") not in STATUS_RANK or not isinstance(entry.get("feeds"), list) \
+                or ("message" in entry) != (entry.get("status") != "ok"):
+            problem = "source %r" % entry["id"]
+        for feed in entry.get("feeds") or []:
+            if feed.get("topic") not in topic_ids or feed.get("status") not in STATUS_RANK \
+                    or ("message" in feed) != (feed.get("status") != "ok"):
+                problem = "a feed of source %r" % entry["id"]
+    ids = set()
+    for item in document["items"]:
+        topics = item.get("topics")
+        if set(item) != set(ITEM_FIELDS_V2) or not isinstance(topics, list) or not topics \
+                or topics != [t for t in topic_ids if t in topics] or len(set(topics)) != len(topics) \
+                or (item["sourceId"], item["id"]) in ids:
+            problem = "item %r" % item.get("id")
+        ids.add((item["sourceId"], item.get("id")))
+    if problem:
+        raise BuildError("internal error: news.json does not follow R19.1 to R19.3 (%s); nothing was written" % problem)
 
 
 def build(out, now, fetch, previous_path=None, root=APP_ROOT, user_agent=None):
@@ -475,17 +660,15 @@ def build(out, now, fetch, previous_path=None, root=APP_ROOT, user_agent=None):
     from .fetch import USER_AGENT
     user_agent = user_agent or USER_AGENT
     root, out = Path(root), Path(out)
-    sources = load_sources(root / "sources.json")
-    try:
-        keywords = load_keywords(root / "politics-keywords.json")
-    except KeywordsError as exc:
-        raise BuildError("politics-keywords.json: %s" % exc) from exc
+    topics, sources = load_configuration(root / "sources.json")
+    keywords = load_keyword_files(root, topics)  # a missing or invalid file fails the build (R14.5, R17.5)
     _check_output_folder(out, root)
 
     if previous_path is None:
         previous_path = out / "news.json"
     previous = load_previous(previous_path)  # read before anything is overwritten
 
+    topic_ids = [t["id"] for t in topics]
     robots = _Robots(fetch, user_agent)
     entries, items = [], []
     for source in build_sources(sources):
@@ -497,13 +680,13 @@ def build(out, now, fetch, previous_path=None, root=APP_ROOT, user_agent=None):
         "version": VERSION,
         "generatedAt": generated_at(now),
         "generatedAtDisplay": generated_at_display(now),
-        "category": CATEGORY,
+        "topics": topic_ids,
         "sources": entries,
         "items": [i.as_dict() for i in items],
     }
-    _check_document(document, sources)
+    _check_document(document, sources, topic_ids)
 
-    plan = _planned_files(root)
+    plan = _planned_files(root, [t["keywords"] for t in topics if "keywords" in t])
     _check_targets(out, [Path("news.json")] + [rel for _, rel in plan])
     out.mkdir(parents=True, exist_ok=True)
     _write_json(out / "news.json", document)

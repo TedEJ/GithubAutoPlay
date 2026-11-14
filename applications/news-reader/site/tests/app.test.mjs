@@ -151,7 +151,9 @@ test("validateNews returns a clean copy and recomputes time, name and id", () =>
   assert.equal(news.items.length, 2);
   const item = news.items[1];
   assert.deepEqual(Object.keys(item).sort(),
-    ["id", "published", "publishedDisplay", "sourceId", "sourceName", "title", "url"]);
+    ["id", "published", "publishedDisplay", "sourceId", "sourceName", "title", "topics", "url"]);
+  assert.deepEqual(item.topics, ["all-news", "politics"]); // a version 1 item was a politics headline (R18.4)
+  assert.equal(news.version, 2);
   assert.equal(item.publishedDisplay, "2026-11-13 13:58");
   assert.match(item.id, /^[0-9a-f]{16}$/);
   assert.notEqual(item.id, "y");
@@ -209,7 +211,8 @@ test("validateNews takes the source name from sources.json", () => {
 });
 
 test("validateNews rejects an unusable file", () => {
-  for (const bad of [null, [], "x", 5, {}, { version: 2, generatedAt: "2026-11-13T13:05:12Z", items: [] },
+  for (const bad of [null, [], "x", 5, {}, { version: 3, generatedAt: "2026-11-13T13:05:12Z", items: [] },
+    newsFile({ version: 0 }), newsFile({ version: "2" }), newsFile({ version: 2.5 }), newsFile({ version: 3 }),
     newsFile({ generatedAt: "not a time" }), newsFile({ generatedAt: 5 }), newsFile({ items: "x" }),
     newsFile({ items: {} })]) {
     assert.equal(app.validateNews(bad, SOURCES, NOW), null);
@@ -233,6 +236,178 @@ test("validateNews limits the number of items and cleans the source statuses", (
     id: "svt", name: "SVT", status: "error", lastSuccess: "2026-11-13T09:00:00Z", itemCount: 3,
     message: "fetch failed: timeout",
   }]);
+});
+
+// ---------------------------------------------------------------- news.json version 2 (F5, R19.8)
+
+// A hand-written version 2 file: the two politics items of newsFile() plus items of other topics,
+// and a Sveriges Radio item that must never be read from a file (N10).
+function newsFileV2(overrides = {}) {
+  const v1 = newsFile();
+  const base = { id: "x", sourceId: "svt", sourceName: "SVT", publishedDisplay: "bogus" };
+  return {
+    version: 2,
+    generatedAt: "2026-11-13T13:05:12Z",
+    generatedAtDisplay: "2026-11-13 14:05",
+    topics: ["all-news", "politics", "nature", "ai"],
+    sources: [{
+      id: "svt", name: "SVT", status: "ok", lastSuccess: "2026-11-13T13:05:12Z", itemCount: 5,
+      feeds: [
+        { topic: "all-news", status: "ok", lastSuccess: "2026-11-13T13:05:12Z", itemCount: 4 },
+        { topic: "politics", status: "ok", lastSuccess: "2026-11-13T13:05:12Z", itemCount: 2 },
+        { topic: "nature", status: "ok", lastSuccess: "2026-11-13T13:05:12Z", itemCount: 1 },
+        { topic: "ai", status: "ok", lastSuccess: "2026-11-13T13:05:12Z", itemCount: 1 },
+      ],
+    }],
+    items: [
+      { ...v1.items[0], topics: ["all-news", "politics"] },
+      { ...v1.items[1], topics: ["all-news", "politics", "ai"] },
+      { ...base, title: "Naturrubrik", url: "https://www.svt.se/nyheter/natur/1", published: "2026-11-13T13:00:00Z",
+        topics: ["all-news", "nature"] },
+      { ...base, title: "Vanlig rubrik", url: "https://www.svt.se/nyheter/2", published: "2026-11-13T13:01:00Z",
+        topics: ["all-news"] },
+      { ...base, title: "AI-rubrik", url: "https://www.svt.se/nyheter/3", published: "2026-11-13T13:02:00Z",
+        topics: ["ai"] },
+    ],
+    ...overrides,
+  };
+}
+
+test("validateNews reads version 2: topics per item, the topic list and the status of each feed", () => {
+  const news = app.validateNews(newsFileV2(), SOURCES, NOW);
+  assert.equal(news.version, 2);
+  assert.deepEqual(news.topics, ["all-news", "politics", "nature", "ai"]);
+  assert.deepEqual(news.items.map((i) => i.topics), [
+    ["all-news", "politics"], ["all-news", "politics", "ai"], ["all-news", "nature"], ["all-news"], ["ai"]]);
+  assert.equal(news.sources[0].itemCount, 5);
+  assert.deepEqual(news.sources[0].feeds.map((f) => [f.topic, f.status, f.itemCount]),
+    [["all-news", "ok", 4], ["politics", "ok", 2], ["nature", "ok", 1], ["ai", "ok", 1]]);
+  assert.deepEqual(Object.keys(news.items[0]).sort(),
+    ["id", "published", "publishedDisplay", "sourceId", "sourceName", "title", "topics", "url"]);
+  // Idempotent: the saved copy validates to itself.
+  assert.deepEqual(app.validateNews(JSON.parse(JSON.stringify(news)), SOURCES, NOW), news);
+});
+
+test("validateNews: a version 1 file has the topics Alla nyheter and Politik and no feeds", () => {
+  const news = app.validateNews(newsFile(), SOURCES, NOW);
+  assert.deepEqual(news.topics, ["all-news", "politics"]);
+  assert.ok(news.items.every((i) => i.topics.join() === "all-news,politics"));
+  assert.ok(!("feeds" in news.sources[0]));
+});
+
+test("validateNews: topics of a version 2 item are sorted, deduplicated and filtered to known ids", () => {
+  const data = newsFileV2();
+  data.items[0].topics = ["ai", "politics", "politics", "sport", 5, "all-news"];
+  data.topics = ["ai", "ai", "nope", "all-news"];
+  const news = app.validateNews(data, SOURCES, NOW);
+  assert.deepEqual(news.items[0].topics, ["all-news", "politics", "ai"]);
+  assert.deepEqual(news.topics, ["all-news", "ai"]);
+});
+
+test("validateNews: a version 2 item without a usable topic list is dropped (R1.5)", () => {
+  const data = newsFileV2();
+  const good = data.items[0];
+  const { topics: _unused, ...withoutTopics } = good;
+  data.items.push(withoutTopics, { ...good, url: "https://www.svt.se/x/1", topics: [] },
+    { ...good, url: "https://www.svt.se/x/2", topics: "politics" },
+    { ...good, url: "https://www.svt.se/x/3", topics: ["sport"] },
+    { ...good, url: "https://www.svt.se/x/4", topics: null },
+    { ...good, url: "https://www.svt.se/x/5", topics: { 0: "politics" } });
+  assert.equal(app.validateNews(data, SOURCES, NOW).items.length, 5);
+});
+
+test("validateNews: a version 2 file without a topic list or feeds is still usable", () => {
+  const data = newsFileV2();
+  delete data.topics;
+  delete data.sources[0].feeds;
+  const news = app.validateNews(data, SOURCES, NOW);
+  assert.deepEqual(news.topics, []);
+  assert.ok(!("feeds" in news.sources[0]));
+  assert.equal(news.items.length, 5);
+});
+
+test("validateNews cleans the feed statuses of a version 2 file", () => {
+  const data = newsFileV2();
+  data.sources[0].feeds = [
+    { topic: "politics", status: "error", lastSuccess: "2026-11-13T09:00:00Z", itemCount: 3, message: "fetch failed: timeout",
+      url: "https://secret.example/x" },
+    { topic: "nature", status: "blocked-by-robots", lastSuccess: "bad", itemCount: -4, message: 7 },
+    { topic: "sport", status: "ok" }, { topic: "ai", status: "weird" }, null, "x",
+  ];
+  assert.deepEqual(app.validateNews(data, SOURCES, NOW).sources[0].feeds, [
+    { topic: "politics", status: "error", lastSuccess: "2026-11-13T09:00:00Z", itemCount: 3, message: "fetch failed: timeout" },
+    { topic: "nature", status: "blocked-by-robots", lastSuccess: null, itemCount: 0 },
+  ]);
+});
+
+test("validateNews never reads a Sveriges Radio item from a version 2 file either (N10)", () => {
+  const data = newsFileV2();
+  data.items.push({ ...data.items[0], sourceId: "sveriges-radio", url: "https://www.sverigesradio.se/artikel/1",
+    title: "SR-rubrik" });
+  assert.ok(!app.validateNews(data, SOURCES, NOW).items.some((i) => i.sourceId === "sveriges-radio"));
+});
+
+test("visibleItems: until F7 only the items of Politik are shown, so the list is as before (R19.8)", () => {
+  const news = app.validateNews(newsFileV2(), SOURCES, NOW);
+  assert.deepEqual(app.visibleItems(news, ["svt"]).map((i) => i.title),
+    ["Nyare rubrik om regeringen", "Äldre rubrik om riksdagen"]);
+  // The very same list as from the version 1 file that had only these two items.
+  const fromV1 = app.visibleItems(app.validateNews(newsFile(), SOURCES, NOW), ["svt"]);
+  assert.deepEqual(app.visibleItems(news, ["svt"]).map(({ topics, ...rest }) => rest), fromV1.map(({ topics, ...rest }) => rest));
+  assert.deepEqual(app.visibleItems(news, []), []);
+});
+
+test("visibleItems: live items have no topics and are all shown next to the Politik items of the file", () => {
+  const news = app.validateNews(newsFileV2(), SOURCES, NOW);
+  const live = new Map([["sveriges-radio", [{ id: "l1", sourceId: "sveriges-radio", sourceName: "Sveriges Radio",
+    title: "Ekot-rubrik", url: "https://www.sverigesradio.se/artikel/9", published: "2026-11-13T13:20:00Z",
+    publishedDisplay: "2026-11-13 14:20" }]]]);
+  assert.deepEqual(app.visibleItems(news, ["svt", "sveriges-radio"], live).map((i) => i.title),
+    ["Ekot-rubrik", "Nyare rubrik om regeringen", "Äldre rubrik om riksdagen"]);
+});
+
+test("sourceRows: before F7 the row of a version 2 entry uses the politics feed, so the count is the visible items (R19.8)", () => {
+  const news = app.validateNews(newsFileV2(), SOURCES, NOW);
+  assert.equal(app.sourceRows(SOURCES, news, ["svt"])[0].status, "Hämtad, 2 rubriker");
+  assert.equal(app.visibleItems(news, ["svt"]).length, 2);
+});
+
+function rowStatus(data) {
+  return app.sourceRows(SOURCES, app.validateNews(data, SOURCES, NOW), ["svt"])[0].status;
+}
+
+function withFeeds(changes) {
+  const data = newsFileV2();
+  data.sources[0].feeds = data.sources[0].feeds.map((f) => (changes[f.topic] ? { ...f, ...changes[f.topic] } : f));
+  return data;
+}
+
+test("sourceRows: only the all-news feed failed, the row stays Hämtad while the politics items are fresh", () => {
+  const failed = { status: "error", lastSuccess: "2026-11-13T09:00:00Z", message: "fetch failed: timeout" };
+  const data = withFeeds({ "all-news": failed, nature: failed, ai: failed });
+  data.sources[0].status = "error";
+  data.sources[0].lastSuccess = "2026-11-13T09:00:00Z";
+  data.sources[0].message = "fetch failed: timeout";
+  assert.equal(rowStatus(data), "Hämtad, 2 rubriker");
+});
+
+test("sourceRows: a failed politics feed shows the failure with its own last success", () => {
+  const data = withFeeds({ politics: { status: "error", lastSuccess: "2026-11-13T09:00:00Z", message: "x", itemCount: 1 } });
+  assert.equal(rowStatus(data), "Kunde inte hämtas sedan 2026-11-13 10:00");
+  assert.equal(rowStatus(withFeeds({ politics: { status: "error", lastSuccess: null, message: "x" } })), "Kunde inte hämtas");
+  assert.equal(rowStatus(withFeeds({ politics: { status: "blocked-by-robots", message: "x" } })),
+    "Blockerad enligt källans robots.txt");
+});
+
+test("sourceRows: without feeds, or without a politics feed entry, the source-level fields are used", () => {
+  const data = newsFileV2();
+  delete data.sources[0].feeds;
+  assert.equal(rowStatus(data), "Hämtad, 5 rubriker");
+  const other = newsFileV2();
+  other.sources[0].feeds = other.sources[0].feeds.filter((f) => f.topic !== "politics");
+  other.sources[0].itemCount = 7;
+  assert.equal(rowStatus(other), "Hämtad, 7 rubriker");
+  assert.equal(rowStatus(newsFile()), "Hämtad, 2 rubriker"); // version 1
 });
 
 test("parseSavedNews: text from storage is validated", () => {
@@ -725,6 +900,77 @@ test("sourceRows: error with no last success says only that it could not be fetc
   const rows = app.sourceRows(SOURCES, app.validateNews(file, SOURCES, NOW), ["svt"]);
   assert.equal(rows[0].status, "Kunde inte hämtas");
   assert.ok(!rows[0].status.includes("Tid saknas"));
+});
+
+// ---------------------------------------------------------------- the page with version 2 (F5, R19.8)
+
+test("page: a version 2 news.json shows exactly the list that the version 1 file gave", async () => {
+  const v1 = setup({ files: { "sources.json": realSources, "news.json": newsFile() }, storage: fakeStorage() });
+  await v1.instance.start();
+  const storage = fakeStorage();
+  const v2 = setup({ files: { "sources.json": realSources, "news.json": newsFileV2() }, storage });
+  await v2.instance.start();
+  assert.deepEqual(headlinesOf(v2.byId), headlinesOf(v1.byId));
+  assert.deepEqual(headlinesOf(v2.byId), ["Nyare rubrik om regeringen", "Äldre rubrik om riksdagen"]);
+  assert.deepEqual(v2.byId.headlines.children.map((li) => li.children[1].textContent),
+    v1.byId.headlines.children.map((li) => li.children[1].textContent));
+  assert.equal(v2.byId.updated.textContent, v1.byId.updated.textContent);
+  assert.equal(v2.byId.notices.children.length, 0);
+  assert.equal(v2.byId.empty.hidden, true);
+  // The saved copy is a clean version 2 copy that holds every item with its topics, and nothing else.
+  const saved = JSON.parse(storage.data["newsReader.lastNews"]);
+  assert.equal(saved.version, 2);
+  assert.equal(saved.items.length, 5);
+  assert.ok(saved.items.every((i) => Array.isArray(i.topics)));
+});
+
+test("page: a version 2 file without any Politik item gives the empty notice, as an empty version 1 file did", async () => {
+  const data = newsFileV2();
+  data.items = data.items.filter((i) => !i.topics.includes("politics"));
+  const { instance, byId } = setup({ files: { "sources.json": realSources, "news.json": data } });
+  await instance.start();
+  assert.equal(byId.headlines.children.length, 0);
+  assert.equal(byId.empty.hidden, false);
+  assert.equal(byId.empty.textContent, "Inga nyheter från valda källor.");
+});
+
+test("page: the Källor row says Hämtad with the count of the politics feed of a version 2 file (R19.8)", async () => {
+  const { instance, byId } = setup({ files: { "sources.json": realSources, "news.json": newsFileV2() } });
+  await instance.start();
+  const status = byId.sources.children[0].find((n) => n.className === "source-status")[0];
+  assert.equal(status.textContent, "Hämtad, 2 rubriker");
+});
+
+test("page: news.json fails, a saved version 2 copy shows the Politik items only, with the offline notice", async () => {
+  const saved = app.validateNews(newsFileV2(), SOURCES, NOW);
+  const storage = fakeStorage({ "newsReader.lastNews": JSON.stringify(saved) });
+  const { instance, byId } = setup({ files: { "sources.json": realSources }, storage });
+  await instance.start();
+  assert.deepEqual(headlinesOf(byId), ["Nyare rubrik om regeringen", "Äldre rubrik om riksdagen"]);
+  assert.equal(byId.notices.children[0].textContent, "Offline – visar sparade SVT-nyheter från 2026-11-13 14:05");
+});
+
+test("page: a saved version 1 copy, as an older page wrote it, is shown whole (R19.8)", async () => {
+  // The raw text an older page saved: version 1, seven fields per item, `category`.
+  const oldText = JSON.stringify({ ...newsFile(), sources: [{ id: "svt", name: "SVT", status: "ok",
+    lastSuccess: "2026-11-13T13:05:12Z", itemCount: 2 }] });
+  const storage = fakeStorage({ "newsReader.lastNews": oldText });
+  const { instance, byId } = setup({ files: { "sources.json": realSources }, storage });
+  await instance.start();
+  assert.deepEqual(headlinesOf(byId), ["Nyare rubrik om regeringen", "Äldre rubrik om riksdagen"]);
+  assert.equal(byId.notices.children[0].textContent, "Offline – visar sparade SVT-nyheter från 2026-11-13 14:05");
+  // Reading it again as text from storage gives topics to every item.
+  assert.ok(app.parseSavedNews(oldText, SOURCES, NOW).items.every((i) => i.topics.join() === "all-news,politics"));
+});
+
+test("page: a saved copy of another version is not used", async () => {
+  for (const version of [0, 3, "2"]) {
+    const storage = fakeStorage({ "newsReader.lastNews": JSON.stringify(newsFileV2({ version })) });
+    const { instance, byId } = setup({ files: { "sources.json": realSources }, storage });
+    await instance.start();
+    assert.equal(byId.notices.children[0].textContent, "Kunde inte hämta nyheter. Försök igen senare.");
+    assert.equal(byId.headlines.children.length, 0);
+  }
 });
 
 // ---------------------------------------------------------------- forbidden things

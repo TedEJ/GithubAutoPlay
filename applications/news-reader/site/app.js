@@ -111,15 +111,32 @@
   // ------------------------------------------------------------------------
   // news.json (and the saved copy of it)
 
-  // The parsed news.json -> a clean copy in the same shape, or null when the
-  // file cannot be used. Only the named fields are read (N1). Items of other
-  // than enabled build sources are dropped (Sveriges Radio items are never
-  // shown from a file, N10), as are items without a headline or with a link
+  // The topics of news.json and the topics that a version 1 file stands for (R18.4:
+  // its items were politics headlines). Order and ids are those of R13.1.
+  const TOPICS = logic.TOPIC_ORDER;
+  const V1_TOPICS = ["all-news", "politics"];
+
+  // A list of topic ids -> the known ones in the order of R13.1 without duplicates, or
+  // null when the value is not a list or no known id is left (R1.5, R19.2).
+  function readTopics(value) {
+    if (!Array.isArray(value) || value.length > TOPICS.length * 4) return null;
+    const known = TOPICS.filter((t) => value.includes(t));
+    return known.length > 0 ? known : null;
+  }
+
+  // The parsed news.json (version 1 or 2, R19.8) -> a clean copy in the shape of
+  // version 2, or null when the file cannot be used. Only the named fields are read
+  // (N1). Items of other than enabled build sources are dropped (Sveriges Radio items
+  // are never shown from a file, N10), as are items without a headline or with a link
   // that logic.checkUrl does not accept (R9.1). The source name comes from
-  // sources.json, the time text is recomputed by logic.js, and the id is
-  // recomputed from the link. Idempotent: a clean copy validates to itself.
+  // sources.json, the time text is recomputed by logic.js, and the id is recomputed
+  // from the link. Every item has `topics`: a version 1 item gets ["all-news",
+  // "politics"] (R18.4); a version 2 item with a missing or unusable list is dropped
+  // (R1.5). The status of each feed is kept when present (R19.3); a version 1 file has
+  // none. Idempotent: a clean copy validates to itself.
   function validateNews(data, sources, nowMs) {
-    if (!isObject(data) || data.version !== 1) return null;
+    if (!isObject(data) || (data.version !== 1 && data.version !== 2)) return null;
+    const version2 = data.version === 2;
     if (typeof data.generatedAt !== "string") return null;
     const generatedSeconds = logic.parseTime(data.generatedAt);
     if (generatedSeconds === null) return null;
@@ -137,6 +154,8 @@
       if (!source) continue;
       if (!isText(raw.title, MAX_TITLE) || raw.title.trim() === "") continue;
       if (!isText(raw.url, MAX_URL)) continue;
+      const topics = version2 ? readTopics(raw.topics) : V1_TOPICS.slice();
+      if (topics === null) continue;
       const normalised = logic.checkUrl(raw.url, source.allowedHosts);
       if (normalised === null) continue;
       const id = logic.itemId(normalised);
@@ -151,6 +170,7 @@
         url: raw.url.trim(),
         published,
         publishedDisplay: logic.displayTime(published),
+        topics,
       });
     }
 
@@ -159,33 +179,53 @@
       for (const raw of data.sources.slice(0, MAX_SOURCES)) {
         if (!isObject(raw) || typeof raw.id !== "string" || !bySource.has(raw.id)) continue;
         if (!STATUSES.includes(raw.status)) continue;
-        const count = Number.isInteger(raw.itemCount) && raw.itemCount >= 0 && raw.itemCount <= MAX_ITEMS
-          ? raw.itemCount : 0;
-        let lastSuccess = null;
-        if (typeof raw.lastSuccess === "string") {
-          const seconds = logic.parseTime(raw.lastSuccess);
-          if (seconds !== null) lastSuccess = logic.formatUtc(seconds);
-        }
         const entry = {
           id: raw.id,
           name: bySource.get(raw.id).name,
           status: raw.status,
-          lastSuccess,
-          itemCount: count,
+          lastSuccess: readLastSuccess(raw.lastSuccess),
+          itemCount: readCount(raw.itemCount),
         };
         if (raw.status !== "ok" && isText(raw.message, MAX_MESSAGE)) entry.message = raw.message;
+        if (version2 && Array.isArray(raw.feeds)) {
+          entry.feeds = [];
+          for (const feed of raw.feeds.slice(0, TOPICS.length)) {
+            if (!isObject(feed) || !TOPICS.includes(feed.topic) || !STATUSES.includes(feed.status)) continue;
+            const clean = {
+              topic: feed.topic,
+              status: feed.status,
+              lastSuccess: readLastSuccess(feed.lastSuccess),
+              itemCount: readCount(feed.itemCount),
+            };
+            if (feed.status !== "ok" && isText(feed.message, MAX_MESSAGE)) clean.message = feed.message;
+            entry.feeds.push(clean);
+          }
+        }
         statuses.push(entry);
       }
     }
 
+    // The topics that exist (R19.1): from a version 2 file the known ids in order; a
+    // version 1 file stands for Alla nyheter and Politik.
+    const topics = version2 ? readTopics(data.topics) : V1_TOPICS.slice();
     return {
-      version: 1,
+      version: 2,
       generatedAt,
       generatedAtDisplay: logic.displayTime(generatedAt),
-      category: "politics-sweden",
+      topics: topics === null ? [] : topics,
       sources: statuses,
       items,
     };
+  }
+
+  function readCount(value) {
+    return Number.isInteger(value) && value >= 0 && value <= MAX_ITEMS ? value : 0;
+  }
+
+  function readLastSuccess(value) {
+    if (typeof value !== "string") return null;
+    const seconds = logic.parseTime(value);
+    return seconds === null ? null : logic.formatUtc(seconds);
   }
 
   // Text from storage -> a clean news object, or null.
@@ -227,10 +267,15 @@
 
   // The list: the chosen sources' items, merged and sorted by logic.js (R5.5).
   // `liveItems` (optional): a Map from the id of a source that the page fetches
-  // itself to its items in memory.
+  // itself to its items in memory. Until the topic choice of F7, the page shows
+  // only the items of news.json that belong to Politik (R19.8), so the list is the
+  // one it was before news.json had topics; live items have no topics before F8
+  // and are all shown.
   function visibleItems(news, selected, liveItems) {
     const lists = selected.map((id) => {
-      const fromFile = news ? news.items.filter((item) => item.sourceId === id) : [];
+      const fromFile = news
+        ? news.items.filter((item) => item.sourceId === id && item.topics.includes("politics"))
+        : [];
       const live = liveItems && liveItems.get(id);
       return live ? fromFile.concat(live) : fromFile;
     });
@@ -283,10 +328,16 @@
     if (!news) return "Status okänd";
     const entry = news.sources.find((s) => s.id === source.id);
     if (!entry) return "Status okänd";
-    if (entry.status === "ok") return "Hämtad, " + countText(entry.itemCount);
-    if (entry.status === "blocked-by-robots") return "Blockerad enligt källans robots.txt";
-    if (entry.lastSuccess === null) return "Kunde inte hämtas";
-    return "Kunde inte hämtas sedan " + logic.displayTime(entry.lastSuccess);
+    // Until the topic choice of F7 the page shows Politik only, so the row uses the
+    // status and count of the feed of Politik when the entry has feeds (R19.8); a
+    // failure of another feed does not show here. Without feeds (a version 1 file)
+    // the source-level fields are used.
+    const feed = Array.isArray(entry.feeds) ? entry.feeds.find((f) => f.topic === "politics") : undefined;
+    const shown = feed || entry;
+    if (shown.status === "ok") return "Hämtad, " + countText(shown.itemCount);
+    if (shown.status === "blocked-by-robots") return "Blockerad enligt källans robots.txt";
+    if (shown.lastSuccess === null) return "Kunde inte hämtas";
+    return "Kunde inte hämtas sedan " + logic.displayTime(shown.lastSuccess);
   }
 
   // The rows of "Källor" (R4.6): name, note and status of each enabled source.
