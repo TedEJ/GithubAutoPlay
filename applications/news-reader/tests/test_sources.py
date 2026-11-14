@@ -134,11 +134,11 @@ def test_svt_is_collected_by_the_build(sources):
         assert feeds[topic]["url"] == SVT_ALL and feeds[topic]["method"] == "keywordFilter"
 
 
-def test_riksdagen_is_an_enabled_build_source_with_three_feeds_on_one_address(sources):
-    # R16.1, R16.2, R16.9: switched on by F7, together with the credit text on the page.
+def test_riksdagen_is_a_disabled_build_source_with_three_feeds_on_one_address(sources):
+    # R16.1, R16.2, R16.9: switched off again by the owner (D41); F7 only added the credit text on the page.
     rd = next(s for s in sources if s["id"] == "riksdagen")
     assert rd["name"] == "Riksdagen"
-    assert rd["enabled"] is True
+    assert rd["enabled"] is False
     assert rd["fetchedBy"] == "build"
     assert rd["storageAllowed"] is True
     assert rd["homepage"] == "https://www.riksdagen.se/"

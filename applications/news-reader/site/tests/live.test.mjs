@@ -201,7 +201,7 @@ test("the status of the source: fetched time and count in Källor, and in the li
   assert.match(srRow(t.byId), /Hämtad 14:30, 3 rubriker/);
   assert.equal(t.byId.updated.textContent, "Nyheter uppdaterade 2026-11-13 14:05 · Sveriges Radio hämtad 14:30");
   assert.equal(t.byId["bottom-line"].textContent,
-    "Rubriker och länkar från SVT, Sveriges Radio och Riksdagen. Klicka för att läsa hos källan.");
+    "Rubriker och länkar från SVT och Sveriges Radio. Klicka för att läsa hos källan.");
 });
 
 test("a headline is shown as given: entities decoded, tags and white space tidied, never cut", async () => {
@@ -274,7 +274,7 @@ test("only Sveriges Radio chosen: its items alone; nothing matching gives the em
   t2.state.feed.body = '<feed xmlns="' + NS + '">' + srEntry("Sport", 1, "2026-11-13T13:20:00Z", "Fotboll") + "</feed>";
   await t2.instance.start();
   assert.equal(t2.byId.empty.hidden, false);
-  // Riksdagen was added to the saved choice by the migration (R18.4); both chosen sources offer Politik.
+  // Riksdagen is switched off (D41), so the migration adds nothing; the chosen source offers Politik.
   assert.equal(t2.byId.empty.textContent, "Inga nyheter i ämnet Politik från valda källor.");
 });
 
@@ -717,7 +717,7 @@ test("memory only: choosing sources writes only the ids; the saved copy after a 
   box.fire("change");
   box.checked = true;
   box.fire("change");
-  assert.equal(storage.data["newsReader.selectedSources"], '["svt","sveriges-radio","riksdagen"]');
+  assert.equal(storage.data["newsReader.selectedSources"], '["svt","sveriges-radio"]'); // Riksdagen is switched off (D41): no migration
   // Only ids are written: the sources and the topic id (R18.3).
   assert.deepEqual(Object.keys(storage.data).sort(),
     ["newsReader.lastNews", "newsReader.selectedSources", "newsReader.selectedTopic"]);
