@@ -196,7 +196,8 @@
   // from KINDS.
   async function fetchAtom(fetchFn, url, options) {
     const opts = options || {};
-    const init = { credentials: "omit", cache: "no-store" };
+    // The referrer is not sent: the address of the page is not Sveriges Radio's business.
+    const init = { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" };
     if (opts.signal) init.signal = opts.signal;
     const timedOut = () => Boolean(opts.signal && opts.signal.aborted);
     let text;

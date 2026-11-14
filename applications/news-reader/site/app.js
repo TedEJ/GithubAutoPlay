@@ -266,8 +266,10 @@
 
   // The status text of a source that the page fetches itself (R7.6). `live` is
   // its state ({status: "idle" | "loading" | "ok" | "error", fetchedAt, items})
-  // or undefined. The text of a failure holds the source name only.
-  function browserStatus(source, live) {
+  // or undefined; `chosen` is false when the reader has unticked the source (then
+  // nothing is requested). The text of a failure holds the source name only.
+  function browserStatus(source, live, chosen) {
+    if (chosen === false) return "Inte vald – ingen hämtning";
     if (!live || live.status === "idle") return "Inte hämtad ännu";
     if (live.status === "error") return source.name + " kunde inte hämtas just nu";
     if (live.status === "loading") return "Hämtar …";
@@ -292,7 +294,7 @@
       checked: selected.includes(source.id),
       note: source.method === "keywordFilter" ? TEXT.keywordNote : "",
       status: source.fetchedBy === "browser"
-        ? browserStatus(source, live && live.get(source.id))
+        ? browserStatus(source, live && live.get(source.id), selected.includes(source.id))
         : buildStatus(source, news),
     }));
   }
@@ -512,10 +514,24 @@
     function onChoice() {
       // The ids of the ticked boxes, in the order of sources.json. Ids that are
       // no longer approved are not in it, so they are dropped here (R3.5).
+      const before = state.selected;
       state.selected = state.sources
         .filter((s) => sourceEls.get(s.id).input.checked)
         .map((s) => s.id);
+      const ticked = state.selected.filter((id) => !before.includes(id));
       writeKey(storage, KEY_SELECTED, JSON.stringify(state.selected));
+      // An unticked live source keeps nothing in memory. Its time of last request
+      // stays, so the call limits hold across unticking and ticking.
+      for (const source of state.sources) {
+        const live = state.live.get(source.id);
+        if (source.fetchedBy === "browser" && live && !state.selected.includes(source.id)) {
+          live.items = [];
+          if (!live.inFlight) live.status = "idle";
+        }
+      }
+      // Ticking a source fetches it if the limits allow (the first request of the
+      // page at once, later ones only 5 minutes after the last).
+      if (ticked.length > 0) startLive("choose", ticked);
       renderList();
       renderSources();
     }
@@ -571,9 +587,15 @@
           allowedHosts: source.allowedHosts,
           "politics-sweden": { method: source.method },
         }, state.keywords, env.now());
-        live.items = items;
-        live.fetchedAt = env.now();
-        live.status = "ok";
+        if (state.selected.includes(source.id)) {
+          live.items = items;
+          live.fetchedAt = env.now();
+          live.status = "ok";
+        } else {
+          // Unticked while the request ran: nothing is kept.
+          live.items = [];
+          live.status = "idle";
+        }
       } catch (e) {
         // Nothing from the error is used: not its message, not its type.
         live.items = [];
@@ -593,13 +615,16 @@
     // same moment, or a request that is still running, cannot make two requests.
     // The returned promise ends when the requests started now have ended; the
     // page does not wait for it (an SVT load never waits for Sveriges Radio).
-    function startLive(trigger) {
+    function startLive(trigger, only) {
       if (!state.sources) return Promise.resolve();
       const jobs = [];
       for (const source of state.sources) {
         if (source.fetchedBy !== "browser") continue;
+        if (only && !only.includes(source.id)) continue;
         const live = liveOf(source.id);
         if (live.inFlight) continue;
+        // An unticked source is not requested at all (the reader asked not to see it).
+        if (!state.selected.includes(source.id)) continue;
         const now = env.now();
         if (!logic.liveFetchAllowed(trigger, live.last, now, doc.hidden === true)) continue;
         live.last = now;

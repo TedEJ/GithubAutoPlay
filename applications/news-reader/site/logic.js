@@ -658,11 +658,16 @@
   const LIVE_SCHEDULED_MS = 10 * 60 * 1000; // timer and "tab visible again"
   const LIVE_MIN_GAP_MS = 5 * 60 * 1000; // never two requests closer than this
   const CLOCK_RESET_MS = 60 * 60 * 1000;
+  // The first request of a page is noted a little after the timer was started
+  // (sources.json is read first), so the first timer tick comes a little less
+  // than 10 minutes after it. The timer may count that as 10 minutes.
+  const TIMER_TOLERANCE_MS = 30 * 1000;
 
   // May a request to a source that the page fetches itself be sent now?
   // `trigger`: "open" (the page was opened), "timer" or "visible" (scheduled:
   // at most one request every 10 minutes), "refresh" (the button "Uppdatera":
-  // at least 5 minutes since the last request). `lastMs`: when the last request
+  // at least 5 minutes since the last request), "choose" (the reader ticked the
+  // source: as "refresh"). `lastMs`: when the last request
   // to this source was started (epoch ms), or null when there was none.
   // `nowMs`: now. `hidden`: the tab is hidden: nothing is sent then. A clock
   // that has been set back by up to an hour counts as "not long enough ago"; a
@@ -672,7 +677,8 @@
     if (lastMs === null) return true;
     const elapsed = nowMs - lastMs;
     if (elapsed < -CLOCK_RESET_MS) return true;
-    if (trigger === "timer" || trigger === "visible") return elapsed >= LIVE_SCHEDULED_MS;
+    if (trigger === "timer") return elapsed >= LIVE_SCHEDULED_MS - TIMER_TOLERANCE_MS;
+    if (trigger === "visible") return elapsed >= LIVE_SCHEDULED_MS;
     return elapsed >= LIVE_MIN_GAP_MS;
   }
 

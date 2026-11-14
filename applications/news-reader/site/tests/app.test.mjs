@@ -217,7 +217,8 @@ test("sourceRows: note, checkbox and status (R4.6, R6.2)", () => {
   });
   assert.equal(rows[1].checked, false);
   assert.equal(rows[1].note, "Urval med nyckelord – ungefärligt");
-  assert.equal(rows[1].status, "Inte hämtad ännu"); // no live state yet (S11)
+  assert.equal(rows[1].status, "Inte vald – ingen hämtning"); // unticked (S11)
+  assert.equal(app.sourceRows(SOURCES, news, ["svt", "sveriges-radio"])[1].status, "Inte hämtad ännu");
   const failed = newsFile({ sources: [{ id: "svt", status: "error", lastSuccess: "2026-11-13T09:00:00Z", itemCount: 1 }] });
   rows = app.sourceRows(SOURCES, app.validateNews(failed, SOURCES, NOW), ["svt"]);
   assert.equal(rows[0].status, "Kunde inte hämtas sedan 2026-11-13 10:00");

@@ -215,17 +215,27 @@ test("a headline is shown as given: entities decoded, tags and white space tidie
   assert.deepEqual(got, ["Riksdagen & regeringen åäö", long]);
 });
 
-test("unticking Sveriges Radio hides its items; ticking shows them again without a new request", async () => {
+test("unticking Sveriges Radio hides and drops its items; ticking again within 5 minutes makes no request", async () => {
   const t = setup();
   await t.instance.start();
   const box = t.byId.sources.children[1].children[0];
   box.checked = false;
   box.fire("change");
   assert.deepEqual(headlines(t.byId), ["SVT: rubrik om regeringen", "SVT: rubrik om riksdagen"]);
+  assert.equal(t.instance.state.live.get("sveriges-radio").items.length, 0, "dropped from memory");
   box.checked = true;
   box.fire("change");
+  await t.wait(); await t.wait();
+  assert.equal(t.feedCalls().length, 1, "the 5-minute rule holds between any two requests");
+  assert.deepEqual(headlines(t.byId).length, 2, "nothing is held, so nothing is shown yet");
+  assert.match(srRow(t.byId), /Inte hämtad ännu/);
+  // After 5 minutes, ticking again fetches.
+  box.checked = false; box.fire("change");
+  t.clock.now += 5 * MIN;
+  box.checked = true; box.fire("change");
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 2);
   assert.equal(headlines(t.byId).length, 5);
-  assert.equal(t.feedCalls().length, 1);
 });
 
 test("only Sveriges Radio chosen: its items alone; nothing matching gives the empty notice, not while it loads", async () => {
@@ -288,7 +298,8 @@ test("the request: the address from sources.json, credentials omit, cache no-sto
   assert.equal(url, FEED_URL);
   assert.equal(init.credentials, "omit");
   assert.equal(init.cache, "no-store");
-  assert.deepEqual(Object.keys(init).sort(), ["cache", "credentials", "signal"]);
+  assert.equal(init.referrerPolicy, "no-referrer", "the address of the page is not sent");
+  assert.deepEqual(Object.keys(init).sort(), ["cache", "credentials", "referrerPolicy", "signal"]);
   // The timeout is 15 seconds and is cleared when the request ends.
   const timer = t.timers.find((x) => x.ms === 15000);
   assert.ok(timer);
@@ -517,6 +528,28 @@ test("a failed request is not retried before the next allowed time (R7.6)", asyn
   assert.match(srRow(t.byId), /Hämtad/);
 });
 
+test("the first timer tick calls SR even when sources.json was slow (the first request is stamped a little after the timer started)", async () => {
+  const t = setup();
+  // Reading sources.json takes 2 seconds on the fake clock.
+  const inner = t.state.files["sources.json"];
+  t.state.files["sources.json"] = { get version() { t.clock.now += 2000; return inner.version; }, sources: inner.sources };
+  const start = t.clock.now;
+  await t.instance.start();
+  assert.equal(t.feedCalls().length, 1);
+  assert.ok(t.clock.now - start >= 2000, "the delay happened");
+  t.clock.now = start + 10 * MIN; // the first tick of the 10-minute timer
+  t.intervals[0].fn();
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 2, "SR is refreshed at the first tick");
+  // Not more often: Uppdatera and a visible-again right after, and a second tick 5 minutes later.
+  t.byId.refresh.fire("click");
+  t.doc.fire("visibilitychange");
+  t.clock.now += 5 * MIN;
+  t.intervals[0].fn();
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 2);
+});
+
 test("no request when sources.json cannot be read", async () => {
   const t = setup();
   delete t.state.files["sources.json"];
@@ -704,8 +737,12 @@ test("liveFetchAllowed (logic.js): the rules of R7.2", async () => {
   assert.equal(f("open", null, 1000, true), false, "hidden: never");
   assert.equal(f("refresh", 0, 5 * MIN - 1, false), false);
   assert.equal(f("refresh", 0, 5 * MIN, false), true);
-  assert.equal(f("timer", 0, 10 * MIN - 1, false), false);
+  assert.equal(f("timer", 0, 10 * MIN - 30 * 1000 - 1, false), false);
+  assert.equal(f("timer", 0, 10 * MIN - 30 * 1000, false), true, "the timer may be 30 seconds early");
   assert.equal(f("timer", 0, 10 * MIN, false), true);
+  assert.equal(f("choose", 0, 5 * MIN - 1, false), false);
+  assert.equal(f("choose", 0, 5 * MIN, false), true);
+  assert.equal(f("choose", null, 0, false), true);
   assert.equal(f("visible", 0, 10 * MIN - 1, false), false);
   assert.equal(f("visible", 0, 10 * MIN, false), true);
   assert.equal(f("refresh", 10 * MIN, 10 * MIN, false), false);
@@ -746,4 +783,125 @@ test("visibleItems with live items: merged and sorted with the others", () => {
   assert.deepEqual(app.visibleItems(news, ["svt"], live).map((i) => i.sourceId), ["svt", "svt"]);
   assert.deepEqual(app.visibleItems(null, ["sveriges-radio"], live).map((i) => i.title), ["SR"]);
   assert.deepEqual(app.visibleItems(null, ["sveriges-radio"]), []);
+});
+
+// ---------------------------------------------------------------- attributes
+
+test("no attribute anywhere on the page holds a Sveriges Radio headline (title, data-, aria-label, ...)", async () => {
+  const t = setup();
+  await t.instance.start();
+  const titles = headlines(t.byId).filter((h) => h.includes(SR_MARK));
+  assert.equal(titles.length, 3);
+  const root = t.byId;
+  const all = [];
+  const walk = (n) => { all.push(n); n.children.forEach(walk); };
+  for (const id of Object.keys(root)) walk(root[id]);
+  walk(t.doc.documentElement);
+  let checked = 0;
+  for (const node of all) {
+    for (const [name, value] of Object.entries(node.attrs)) {
+      checked++;
+      for (const title of titles) assert.ok(!value.includes(title), name + " holds a headline");
+      assert.ok(!value.includes(SR_MARK + " "), name + " holds headline text");
+    }
+  }
+  assert.ok(checked > 20, "attributes were looked at");
+});
+
+// ---------------------------------------------------------------- unticked source
+
+test("unticked Sveriges Radio: no request on load, timer, Uppdatera or visibility; status says so", async () => {
+  const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["svt"]' }) });
+  await t.instance.start();
+  assert.equal(t.feedCalls().length, 0);
+  assert.equal(t.calls.filter(([u]) => u === "politics-keywords.json").length, 0, "not even the keyword list");
+  assert.match(srRow(t.byId), /Inte vald – ingen hämtning/);
+  for (let k = 0; k < 5; k++) {
+    t.clock.now += 11 * MIN;
+    t.intervals[0].fn();
+    t.byId.refresh.fire("click");
+    t.doc.fire("visibilitychange");
+    for (let i = 0; i < 10; i++) await t.wait();
+  }
+  assert.equal(t.feedCalls().length, 0);
+  assert.deepEqual(headlines(t.byId), ["SVT: rubrik om regeringen", "SVT: rubrik om riksdagen"]);
+  assert.equal(t.byId.updated.textContent, "SVT uppdaterad 2026-11-13 14:05");
+});
+
+test("ticking Sveriges Radio the first time in a page load fetches at once; the items appear", async () => {
+  const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["svt"]' }) });
+  await t.instance.start();
+  const box = t.byId.sources.children[1].children[0];
+  box.checked = true;
+  box.fire("change");
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 1);
+  assert.equal(headlines(t.byId).length, 5);
+  assert.match(srRow(t.byId), /Hämtad 14:30, 3 rubriker/);
+});
+
+test("ticking another source does not fetch Sveriges Radio; ticking SR twice quickly gives one request", async () => {
+  const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '[]' }) });
+  await t.instance.start();
+  const svtBox = t.byId.sources.children[0].children[0];
+  const srBox = t.byId.sources.children[1].children[0];
+  svtBox.checked = true; svtBox.fire("change");
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 0);
+  srBox.checked = true; srBox.fire("change");
+  srBox.checked = false; srBox.fire("change");
+  srBox.checked = true; srBox.fire("change");
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 1);
+  // SVT unticked and ticked 20 minutes later: SR is not requested because of that.
+  t.clock.now += 20 * MIN;
+  svtBox.checked = false; svtBox.fire("change");
+  svtBox.checked = true; svtBox.fire("change");
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 1);
+});
+
+test("unticking while a request runs: nothing is kept when it ends", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const t = setup();
+  t.state.feed.gate = gate;
+  const started = t.instance.start();
+  for (let i = 0; i < 10; i++) await t.wait();
+  const box = t.byId.sources.children[1].children[0];
+  box.checked = false; box.fire("change");
+  release();
+  await started;
+  assert.equal(t.instance.state.live.get("sveriges-radio").items.length, 0);
+  assert.equal(headlines(t.byId).length, 2);
+  assert.match(srRow(t.byId), /Inte vald – ingen hämtning/);
+  assert.equal(t.feedCalls().length, 1);
+});
+
+test("a long random session with ticking: never a request while unticked, never two within 5 minutes", async () => {
+  const t = setup();
+  await t.instance.start();
+  let seed = 11;
+  const random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const box = t.byId.sources.children[1].children[0];
+  const times = [t.clock.now];
+  let requests = 1;
+  for (let step = 0; step < 400; step++) {
+    t.clock.now += Math.floor(random() * 6 * MIN);
+    const r = random();
+    if (r < 0.2) t.byId.refresh.fire("click");
+    else if (r < 0.35) t.intervals[0].fn();
+    else if (r < 0.5) { t.doc.hidden = !t.doc.hidden; t.doc.fire("visibilitychange"); }
+    else { box.checked = !box.checked; box.fire("change"); }
+    for (let i = 0; i < 10; i++) await t.wait();
+    if (t.feedCalls().length > requests) {
+      requests = t.feedCalls().length;
+      assert.equal(box.checked, true, "requested while unticked");
+      assert.equal(t.doc.hidden, false, "requested while hidden");
+      times.push(t.clock.now);
+    }
+    if (!box.checked) assert.equal(t.instance.state.live.get("sveriges-radio").items.length, 0);
+  }
+  assert.ok(times.length > 8);
+  for (let i = 1; i < times.length; i++) assert.ok(times[i] - times[i - 1] >= 5 * MIN);
 });

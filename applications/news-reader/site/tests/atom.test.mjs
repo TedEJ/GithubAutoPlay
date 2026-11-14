@@ -347,9 +347,9 @@ test("fetchAtom: the request has credentials omit and cache no-store, and the en
   assert.equal(entries.length, 1);
   assert.equal(seen.length, 1);
   assert.equal(seen[0][0], "https://feed.example/x");
-  assert.deepEqual(seen[0][1], { credentials: "omit", cache: "no-store", signal: controller.signal });
+  assert.deepEqual(seen[0][1], { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer", signal: controller.signal });
   await atom.fetchAtom(fetchFn, "https://feed.example/x", { DOMParser: FakeDOMParser });
-  assert.deepEqual(seen[1][1], { credentials: "omit", cache: "no-store" });
+  assert.deepEqual(seen[1][1], { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" });
 });
 
 test("fetchAtom: every failure is an AtomError with a fixed message that holds nothing from the feed or the error", async () => {
