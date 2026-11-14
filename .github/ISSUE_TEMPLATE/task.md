@@ -17,6 +17,9 @@ assignees: ""
 - [ ] <!-- Small, concrete step -->
 
 ## Notes
+Depends on: None
+<!-- Required. List the issues that must be closed before this one is taken, for example
+     `Depends on: #12, #15`, or write `Depends on: None`. See section 2 of WORKFLOW.md. -->
 <!-- Constraints, links, decisions that are already made, open questions. -->
 
 ## Acceptance criteria

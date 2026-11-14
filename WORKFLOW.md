@@ -17,6 +17,7 @@ Every issue must have exactly one workload level label. The level shows how many
 3. If the level is wrong, update the level label (higher or lower) and stop. Do not perform the issue at the wrong level.
 4. If the issue is too large for what you can do now, take another issue that is within reach.
 5. If the requirements are unclear or conflict with this file, add a comment with the question instead of guessing.
+6. Check the dependencies. Every issue has a line `Depends on: #N, #M` (or `Depends on: None`) in its Notes section, and the line is required. It lists the earlier issues that must be finished first, because this issue builds on their result. The manager checks that every listed issue is closed as completed before the issue is taken, and a pull request for an issue is not started while a dependency is open. An issue that depends on an open issue is not taken: the worker or manager tells the owner which issue is still open and takes another issue instead. Issues are closed by the owner or the manager after the merge (see section 5), so a dependency counts as done only once its pull request is merged and the issue is closed. If the line is missing, add a comment with the question instead of guessing. There is no automatic check for this rule.
 
 ## 3. Doing the work
 1. Fetch the latest `main`.
@@ -45,7 +46,7 @@ All gates must pass. If one fails, fix it on the same branch and run the gates a
 9. Name the issue in the pull request description: `Closes #N` if the pull request finishes issue #N, or `Refs #N` if it does not. Issues named with `Closes #N` were not closed after merges made by the auto-merge Action (see #28), so do not rely on it. The owner closes the issue after the pull request is merged (GitHub also closes it by itself when the owner merges by hand). Do not wait for the issue to close, and do not close it by hand. In the report after the last pull request of an issue, say that the owner closes the issue.
 
 ## 6. Follow-up work
-Create a new issue for any follow-up found during the work or raised in pull request comments. Set a workload level (Low, Medium or High) on every new issue. New issues use an issue template so that goal, tasks and acceptance criteria are always present: `.github/ISSUE_TEMPLATE/task.md` for ordinary tasks and `.github/ISSUE_TEMPLATE/gui-task.md` for changes to a window that the owner tests by hand (it adds an owner check list and reminds that the pull request needs the label `no-auto-merge`).
+Create a new issue for any follow-up found during the work or raised in pull request comments. Set a workload level (Low, Medium or High) on every new issue. New issues use an issue template so that goal, tasks and acceptance criteria are always present: `.github/ISSUE_TEMPLATE/task.md` for ordinary tasks and `.github/ISSUE_TEMPLATE/gui-task.md` for changes to a window that the owner tests by hand (it adds an owner check list and reminds that the pull request needs the label `no-auto-merge`). Both templates have the required line `Depends on:` in the Notes section (see section 2); a follow-up issue lists there the issues it depends on, or `None`.
 
 ## 7. Hard rules
 - Never push directly to `main`.

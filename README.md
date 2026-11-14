@@ -34,7 +34,7 @@ The check currently verifies that the required files exist and that relative lin
 
 Changing branch protection and repository settings requires owner rights and is done by the repository owner. The settings, workflows and token requirements are collected in [GitRequirements/README.md](GitRequirements/README.md).
 
-Helper scripts for checks, GUI verification and pull request descriptions live in `scripts/`, and [WORKFLOW.md](WORKFLOW.md) explains when to use each one. Issue templates for ordinary tasks and for GUI tasks are in `.github/ISSUE_TEMPLATE/`.
+Helper scripts for checks, GUI verification and pull request descriptions live in `scripts/`, and [WORKFLOW.md](WORKFLOW.md) explains when to use each one. Issue templates for ordinary tasks and for GUI tasks are in `.github/ISSUE_TEMPLATE/`. Every issue needs a line `Depends on: #N, #M` (or `Depends on: None`) in its Notes section, and an issue is only taken when all issues it depends on are closed (see section 2 of [WORKFLOW.md](WORKFLOW.md)).
 
 Work can be split between a manager and worker agents (a Designer/Developer and a Reviewer); the roles and the flow are in section 10 of [WORKFLOW.md](WORKFLOW.md).
 
