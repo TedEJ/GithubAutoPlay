@@ -217,7 +217,7 @@ test("sourceRows: note, checkbox and status (R4.6, R6.2)", () => {
   });
   assert.equal(rows[1].checked, false);
   assert.equal(rows[1].note, "Urval med nyckelord – ungefärligt");
-  assert.equal(rows[1].status, "Inte tillgänglig ännu"); // S11 replaces this
+  assert.equal(rows[1].status, "Inte hämtad ännu"); // no live state yet (S11)
   const failed = newsFile({ sources: [{ id: "svt", status: "error", lastSuccess: "2026-11-13T09:00:00Z", itemCount: 1 }] });
   rows = app.sourceRows(SOURCES, app.validateNews(failed, SOURCES, NOW), ["svt"]);
   assert.equal(rows[0].status, "Kunde inte hämtas sedan 2026-11-13 10:00");
@@ -348,7 +348,7 @@ test("page: the headline is written as text, never as markup", async () => {
   assert.equal(link.textContent, "<img src=x onerror=alert(1)> & <b>fet</b>");
 });
 
-test("page: Källor lists each source with note and status; the Sveriges Radio row says not available", async () => {
+test("page: Källor lists each source with note and status; the Sveriges Radio row says it could not be fetched here", async () => {
   const { instance, byId } = setup({ files: { "sources.json": realSources, "news.json": newsFile() } });
   await instance.start();
   const rows = byId.sources.children;
@@ -358,7 +358,8 @@ test("page: Källor lists each source with note and status; the Sveriges Radio r
   assert.match(text[0], /Urval med nyckelord – ungefärligt/);
   assert.match(text[0], /Hämtad, 2 rubriker/);
   assert.match(text[1], /Sveriges Radio/);
-  assert.match(text[1], /Inte tillgänglig ännu/);
+  // This fake serves neither the keyword list nor the feed: the live fetch fails (R7.6).
+  assert.match(text[1], /Sveriges Radio kunde inte hämtas just nu/);
   const input = rows[0].children[0];
   const label = rows[0].children[1];
   const ids = rows.flatMap((r) => [r.children[0].attrs.id, r.children[2].attrs.id]);
@@ -554,9 +555,10 @@ test("refresh: a load that is already running is not started twice", async () =>
   assert.equal(calls.length, 1, "only one request while a load is running");
   release();
   await Promise.all([first, second, third]);
-  assert.deepEqual(calls, ["sources.json", "news.json"]);
+  assert.deepEqual(calls.filter((u) => u.endsWith(".json")).sort(),
+    ["news.json", "politics-keywords.json", "sources.json"]);
   await instance.load();
-  assert.equal(calls.length, 3);
+  assert.equal(calls.filter((u) => u === "news.json").length, 2);
 });
 
 test("refresh: the button is never disabled (that would drop the focus), it is marked busy", async () => {
@@ -645,8 +647,11 @@ test("index.html: the Content-Security-Policy is exactly the intended one", () =
   const m = /<meta http-equiv="Content-Security-Policy" content="([^"]*)">/.exec(html);
   assert.ok(m, "CSP meta tag");
   assert.equal(m[1],
-    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'");
+    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://api.sr.se; base-uri 'none'; form-action 'none'");
   assert.ok(!/\*/.test(m[1]) && !/unsafe/.test(m[1]));
+  // Only connect-src names another site, and only the one that S11 needs.
+  const other = m[1].split(";").map((d) => d.trim()).filter((d) => /https?:|\/\//.test(d));
+  assert.deepEqual(other, ["connect-src 'self' https://api.sr.se"]);
 });
 
 test("index.html: the refresh button and Källor need the script", () => {
@@ -670,9 +675,13 @@ test("index.html: structure, language, noindex, no inline script or handler", ()
   assert.ok(!/<style/i.test(html) && !/\sstyle\s*=/i.test(html), "inline style");
 });
 
-for (const name of ["index.html", "app.js", "style.css"]) {
+for (const name of ["index.html", "app.js", "atom.js", "style.css"]) {
   test(name + ": no forbidden constructs", () => {
-    const text = read(name);
+    let text = read(name);
+    // The two addresses that are allowed to appear: the one site named in the CSP
+    // and the Atom namespace name (a name, never requested).
+    if (name === "index.html") text = text.replace("https://api.sr.se", "");
+    if (name === "atom.js") text = text.replace('"http://www.w3.org/2005/Atom"', "");
     const forbidden = [
       [/innerHTML|outerHTML|insertAdjacentHTML|document\.write/, "HTML injection"],
       [/\beval\s*\(|new\s+Function\s*\(|setTimeout\s*\(\s*["'`]|setInterval\s*\(\s*["'`]/, "eval"],
@@ -691,9 +700,22 @@ for (const name of ["index.html", "app.js", "style.css"]) {
   });
 }
 
-test("app.js: only the fetches of sources.json and news.json", () => {
+test("app.js: only the own files are fetched by name; the feed address comes from sources.json", () => {
   const text = read("app.js");
   const calls = text.match(/fetchJson\("[^"]*"\)/g) || [];
-  assert.deepEqual(calls.sort(), ['fetchJson("news.json")', 'fetchJson("sources.json")']);
+  assert.deepEqual(calls.sort(),
+    ['fetchJson("news.json")', 'fetchJson("politics-keywords.json")', 'fetchJson("sources.json")']);
+  // One call of fetch for the own files, and the feed request goes through atom.js.
   assert.equal((text.match(/env\.fetch\(/g) || []).length, 1);
+  assert.equal((text.match(/atom\.fetchAtom\(/g) || []).length, 1);
+  assert.ok(!/sr\.se/i.test(text), "no Sveriges Radio address in app.js");
+});
+
+test("atom.js: no DOM rendering, no storage, no timers, no console", () => {
+  const code = read("atom.js").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+  for (const re of [/\bdocument\b/, /\bwindow\b/, /createElement|appendChild|textContent\s*=/,
+    /localStorage|sessionStorage|indexedDB|\bcaches\b|cookie/, /setTimeout|setInterval|Date\.now/,
+    /console/, /\bsr\.se\b/i]) {
+    assert.ok(!re.test(code), "atom.js uses " + re);
+  }
 });

@@ -652,6 +652,30 @@
     return sortItems([].concat(...lists), true);
   }
 
+  // ------------------------------------------------------------------------
+  // Call limits of the live fetch (R7.2)
+
+  const LIVE_SCHEDULED_MS = 10 * 60 * 1000; // timer and "tab visible again"
+  const LIVE_MIN_GAP_MS = 5 * 60 * 1000; // never two requests closer than this
+  const CLOCK_RESET_MS = 60 * 60 * 1000;
+
+  // May a request to a source that the page fetches itself be sent now?
+  // `trigger`: "open" (the page was opened), "timer" or "visible" (scheduled:
+  // at most one request every 10 minutes), "refresh" (the button "Uppdatera":
+  // at least 5 minutes since the last request). `lastMs`: when the last request
+  // to this source was started (epoch ms), or null when there was none.
+  // `nowMs`: now. `hidden`: the tab is hidden: nothing is sent then. A clock
+  // that has been set back by up to an hour counts as "not long enough ago"; a
+  // bigger step back is taken as a reset and allows the request.
+  function liveFetchAllowed(trigger, lastMs, nowMs, hidden) {
+    if (hidden) return false;
+    if (lastMs === null) return true;
+    const elapsed = nowMs - lastMs;
+    if (elapsed < -CLOCK_RESET_MS) return true;
+    if (trigger === "timer" || trigger === "visible") return elapsed >= LIVE_SCHEDULED_MS;
+    return elapsed >= LIVE_MIN_GAP_MS;
+  }
+
   const api = {
     version() { return 1; },
     MAX_ITEMS,
@@ -674,6 +698,7 @@
     selectItems,
     sortItems,
     mergeItems,
+    liveFetchAllowed,
   };
 
   if (typeof module !== "undefined" && module.exports) {
