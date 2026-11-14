@@ -14,7 +14,7 @@ import { FakeDOMParser } from "./xml-fake.mjs";
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const realSources = JSON.parse(fs.readFileSync(path.join(ROOT, "sources.json"), "utf8"));
 const keywordFile = JSON.parse(fs.readFileSync(path.join(ROOT, "politics-keywords.json"), "utf8"));
-const FEED_URL = realSources.sources.find((s) => s.id === "sveriges-radio")["politics-sweden"].url;
+const FEED_URL = realSources.sources.find((s) => s.id === "sveriges-radio").feeds.find((f) => f.topic === "politics").url;
 
 const NOW = Date.parse("2026-11-13T13:30:00Z");
 const MIN = 60 * 1000;
@@ -312,7 +312,7 @@ test("the request: the address from sources.json, credentials omit, cache no-sto
 test("a source without a usable https address is never requested and shows the failure status", async () => {
   const t = setup();
   const files = JSON.parse(JSON.stringify(realSources));
-  files.sources[1]["politics-sweden"].url = "http://api.sr.se/api/rss/program/83";
+  files.sources[1].feeds.find((f) => f.topic === "politics").url = "http://api.sr.se/api/rss/program/83";
   t.state.files["sources.json"] = files;
   await t.instance.start();
   assert.equal(t.feedCalls().length, 0);
@@ -532,7 +532,7 @@ test("the first timer tick calls SR even when sources.json was slow (the first r
   const t = setup();
   // Reading sources.json takes 2 seconds on the fake clock.
   const inner = t.state.files["sources.json"];
-  t.state.files["sources.json"] = { get version() { t.clock.now += 2000; return inner.version; }, sources: inner.sources };
+  t.state.files["sources.json"] = { get version() { t.clock.now += 2000; return inner.version; }, topics: inner.topics, sources: inner.sources };
   const start = t.clock.now;
   await t.instance.start();
   assert.equal(t.feedCalls().length, 1);
@@ -758,7 +758,7 @@ test("validateSources: a browser source carries its feed address from sources.js
   assert.equal("url" in sources[0], false);
   for (const bad of ["http://api.sr.se/x", "ftp://x/y", "javascript:alert(1)", "https://", "https://a b", "", 5, null]) {
     const copy = JSON.parse(JSON.stringify(realSources));
-    copy.sources[1]["politics-sweden"].url = bad;
+    copy.sources[1].feeds.find((f) => f.topic === "politics").url = bad;
     assert.equal(app.validateSources(copy)[1].url, "", String(bad));
   }
 });

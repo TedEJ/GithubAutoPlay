@@ -586,7 +586,10 @@
   // sources.json, `keywords` the result of validateKeywords, `now` as above.
   function selectItems(entries, source, keywords, now) {
     const nowMs = toMillis(now);
-    const method = source["politics-sweden"].method;
+    // The feed entry of the topic Politik (R14.7); the page evaluates no other topic until F8.
+    const feed = Array.isArray(source.feeds) ? source.feeds.find((f) => f && f.topic === "politics") : undefined;
+    if (!feed) throw new Error("source " + JSON.stringify(source.id) + " has no feed entry for the topic politics");
+    const method = feed.method;
     let useKeywords;
     if (method === "keywordFilter") useKeywords = true;
     else if (method === "feed") useKeywords = false;

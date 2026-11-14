@@ -48,10 +48,90 @@ test("validateSources keeps enabled sources and only the fields the page uses", 
 });
 
 test("validateSources rejects unusable files", () => {
-  for (const bad of [null, [], "x", {}, { version: 2, sources: [] }, { version: 1, sources: [] },
-    { version: 1, sources: [{ id: 1 }] }, { version: 1, sources: "x" }]) {
+  for (const bad of [null, [], "x", {}, { version: 3, sources: [] }, { version: 2, sources: [] },
+    { version: 2, sources: [{ id: 1 }] }, { version: 2, sources: "x" }]) {
     assert.equal(app.validateSources(bad), null);
   }
+});
+
+// sources.json version 2 (F3, R14.7): hand-written samples, not the real file.
+const TOPICS = [
+  { id: "all-news", label: "Alla nyheter" },
+  { id: "politics", label: "Politik", keywords: "politics-keywords.json" },
+  { id: "nature", label: "Natur", keywords: "nature-keywords.json" },
+  { id: "ai", label: "AI", keywords: "ai-keywords.json" },
+];
+const ALL = "https://build.example.invalid/all.xml";
+const POL = "https://build.example.invalid/politics.xml";
+const LIVE = "https://live.example.invalid/feed";
+const v2File = (extra = {}) => ({
+  version: 2,
+  topics: TOPICS,
+  sources: [
+    { id: "b", name: "Build", enabled: true, fetchedBy: "build", storageAllowed: true,
+      homepage: "https://build.example.invalid/", allowedHosts: ["example.invalid"],
+      feeds: [
+        { topic: "all-news", method: "feed", url: ALL },
+        { topic: "politics", method: "keywordFilter", url: POL },
+        { topic: "nature", method: "keywordFilter", url: ALL },
+        { topic: "ai", method: "keywordFilter", matchOn: "title", url: ALL },
+      ], ...extra },
+    { id: "l", name: "Live", enabled: true, fetchedBy: "browser", storageAllowed: false,
+      homepage: "https://live.example.invalid/", allowedHosts: ["example.invalid"],
+      feeds: TOPICS.map((t) => ({ topic: t.id, method: t.id === "all-news" ? "feed" : "keywordFilter", url: LIVE })) },
+  ],
+});
+
+test("validateSources reads version 2: the politics feed entry gives the method and, for a browser source, the address", () => {
+  const got = app.validateSources(v2File());
+  assert.deepEqual(got, [
+    { id: "b", name: "Build", fetchedBy: "build", allowedHosts: ["example.invalid"], method: "keywordFilter" },
+    { id: "l", name: "Live", fetchedBy: "browser", allowedHosts: ["example.invalid"], method: "keywordFilter", url: LIVE },
+  ]);
+});
+
+test("validateSources: the order of the feed entries does not matter, other topics are not read", () => {
+  const data = v2File();
+  data.sources[0].feeds.reverse();
+  data.sources[0].feeds.find((f) => f.topic === "nature").method = "categoryFilter";
+  assert.equal(app.validateSources(data)[0].method, "keywordFilter");
+});
+
+test("validateSources accepts credit, linkHosts and matchOn without showing them", () => {
+  const data = v2File({ credit: "Källa: Exempel", linkHosts: ["www.example.invalid"] });
+  const got = app.validateSources(data);
+  assert.equal(got.length, 2);
+  assert.deepEqual(Object.keys(got[0]).sort(), ["allowedHosts", "fetchedBy", "id", "method", "name"]);
+});
+
+test("validateSources refuses version 1 (R14.6, R14.7)", () => {
+  const v1 = { version: 1, sources: [{ id: "b", name: "Build", enabled: true, fetchedBy: "build",
+    allowedHosts: ["example.invalid"], "politics-sweden": { method: "keywordFilter", url: POL } }] };
+  assert.equal(app.validateSources(v1), null);
+  for (const version of ["2", 2.5, null, undefined, 0]) assert.equal(app.validateSources({ ...v2File(), version }), null);
+});
+
+test("validateSources: a source without a politics entry has no method and no address, as a source with a bad one had before", () => {
+  const data = v2File();
+  data.sources[0].feeds = data.sources[0].feeds.filter((f) => f.topic !== "politics");
+  data.sources[1].feeds = data.sources[1].feeds.filter((f) => f.topic !== "politics");
+  const [b, l] = app.validateSources(data);
+  assert.equal(b.method, "");
+  assert.equal(l.method, "");
+  assert.equal(l.url, "");
+  for (const feeds of [undefined, null, "x", [], [null, 5, { topic: "politics" }]]) {
+    const copy = v2File();
+    copy.sources[0].feeds = feeds;
+    assert.equal(app.validateSources(copy)[0].method, "");
+  }
+});
+
+test("validateSources: the real file gives the same two sources and fields as before F3", () => {
+  assert.deepEqual(SOURCES, [
+    { id: "svt", name: "SVT", fetchedBy: "build", allowedHosts: ["svt.se"], method: "keywordFilter" },
+    { id: "sveriges-radio", name: "Sveriges Radio", fetchedBy: "browser", allowedHosts: ["sverigesradio.se"],
+      method: "keywordFilter", url: "https://api.sr.se/api/rss/program/83" },
+  ]);
 });
 
 test("joinNames and the bottom line come from the source names", () => {
@@ -452,6 +532,16 @@ test("page: an unusable news.json counts as a failed load", async () => {
     files: { "sources.json": realSources, "news.json": "<html>not json</html>" } });
   await instance.start();
   assert.equal(byId.notices.children[0].textContent, "Kunde inte hämta nyheter. Försök igen senare.");
+});
+
+test("page: a version 1 sources.json gives the same generic failure text and no list (R14.6)", async () => {
+  const v1 = { version: 1, sources: [{ id: "svt", name: "SVT", enabled: true, fetchedBy: "build",
+    allowedHosts: ["svt.se"], "politics-sweden": { method: "keywordFilter", url: "https://www.svt.se/x.xml" } }] };
+  const { instance, byId } = setup({ files: { "sources.json": v1, "news.json": newsFile() } });
+  await instance.start();
+  assert.equal(byId.notices.children[0].textContent, "Kunde inte hämta nyheter. Försök igen senare.");
+  assert.equal(byId.headlines.children.length, 0);
+  assert.equal(byId["sources-section"].hidden, true);
 });
 
 test("page: sources.json missing gives the error notice and no list", async () => {

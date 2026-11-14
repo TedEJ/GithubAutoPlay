@@ -52,7 +52,7 @@ function feed(entries, ns = NS) {
 }
 
 const select = (entries) => logic.selectItems(entries, {
-  id: SR.id, name: SR.name, allowedHosts: SR.allowedHosts, "politics-sweden": SR["politics-sweden"],
+  id: SR.id, name: SR.name, allowedHosts: SR.allowedHosts, feeds: SR.feeds,
 }, keywords, NOW);
 
 // ---------------------------------------------------------------- parsing

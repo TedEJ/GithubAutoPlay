@@ -16,12 +16,30 @@ ROBOTS_URL = "https://news.example.invalid/robots.txt"
 BROWSER_FEED_URL = "https://live.example.invalid/atom.xml"
 
 
+TOPICS = [
+    {"id": "all-news", "label": "Alla nyheter"},
+    {"id": "politics", "label": "Politik", "keywords": "politics-keywords.json"},
+    {"id": "nature", "label": "Natur", "keywords": "nature-keywords.json"},
+    {"id": "ai", "label": "AI", "keywords": "ai-keywords.json"},
+]
+
+
+def politics(url=FEED_URL, method="keywordFilter"):
+    """The `feeds` list of a source that offers only the topic politics."""
+    return [{"topic": "politics", "method": method, "url": url}]
+
+
+def sources_file(*sources):
+    """A `sources.json` document of version 2 (R14.1)."""
+    return {"version": 2, "topics": TOPICS, "sources": list(sources)}
+
+
 def source(**changes):
     entry = {
         "id": "test-news", "name": "Test News", "enabled": True, "fetchedBy": "build",
         "storageAllowed": True, "homepage": "https://news.example.invalid/",
         "allowedHosts": ["example.invalid"],
-        "politics-sweden": {"method": "keywordFilter", "url": FEED_URL},
+        "feeds": politics(),
     }
     entry.update(changes)
     return entry
@@ -29,7 +47,7 @@ def source(**changes):
 
 def browser_source(**changes):
     entry = source(id="live-radio", name="Live Radio", fetchedBy="browser", storageAllowed=False)
-    entry["politics-sweden"] = {"method": "keywordFilter", "url": BROWSER_FEED_URL}
+    entry["feeds"] = politics(BROWSER_FEED_URL)
     entry.update(changes)
     return entry
 

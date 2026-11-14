@@ -13,7 +13,7 @@ from newsreader.build import BuildError, build
 from newsreader.fetch import FetchError
 from newsreader.parse import MAX_RESPONSE_BYTES
 from tests.fakes import (BROWSER_FEED_URL, FEED_URL, GOOD_FEED, NOW, ROBOTS_URL, FakeFetch,
-                            APP, browser_source, rss, source)
+                            APP, browser_source, politics, rss, source)
 
 ITEM_FIELDS = {"id", "sourceId", "sourceName", "title", "url", "published", "publishedDisplay"}
 ROBOTS_OK = b"User-agent: *\nAllow: /\n"
@@ -62,8 +62,7 @@ def test_news_json_is_utf8_with_swedish_letters(project):
 def test_one_request_per_feed_and_one_robots_read(project):
     fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED})
     project.write_sources(source(), source(id="second", name="Second",
-                                           **{"politics-sweden": {"method": "keywordFilter",
-                                                                  "url": "https://news.example.invalid/other.xml"}}))
+                                           feeds=politics("https://news.example.invalid/other.xml", "keywordFilter")))
     fetch.responses["https://news.example.invalid/other.xml"] = GOOD_FEED
     run(project, fetch)
     assert fetch.calls.count(ROBOTS_URL) == 1
@@ -241,7 +240,7 @@ def test_items_all_filtered_out_is_still_ok(project):
 
 
 def test_category_filter_source_is_marked_failed_with_a_message(project):
-    project.write_sources(source(**{"politics-sweden": {"method": "categoryFilter", "url": FEED_URL}}))
+    project.write_sources(source(feeds=politics(FEED_URL, "categoryFilter")))
     document = run(project, FakeFetch({FEED_URL: GOOD_FEED}))
     entry = source_entry(document)
     assert entry["status"] == "error"
@@ -253,7 +252,7 @@ def test_category_filter_source_is_marked_failed_with_a_message(project):
 def test_one_failing_source_does_not_stop_the_other(project):
     other = "https://news.example.invalid/other.xml"
     project.write_sources(source(), source(id="second", name="Second",
-                                           **{"politics-sweden": {"method": "keywordFilter", "url": other}}))
+                                           feeds=politics(other, "keywordFilter")))
     document = run(project, FakeFetch({FEED_URL: RuntimeError("x"), other: GOOD_FEED}))
     assert [s["status"] for s in document["sources"]] == ["error", "ok"]
     assert {i["sourceId"] for i in document["items"]} == {"second"}
@@ -330,7 +329,7 @@ def test_unreadable_robots_older_than_24_hours_drops_previous_items(project):
 def test_unreadable_robots_is_read_once_for_all_sources_of_the_host(project):
     other = "https://news.example.invalid/other.xml"
     project.write_sources(source(), source(id="second", name="Second",
-                                           **{"politics-sweden": {"method": "keywordFilter", "url": other}}))
+                                           feeds=politics(other, "keywordFilter")))
     fetch = FakeFetch({ROBOTS_URL: FetchError("timeout", "timeout"), FEED_URL: GOOD_FEED, other: GOOD_FEED})
     document = run(project, fetch)
     assert [s["status"] for s in document["sources"]] == ["error", "error"]
@@ -427,9 +426,9 @@ def test_invalid_sources_json_fails_and_writes_nothing(project):
     {"enabled": "yes"},
     {"id": ""},
     {"allowedHosts": []},
-    {"politics-sweden": {"method": "magic", "url": FEED_URL}},
-    {"politics-sweden": {"method": "keywordFilter", "url": "http://news.example.invalid/x"}},
-    {"politics-sweden": {"method": "keywordFilter", "url": "https://other.example.org/x"}},
+    {"feeds": politics(FEED_URL, "magic")},
+    {"feeds": politics("http://news.example.invalid/x")},
+    {"feeds": politics("https://other.example.org/x")},
     {"storageAllowed": False},  # a build source must be storable
 ])
 def test_invalid_source_entries_fail(project, change):
@@ -689,3 +688,114 @@ def test_file_symlinks_inside_site_are_not_followed(project, tmp_path):
     run(project, FakeFetch({FEED_URL: GOOD_FEED}))
     assert not (project.out / "link.txt").exists() and not (project.out / "linked-dir").exists()
     assert (project.out / "logic.js").exists()
+
+
+# --- sources.json version 2: feeds per source, one fetch per distinct URL (F3: R14, R15.1) -----
+
+OTHER_URL = "https://news.example.invalid/all/rss.xml"
+
+
+def svt_shaped(**changes):
+    """A build source shaped like SVT in design 7.5: all-news, nature and ai share one address,
+    politics has its own."""
+    feeds = [{"topic": "all-news", "method": "feed", "url": OTHER_URL},
+             {"topic": "politics", "method": "keywordFilter", "url": FEED_URL},
+             {"topic": "nature", "method": "keywordFilter", "url": OTHER_URL},
+             {"topic": "ai", "method": "keywordFilter", "url": OTHER_URL}]
+    return source(feeds=feeds, **changes)
+
+
+def feed_requests(fetch):
+    """The feed requests of a fake fetch layer: everything except robots.txt (R15.1)."""
+    return [c for c in fetch.calls if not c.endswith("/robots.txt")]
+
+
+def test_distinct_feed_urls_are_collected_once_each_in_order(project):
+    assert build_module.distinct_feed_urls(svt_shaped(), ("all-news", "politics", "nature", "ai")) == [OTHER_URL, FEED_URL]
+    assert build_module.distinct_feed_urls(svt_shaped(), ("nature", "ai")) == [OTHER_URL]
+    assert build_module.distinct_feed_urls(svt_shaped(), ("politics",)) == [FEED_URL]
+    assert build_module.distinct_feed_urls(svt_shaped(), ()) == []
+
+
+def test_all_topics_cost_one_request_per_distinct_url(project, monkeypatch):
+    # The fetching part of R15.1 with every topic switched on (F5 does it for real): the address
+    # that three topics share is requested once, the other once, robots.txt once per host.
+    monkeypatch.setattr(build_module, "BUILD_TOPICS", ("all-news", "politics", "nature", "ai"))
+    project.write_sources(svt_shaped())
+    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED, OTHER_URL: GOOD_FEED})
+    document = run(project, fetch)
+    assert sorted(feed_requests(fetch)) == sorted([FEED_URL, OTHER_URL])
+    assert fetch.calls.count(ROBOTS_URL) == 1
+    assert source_entry(document)["status"] == "ok"
+
+
+def test_all_topics_one_address_for_every_entry_is_one_request(project, monkeypatch):
+    monkeypatch.setattr(build_module, "BUILD_TOPICS", ("all-news", "politics", "nature", "ai"))
+    feeds = [{"topic": t, "method": "feed" if t == "all-news" else "keywordFilter", "url": FEED_URL}
+             for t in ("all-news", "politics", "nature", "ai")]
+    project.write_sources(source(feeds=feeds))
+    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED})
+    run(project, fetch)
+    assert feed_requests(fetch) == [FEED_URL]
+
+
+def test_a_failing_second_address_fails_the_source_and_stops_further_requests(project, monkeypatch):
+    monkeypatch.setattr(build_module, "BUILD_TOPICS", ("all-news", "politics"))
+    project.write_sources(svt_shaped())
+    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, OTHER_URL: FetchError("timeout", "timeout"), FEED_URL: GOOD_FEED})
+    document = run(project, fetch)
+    assert source_entry(document)["status"] == "error"
+    assert feed_requests(fetch) == [OTHER_URL]
+
+
+def test_the_build_evaluates_only_the_politics_feed_for_now(project):
+    # R14.7: with all four feed entries present, the build fetches one address (politics)
+    # and the items are those the politics feed gives, so news.json is as before F3.
+    project.write_sources(svt_shaped())
+    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED, OTHER_URL: rss(("Riksdagen i allt", "/z/9", "Fri, 13 Nov 2026 11:00:00 GMT"))})
+    document = run(project, fetch)
+    assert feed_requests(fetch) == [FEED_URL]
+    assert [i["url"] for i in document["items"]] == [
+        "https://news.example.invalid/a/1", "https://news.example.invalid/a/2"]
+    assert document["version"] == 1 and document["category"] == "politics-sweden"
+
+
+def test_the_politics_method_is_the_one_of_its_own_feed_entry(project):
+    feeds = [{"topic": "all-news", "method": "feed", "url": FEED_URL},
+             {"topic": "politics", "method": "keywordFilter", "url": FEED_URL}]
+    project.write_sources(source(feeds=feeds))
+    document = run(project, FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED}))
+    assert document["items"] and all("Väder" not in i["title"] for i in document["items"])
+
+
+def test_a_source_without_a_politics_feed_gives_nothing_and_no_request(project):
+    # R13.7: a topic that a source does not offer is not an error.
+    project.write_sources(source(feeds=[{"topic": "nature", "method": "keywordFilter", "url": FEED_URL}]))
+    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED})
+    document = run(project, fetch)
+    assert fetch.calls == []
+    entry = source_entry(document)
+    assert entry["status"] == "ok" and entry["itemCount"] == 0 and document["items"] == []
+
+
+def test_the_real_file_costs_one_svt_feed_request_and_no_sveriges_radio_request(tmp_path):
+    svt_feed = "https://www.svt.se/nyheter/inrikes/rss.xml"
+    fetch = FakeFetch({"https://www.svt.se/robots.txt": ROBOTS_OK,
+                       svt_feed: rss(("Riksdagen röstar om ett påhittat ärende", "/x", "Fri, 13 Nov 2026 11:00:00 GMT")
+                                     ).replace(b"news.example.invalid", b"www.svt.se")})
+    build(tmp_path / "real", NOW, fetch)
+    assert fetch.calls == ["https://www.svt.se/robots.txt", svt_feed]
+
+
+def test_a_version_1_sources_file_fails_the_build_and_writes_nothing(project):
+    (project.root / "sources.json").write_text(json.dumps({"version": 1, "sources": [
+        dict({k: v for k, v in source().items() if k != "feeds"},
+             **{"politics-sweden": {"method": "keywordFilter", "url": FEED_URL}})]}), encoding="utf-8")
+    with pytest.raises(BuildError, match="^sources.json version 1 is no longer supported$"):
+        run(project, FakeFetch())
+    assert not project.out.exists()
+
+
+def test_the_copied_sources_json_is_version_2(project):
+    run(project, FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED}))
+    assert json.loads((project.out / "sources.json").read_text("utf-8"))["version"] == 2
