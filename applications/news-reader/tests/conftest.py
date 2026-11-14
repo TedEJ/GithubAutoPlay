@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from tests.fakes import APP, browser_source, source
+from tests.fakes import APP, browser_source, source, sources_file
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ def project(tmp_path):
 
         def write_sources(self, *sources):
             (self.root / "sources.json").write_text(
-                json.dumps({"version": 1, "sources": list(sources)}), encoding="utf-8")
+                json.dumps(sources_file(*sources)), encoding="utf-8")
 
     p = Project()
     p.root.mkdir()

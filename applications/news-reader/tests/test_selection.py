@@ -13,7 +13,7 @@ import pytest
 from newsreader.keywords import load_keywords
 from newsreader.model import NewsItem, RawEntry
 from newsreader.select import (
-    MAX_ITEMS, check_url, item_id, parse_url, select_items,
+    MAX_ITEMS, check_url, feed_entry, item_id, parse_url, select_items,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -40,7 +40,7 @@ def select(entries, keywords=None, source=SVT, now=NOW):
 
 def no_filter(**kw):
     """A source whose method is `feed` (no keyword filter), to test the other rules alone."""
-    return {**SVT, "politics-sweden": {"method": "feed", "url": "https://www.svt.se/x.xml"}, **kw}
+    return {**SVT, "feeds": [{"topic": "politics", "method": "feed", "url": "https://www.svt.se/x.xml"}], **kw}
 
 
 # ---- URL check (R9.1) --------------------------------------------------
@@ -307,7 +307,7 @@ def test_source_without_keyword_filter_keeps_everything():
 def test_which_sources_filter_comes_from_sources_json(keywords):
     # Both current sources say keywordFilter, so both filter.
     for src in SOURCES.values():
-        assert src["politics-sweden"]["method"] == "keywordFilter"
+        assert feed_entry(src, "politics")["method"] == "keywordFilter"
         assert select([entry(title="Väder i helgen", link="https://sverigesradio.se/1")],
                       keywords, source=src) == []
 
@@ -318,7 +318,7 @@ def test_keywords_are_required_for_keyword_filter():
 
 
 def test_unsupported_method_is_an_error(keywords):
-    src = {**SVT, "politics-sweden": {"method": "categoryFilter", "url": "https://svt.se/x"}}
+    src = {**SVT, "feeds": [{"topic": "politics", "method": "categoryFilter", "url": "https://svt.se/x"}]}
     with pytest.raises(ValueError):
         select([entry()], keywords, source=src)
 

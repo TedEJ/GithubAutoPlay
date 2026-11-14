@@ -1,5 +1,11 @@
 {
-  "version": 1,
+  "version": 2,
+  "topics": [
+    { "id": "all-news", "label": "Alla nyheter" },
+    { "id": "politics", "label": "Politik", "keywords": "politics-keywords.json" },
+    { "id": "nature", "label": "Natur", "keywords": "nature-keywords.json" },
+    { "id": "ai", "label": "AI", "keywords": "ai-keywords.json" }
+  ],
   "sources": [
     {
       "id": "svt",
@@ -9,7 +15,12 @@
       "storageAllowed": true,
       "homepage": "https://www.svt.se/",
       "allowedHosts": ["svt.se"],
-      "politics-sweden": { "method": "keywordFilter", "url": "https://www.svt.se/nyheter/inrikes/rss.xml" }
+      "feeds": [
+        { "topic": "all-news", "method": "feed", "url": "https://www.svt.se/nyheter/rss.xml" },
+        { "topic": "politics", "method": "keywordFilter", "url": "https://www.svt.se/nyheter/inrikes/rss.xml" },
+        { "topic": "nature", "method": "keywordFilter", "url": "https://www.svt.se/nyheter/rss.xml" },
+        { "topic": "ai", "method": "keywordFilter", "url": "https://www.svt.se/nyheter/rss.xml" }
+      ]
     },
     {
       "id": "sveriges-radio",
@@ -19,7 +30,12 @@
       "storageAllowed": false,
       "homepage": "https://www.sverigesradio.se/",
       "allowedHosts": ["sverigesradio.se"],
-      "politics-sweden": { "method": "keywordFilter", "url": "https://api.sr.se/api/rss/program/83" }
+      "feeds": [
+        { "topic": "all-news", "method": "feed", "url": "https://api.sr.se/api/rss/program/83" },
+        { "topic": "politics", "method": "keywordFilter", "url": "https://api.sr.se/api/rss/program/83" },
+        { "topic": "nature", "method": "keywordFilter", "url": "https://api.sr.se/api/rss/program/83" },
+        { "topic": "ai", "method": "keywordFilter", "url": "https://api.sr.se/api/rss/program/83" }
+      ]
     }
   ]
 }

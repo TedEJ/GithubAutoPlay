@@ -64,7 +64,7 @@
   // The parsed sources.json -> the enabled sources with only the fields the
   // page uses, or null when nothing usable is in it.
   function validateSources(data) {
-    if (!isObject(data) || data.version !== 1 || !Array.isArray(data.sources)) return null;
+    if (!isObject(data) || data.version !== 2 || !Array.isArray(data.sources)) return null;
     const result = [];
     const seen = new Set();
     for (const raw of data.sources.slice(0, MAX_SOURCES)) {
@@ -73,7 +73,10 @@
       if (raw.fetchedBy !== "build" && raw.fetchedBy !== "browser") continue;
       const hosts = raw.allowedHosts;
       if (!Array.isArray(hosts) || hosts.length === 0 || !hosts.every((h) => isText(h, 253))) continue;
-      const category = raw["politics-sweden"];
+      // Version 2 (R14.7): the feed entry of the topic Politik; `credit`, `linkHosts`
+      // and `matchOn` are accepted and ignored here. Without such an entry the
+      // source has no method and no address.
+      const category = Array.isArray(raw.feeds) ? raw.feeds.find((f) => isObject(f) && f.topic === "politics") : undefined;
       const method = isObject(category) && typeof category.method === "string" ? category.method : "";
       seen.add(raw.id);
       const source = {
@@ -585,7 +588,7 @@
           id: source.id,
           name: source.name,
           allowedHosts: source.allowedHosts,
-          "politics-sweden": { method: source.method },
+          feeds: [{ topic: "politics", method: source.method }],
         }, state.keywords, env.now());
         if (state.selected.includes(source.id)) {
           live.items = items;

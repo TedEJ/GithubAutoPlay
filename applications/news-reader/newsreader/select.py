@@ -148,8 +148,22 @@ def item_id(normalised_url):
 # ---------------------------------------------------------------------------
 # Selection
 
+POLITICS = "politics"  # the topic the build evaluates until F5 (R14.7)
+
+
+def feed_entry(source, topic):
+    """The feed entry of `source` for `topic` (R14.2), or None if it has none (R13.7)."""
+    for entry in source.get("feeds", ()):
+        if entry.get("topic") == topic:
+            return entry
+    return None
+
+
 def _uses_keyword_filter(source):
-    method = source["politics-sweden"]["method"]
+    entry = feed_entry(source, POLITICS)
+    if entry is None:
+        raise ValueError("source %r has no feed entry for the topic %s" % (source["id"], POLITICS))
+    method = entry["method"]
     if method == "keywordFilter":
         return True
     if method == "feed":
@@ -167,7 +181,7 @@ def select_items(entries, source, keywords, now):
 
     1. In feed order, each entry: the headline is cleaned (R1.3) and an empty
        one drops the item (R1.4); the keyword filter is applied to the cleaned
-       headline and description when the source's `politics-sweden.method` is
+       headline and description when the method of the source's `politics` feed entry is
        `keywordFilter` (R4.4); the URL must pass `check_url` (R1.4, R9.1).
     2. Duplicates within the source are removed by normalised URL, the first in
        feed order is kept (R5.3).

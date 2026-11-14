@@ -19,6 +19,7 @@ fails keeps its items from the previous `news.json` for up to 24 hours (R6.2).
 """
 import json
 import os
+import re
 from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -28,7 +29,7 @@ from .keywords import KeywordsError, load_keywords
 from .model import NewsItem
 from .parse import FeedError, parse_rss
 from .robots import is_allowed, robots_url, url_path
-from .select import MAX_AGE, MAX_ITEMS, check_url, item_id, select_items
+from .select import MAX_AGE, MAX_ITEMS, POLITICS, check_url, feed_entry, item_id, select_items
 from .timeutil import UTC, display_time, generated_at, generated_at_display, parse_time
 
 APP_ROOT = Path(__file__).resolve().parent.parent
@@ -36,6 +37,13 @@ CATEGORY = "politics-sweden"
 VERSION = 1
 FALLBACK_LIMIT = timedelta(hours=24)  # R6.2
 METHODS = ("feed", "categoryFilter", "keywordFilter")
+SOURCES_VERSION = 2  # R14.1
+ALL_NEWS = "all-news"
+TOPIC_IDS = (ALL_NEWS, POLITICS, "nature", "ai")  # R13.1, in this order
+KEYWORDS_NAME = "{}-keywords.json"  # R14.1; only the name is checked here, not the file (F5)
+KEYWORDS_RE = re.compile(r"^[a-z0-9-]+-keywords\.json$")
+# The topics whose feed entries the build fetches and evaluates. Only Politik until F5 (R14.7).
+BUILD_TOPICS = (POLITICS,)
 FETCHED_BY = ("build", "browser")
 ITEM_FIELDS = ("id", "sourceId", "sourceName", "title", "url", "published", "publishedDisplay")
 
@@ -60,14 +68,75 @@ def _is_text(value):
     return isinstance(value, str) and value != ""
 
 
-def validate_sources(data):
-    """Check the shape and rules of the parsed `sources.json` (design 7.1) and return the list.
+def _https_host(url):
+    """The lower-case host of an https address, or None."""
+    if not _is_text(url):
+        return None
+    try:
+        parts = urlsplit(url)
+        return parts.hostname.lower() if parts.scheme == "https" and parts.hostname else None
+    except ValueError:
+        return None
 
-    A browser source must have `storageAllowed: false` (R3.2); a build source
-    must have its feed URL on its own `allowedHosts` (R6.2).
+
+def _on_hosts(host, hosts):
+    return any(host == h or host.endswith("." + h) for h in hosts)
+
+
+def _validate_topics(topics):
+    """R14.1: exactly the four topics in order; the keyword file name follows the name rule."""
+    _require(isinstance(topics, list) and all(isinstance(t, dict) for t in topics),
+             "topics must be a list of objects")
+    _require([t.get("id") for t in topics] == list(TOPIC_IDS),
+             "topics must be exactly %s, in this order" % ", ".join(TOPIC_IDS))
+    for topic in topics:
+        where = "topic %r: " % topic["id"]
+        _require(_is_text(topic.get("label")), where + "label must be text")
+        if topic["id"] == ALL_NEWS:
+            _require("keywords" not in topic, where + "must not have keywords")
+        else:
+            name = topic.get("keywords")
+            _require(isinstance(name, str) and name == KEYWORDS_NAME.format(topic["id"])
+                     and KEYWORDS_RE.match(name),
+                     where + "keywords must be %s" % KEYWORDS_NAME.format(topic["id"]))
+
+
+def _validate_feeds(where, source, feeds):
+    _require(isinstance(feeds, list) and feeds, where + "feeds must be a non-empty list")
+    seen = set()
+    for number, feed in enumerate(feeds):
+        at = where + "feeds[%d]: " % number
+        _require(isinstance(feed, dict), at + "must be an object")
+        topic = feed.get("topic")
+        _require(topic in TOPIC_IDS, at + "topic must be one of %s" % ", ".join(TOPIC_IDS))
+        _require(topic not in seen, at + "a second feed for the topic %s" % topic)
+        seen.add(topic)
+        method = feed.get("method")
+        _require(method in METHODS, at + "method must be one of %s" % ", ".join(METHODS))
+        _require(topic != ALL_NEWS or method == "feed", at + "the topic all-news only uses the method feed")
+        host = _https_host(feed.get("url"))
+        _require(host is not None, at + "url must be an https address")
+        if source["fetchedBy"] == "build":
+            _require(_on_hosts(host, source["allowedHosts"]), at + "the feed address must be on allowedHosts")
+        if "matchOn" in feed:
+            _require(feed["matchOn"] == "title" and method == "keywordFilter",
+                     at + "matchOn is allowed only as \"title\" with the method keywordFilter")
+
+
+def validate_sources(data):
+    """Check the shape and rules of the parsed `sources.json` (version 2, design 7.5) and
+    return the list of sources (R14).
+
+    A browser source must have `storageAllowed: false` (R3.2); the feed address of a
+    build source must be on its own `allowedHosts` (R6.2, R14.3). Of the keyword files
+    only the names are checked, not that they exist (R14.1).
     """
     _require(isinstance(data, dict), "the file must be an object")
-    _require(data.get("version") == 1 and type(data.get("version")) is int, "version must be 1")
+    version = data.get("version")
+    _require(not (version == 1 and type(version) is int),
+             "version 1 is no longer supported (R14.6)")
+    _require(version == SOURCES_VERSION and type(version) is int, "version must be 2")
+    _validate_topics(data.get("topics"))
     sources = data.get("sources")
     _require(isinstance(sources, list) and sources, "sources must be a non-empty list")
     seen = set()
@@ -82,24 +151,37 @@ def validate_sources(data):
         _require(isinstance(source.get("enabled"), bool), where + "enabled must be true or false")
         _require(source.get("fetchedBy") in FETCHED_BY, where + "fetchedBy must be build or browser")
         _require(isinstance(source.get("storageAllowed"), bool), where + "storageAllowed must be true or false")
+        _require(_https_host(source.get("homepage")) is not None, where + "homepage must be an https address")
         hosts = source.get("allowedHosts")
         _require(isinstance(hosts, list) and hosts and all(
             _is_text(h) and h == h.lower() and "/" not in h for h in hosts),
             where + "allowedHosts must be a list of lower-case host names")
-        method = source.get("politics-sweden")
-        _require(isinstance(method, dict) and method.get("method") in METHODS,
-                 where + "politics-sweden.method must be one of %s" % ", ".join(METHODS))
-        url = method.get("url")
-        _require(_is_text(url) and urlsplit(url).scheme == "https" and urlsplit(url).hostname,
-                 where + "politics-sweden.url must be an https address")
+        if "credit" in source:
+            _require(_is_text(source["credit"]), where + "credit must be non-empty text")
+        if "linkHosts" in source:
+            link_hosts = source["linkHosts"]
+            _require(isinstance(link_hosts, list) and link_hosts and all(
+                _is_text(h) and h == h.lower() and "/" not in h and _on_hosts(h, hosts) for h in link_hosts),
+                where + "linkHosts must be a non-empty list of lower-case host names on allowedHosts")
         if source["fetchedBy"] == "browser":
             _require(source["storageAllowed"] is False, where + "a browser source must have storageAllowed false (R3.2)")
         else:
             _require(source["storageAllowed"] is True, where + "a build source must have storageAllowed true")
-            host = urlsplit(url).hostname.lower()
-            _require(any(host == h or host.endswith("." + h) for h in hosts),
-                     where + "the feed address must be on allowedHosts")
+        _validate_feeds(where, source, source.get("feeds"))
     return sources
+
+
+def distinct_feed_urls(source, topics=None):
+    """The distinct feed addresses of `source` for `topics`, in the order of its `feeds`.
+
+    Feed entries that share an address count once (R15.1): the build fetches each of
+    these addresses once. `topics` defaults to `BUILD_TOPICS`."""
+    topics = BUILD_TOPICS if topics is None else topics
+    urls = []
+    for feed in source["feeds"]:
+        if feed["topic"] in topics and feed["url"] not in urls:
+            urls.append(feed["url"])
+    return urls
 
 
 def load_sources(path):
@@ -226,11 +308,10 @@ class _Robots:
         return is_allowed(text, self.user_agent, url_path(feed_url))
 
 
-def _fetch_and_select(source, keywords, now, fetch):
-    """Items of a source, or raises FetchError, FeedError or ValueError."""
-    url = source["politics-sweden"]["url"]
+def _fetch_entries(url, allowed_hosts, fetch):
+    """The parsed entries of one feed address, or raises FetchError, FeedError."""
     try:
-        body = fetch(url, source["allowedHosts"])
+        body = fetch(url, allowed_hosts)
     except FetchError:
         raise
     except Exception as exc:  # a fetch layer must not break the build
@@ -238,39 +319,51 @@ def _fetch_and_select(source, keywords, now, fetch):
     entries = parse_rss(body)
     if not entries:
         raise EmptyFeed("the feed has no items")
-    return select_items(entries, source, keywords, now)
+    return entries
 
 
 def build_source(source, keywords, now, fetch, robots, previous):
-    """Handle one build source. Returns (status entry for `news.json`, list of NewsItem)."""
+    """Handle one build source. Returns (status entry for `news.json`, list of NewsItem).
+
+    Each distinct feed address of the topics in `BUILD_TOPICS` is checked against
+    robots.txt, fetched and parsed once, however many feed entries use it (R15.1).
+    Until F5 only the `politics` feed entry is evaluated (R14.7); a source without one
+    gives no items and no request (R13.7)."""
     assert_storable(source)
     ok_time = generated_at(now)
     previous_entry = _previous_entry(previous, source["id"])
     last_success = _previous_success(previous_entry)
     last_text = previous_entry["lastSuccess"] if last_success is not None else None
-    url = source["politics-sweden"]["url"]
 
     status, message, items = "ok", None, None
-    try:
-        robots_ok = robots.allowed(url, source["allowedHosts"])
-    except RobotsUnreadable as exc:
-        robots_ok = None
-        status, message = "error", str(exc)
-    if robots_ok is False:
-        status, message = "blocked-by-robots", "robots.txt does not allow this address"
-    elif robots_ok:
+    responses = {}
+    for url in distinct_feed_urls(source):
         try:
-            items = _fetch_and_select(source, keywords, now, fetch)
+            robots_ok = robots.allowed(url, source["allowedHosts"])
+        except RobotsUnreadable as exc:
+            status, message = "error", str(exc)
+            break
+        if robots_ok is False:
+            status, message = "blocked-by-robots", "robots.txt does not allow this address"
+            break
+        try:
+            responses[url] = _fetch_entries(url, source["allowedHosts"], fetch)
         except FetchError as exc:
             status, message = "error", "fetch failed: %s" % exc
+            break
         except EmptyFeed:
             status, message = "error", "feed not usable: it has no items"
+            break
         except FeedError:
             # No detail from the parser: its text may quote the feed.
             status, message = "error", "feed not usable (FeedError)"
+            break
+    if status == "ok":
+        politics = feed_entry(source, POLITICS)
+        try:
+            items = select_items(responses[politics["url"]], source, keywords, now) if politics else []
         except ValueError:  # select_items: unsupported method, such as categoryFilter
-            method = source["politics-sweden"]["method"]
-            status, message = "error", "selection failed (ValueError), politics method %s" % method
+            status, message = "error", "selection failed (ValueError), politics method %s" % politics["method"]
 
     if status == "ok":
         entry = {"id": source["id"], "name": source["name"], "status": "ok",

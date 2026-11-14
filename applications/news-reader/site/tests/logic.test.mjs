@@ -342,8 +342,34 @@ test("selection: sorting, tie-break by title then feed order, cap of 20 (R5.1)",
     ["Riksdagen ny", "Riksdagen utan a", "Riksdagen utan b"]);
 });
 
+test("selection: the feed entry of the topic politics decides, other entries are not read (R14.7)", () => {
+  const feeds = [
+    { topic: "all-news", method: "feed", url: "https://svt.se/a" },
+    { topic: "nature", method: "categoryFilter", url: "https://svt.se/b" },
+    { topic: "politics", method: "keywordFilter", url: "https://svt.se/c" },
+    { topic: "ai", method: "magic", url: "https://svt.se/d" },
+  ];
+  const src = { id: "x", name: "X", allowedHosts: ["svt.se"], feeds };
+  const entries = [rss("Riksdagen ny", "a", ""), rss("Vädret", "b", "")];
+  assert.deepEqual(logic.selectItems(entries, src, keywords, SEL_NOW).map((i) => i.title), ["Riksdagen ny"]);
+  // The same result as a source whose only feed entry is politics: the page's list is unchanged.
+  const only = { ...src, feeds: [feeds[2]] };
+  assert.deepEqual(logic.selectItems(entries, only, keywords, SEL_NOW), logic.selectItems(entries, src, keywords, SEL_NOW));
+  // all-news is not what is selected: its method feed would have kept both entries.
+  assert.equal(logic.selectItems(entries, { ...src, feeds: [feeds[0], { ...feeds[2], method: "feed" }] }, null, SEL_NOW).length, 2);
+});
+
+test("selection: a source without a politics entry, or in the version 1 shape, is an error", () => {
+  const base = { id: "x", name: "X", allowedHosts: ["svt.se"] };
+  const entries = [rss("Riksdagen ny", "a", "")];
+  assert.throws(() => logic.selectItems(entries, { ...base, feeds: [{ topic: "nature", method: "feed" }] }, keywords, SEL_NOW), Error);
+  assert.throws(() => logic.selectItems(entries, { ...base, feeds: [] }, keywords, SEL_NOW), Error);
+  assert.throws(() => logic.selectItems(entries, base, keywords, SEL_NOW), Error);
+  assert.throws(() => logic.selectItems(entries, { ...base, "politics-sweden": { method: "keywordFilter" } }, keywords, SEL_NOW), Error);
+});
+
 test("selection: errors for an unsupported method or a missing keyword list", () => {
-  const src = (method) => ({ id: "x", name: "X", allowedHosts: ["svt.se"], "politics-sweden": { method } });
+  const src = (method) => ({ id: "x", name: "X", allowedHosts: ["svt.se"], feeds: [{ topic: "politics", method }] });
   assert.throws(() => logic.selectItems([], src("categoryFilter"), keywords, SEL_NOW), Error);
   assert.throws(() => logic.selectItems([], src("keywordFilter"), null, SEL_NOW), Error);
   const entries = [rss("Vädret", "a", "")];
