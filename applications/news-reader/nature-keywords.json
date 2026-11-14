@@ -43,10 +43,6 @@
       "översvämning*",
       "skyfall*",
       "oväder*",
-      "storm",
-      "stormen",
-      "stormar",
-      "stormarna",
       "stormvarning*",
       "snöstorm*",
       "orkan*",
@@ -56,7 +52,6 @@
       "vulkanutbrott*",
       "tsunami*",
       "värmebölja*",
-      "torka",
       "torkan",
       "extremväder*",
       "smhi"
@@ -74,12 +69,7 @@
     "words": [],
     "phrases": [
       "politiska klimatet",
-      "ekonomiska klimatet",
-      "politisk storm",
-      "politiska stormen",
-      "storm av kritik",
-      "storm av protester",
-      "storm kring"
+      "ekonomiska klimatet"
     ]
   }
 }

@@ -518,3 +518,70 @@ def test_every_exclude_phrase_alone_does_not_match(keywords):
 
 def test_exclusion_never_drops_a_whole_item(keywords):
     assert keywords.matches("Tyska regeringen och moderat tillväxt men Sverigedemokraterna svarar")
+
+
+# ---- every term of the lists must be reachable (F4 review) ---------------------------
+
+def _raw(topic):
+    return json.loads((ROOT / keyword_file_name(topic)).read_text(encoding="utf-8"))
+
+
+def _own_terms(topic):
+    """(kind, term, headline) for every include term of the file."""
+    inc = _raw(topic)["include"]
+    for term in inc["words"]:
+        yield "word", term, f"Nyheter om {term.rstrip('*')} idag"
+        if term.endswith("*"):
+            yield "prefix", term, f"Nyheter om {term.rstrip('*')}xyz idag"
+    for term in inc["phrases"]:
+        yield "phrase", term, f"Nyheter om {term} idag"
+    for term in inc["caseSensitive"]:
+        yield "caseSensitive", term, f"Nyheter om {term} idag"
+    for term in inc["caseSensitiveWords"]:
+        yield "caseSensitiveWord", term, f"Nyheter om {term} idag"
+
+
+@pytest.mark.parametrize("topic", ["nature", "ai"])
+def test_every_include_term_is_reachable_and_hits_its_own_topic(all_keywords, topic):
+    seen = 0
+    for kind, term, headline in _own_terms(topic):
+        assert all_keywords[topic].matches(headline), (topic, kind, term)
+        assert topic in topics_of(headline, None, [{"topic": topic, "method": "keywordFilter"}], all_keywords)
+        seen += 1
+    assert seen >= 15
+
+
+@pytest.mark.parametrize("topic", ["nature", "ai"])
+def test_case_sensitive_words_do_not_hit_in_another_case(all_keywords, topic):
+    for term in _raw(topic)["include"]["caseSensitiveWords"]:
+        for variant in {term.lower(), term.upper(), term.capitalize()} - {term}:
+            assert not all_keywords[topic].matches(f"Nyheter om {variant} idag"), (term, variant)
+
+
+@pytest.mark.parametrize("topic", KEYWORD_TOPICS)
+def test_every_exclude_phrase_hides_something_and_is_not_dead(all_keywords, topic):
+    raw = _raw(topic)
+    for phrase in raw["exclude"]["phrases"]:
+        headline = f"Nyheter: {phrase} idag"
+        assert not all_keywords[topic].matches(headline), (topic, phrase)
+        without = copy.deepcopy(raw)
+        without["exclude"]["phrases"].remove(phrase)
+        assert validate_keywords(without, topic).matches(headline), (topic, phrase, "phrase hides nothing")
+
+
+def test_topics_of_cleans_each_text_once_and_equals_matches(all_keywords, monkeypatch):
+    import newsreader.keywords as module
+    calls = []
+    real = module.clean_headline
+    monkeypatch.setattr(module, "clean_headline", lambda text: calls.append(text) or real(text))
+    feeds = [{"topic": t, "method": "keywordFilter"} for t in KEYWORD_TOPICS]
+    got = topics_of("<b>AI</b> &amp;amp; Vargen", "Handlar om &amp;amp; oväder", feeds, all_keywords)
+    assert len(calls) == 2  # one headline, one description, for three keyword lists
+    monkeypatch.undo()
+    for topic in KEYWORD_TOPICS:
+        assert (topic in got) is all_keywords[topic].matches("<b>AI</b> &amp;amp; Vargen", "Handlar om &amp;amp; oväder")
+    for text in ["&amp;amp;", "Ovä&amp;shy;der", "A&#73;", "Var&#103;en", "", "   "]:
+        for desc in [None, "", text]:
+            for topic in KEYWORD_TOPICS:
+                one = topics_of(text, desc, [{"topic": topic, "method": "keywordFilter"}], all_keywords)
+                assert (topic in one) is all_keywords[topic].matches(text, desc), (text, desc, topic)

@@ -265,9 +265,17 @@
   // True if the item matches this topic's list (R4.4, R17.1). Both texts are
   // cleaned first; a missing or empty description is ignored.
   function matchesKeywords(keywords, headline, description) {
+    return matchesCleaned(keywords,
+      headline === undefined || headline === null ? null : cleanHeadline(headline),
+      description === undefined || description === null || description === "" ? null : cleanHeadline(description));
+  }
+
+  // Like matchesKeywords for texts that cleanHeadline has already been applied
+  // to exactly once (cleaning is not idempotent).
+  function matchesCleaned(keywords, headline, description) {
     for (const text of [headline, description]) {
       if (text === undefined || text === null || text === "") continue;
-      if (hasHit(keywords, cleanHeadline(text))) return true;
+      if (hasHit(keywords, text)) return true;
     }
     return false;
   }
@@ -276,13 +284,17 @@
   // `feeds` are the feed entries of the feed URL the item came from
   // (`{topic, method, matchOn?}`); `keywordsByTopic` maps a topic id to the
   // result of validateKeywords (a plain object or a Map). Same rules as
-  // topics_of in keywords.py; `headline` and `description` are cleaned once
-  // here, so the caller passes the texts as the feed gave them.
+  // topics_of in keywords.py; `headline` and `description` are the RAW texts as
+  // the feed gave them: each is cleaned once here and reused for every
+  // keywordFilter entry, so the caller must not clean them first.
   function topicsOf(headline, description, feeds, keywordsByTopic) {
     const lookup = (topic) => (keywordsByTopic instanceof Map
       ? keywordsByTopic.get(topic)
       : (Object.prototype.hasOwnProperty.call(keywordsByTopic, topic) ? keywordsByTopic[topic] : undefined));
     const found = new Set();
+    let cleanH = null;
+    let cleanD = null;
+    let cleaned = false;
     for (const feed of feeds) {
       const topic = feed.topic;
       const method = feed.method;
@@ -292,8 +304,12 @@
       } else if (method === "keywordFilter") {
         const keywords = lookup(topic);
         if (!keywords) throw new Error("topic " + JSON.stringify(topic) + " needs a keyword list");
-        const text = feed.matchOn === "title" ? null : description;
-        if (matchesKeywords(keywords, headline, text)) found.add(topic);
+        if (!cleaned) {
+          cleanH = headline === undefined || headline === null ? null : cleanHeadline(headline);
+          cleanD = description === undefined || description === null || description === "" ? null : cleanHeadline(description);
+          cleaned = true;
+        }
+        if (matchesCleaned(keywords, cleanH, feed.matchOn === "title" ? null : cleanD)) found.add(topic);
       } else {
         throw new Error("unsupported method " + JSON.stringify(method) + " for topic " + JSON.stringify(topic));
       }

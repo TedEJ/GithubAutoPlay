@@ -2922,20 +2922,20 @@
       }
     },
     {
-      "id": "nature-include-storm",
+      "id": "nature-include-stormvarning",
       "input": {
         "topic": "nature",
-        "headline": "Storm väntas över Västkusten"
+        "headline": "Stormvarning för Västkusten"
       },
       "expected": {
         "match": true
       }
     },
     {
-      "id": "nature-include-stormen",
+      "id": "nature-include-snostorm",
       "input": {
         "topic": "nature",
-        "headline": "Stormen drar västerut"
+        "headline": "Snöstormen drar västerut"
       },
       "expected": {
         "match": true
@@ -3212,7 +3212,7 @@
       }
     },
     {
-      "id": "nature-exclude-phrase-storm-of-criticism",
+      "id": "nature-no-match-storm-of-criticism",
       "input": {
         "topic": "nature",
         "headline": "Storm av kritik mot förslaget"
@@ -3222,7 +3222,7 @@
       }
     },
     {
-      "id": "nature-exclude-phrase-political-storm",
+      "id": "nature-no-match-political-storm",
       "input": {
         "topic": "nature",
         "headline": "Politisk storm efter utspelet"
@@ -3232,17 +3232,17 @@
       }
     },
     {
-      "id": "nature-exclude-phrase-other-hit-remains-storm",
+      "id": "nature-no-match-stormen-i-regeringen",
       "input": {
         "topic": "nature",
-        "headline": "Storm av kritik när stormen drog in"
+        "headline": "Stormen i regeringen efter avhoppet"
       },
       "expected": {
-        "match": true
+        "match": false
       }
     },
     {
-      "id": "nature-exclude-phrase-storm-kring",
+      "id": "nature-no-match-storm-kring",
       "input": {
         "topic": "nature",
         "headline": "Storm kring ministerns resa"
@@ -3847,6 +3847,46 @@
       },
       "expected": {
         "match": true
+      }
+    },
+    {
+      "id": "nature-no-match-torka-the-verb",
+      "input": {
+        "topic": "nature",
+        "headline": "Så ska du torka tvätten snabbare"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-suffix-compound-snoovader",
+      "input": {
+        "topic": "nature",
+        "headline": "Snöoväder i norra Sverige"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-suffix-compound-vinterstorm",
+      "input": {
+        "topic": "nature",
+        "headline": "Vinterstorm drabbar kusten"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-dotted-A.I.",
+      "input": {
+        "topic": "ai",
+        "headline": "A.I. i skolan"
+      },
+      "expected": {
+        "match": false
       }
     }
   ],

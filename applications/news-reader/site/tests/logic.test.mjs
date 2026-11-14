@@ -61,6 +61,57 @@ test("shared cases: topicsOf agrees with the single-topic matching for every key
   }
 });
 
+// ---- every term of the lists must be reachable (F4 review) -------------------------
+
+const rawList = (topic) => readJson("../../" + logic.keywordFileName(topic));
+
+test("every include term of Natur and AI is reachable and hits its own topic", () => {
+  for (const topic of ["nature", "ai"]) {
+    const inc = rawList(topic).include;
+    const feeds = [{ topic, method: "keywordFilter" }];
+    const heads = [];
+    for (const t of inc.words) {
+      heads.push([t, "Nyheter om " + t.replace(/\*$/, "") + " idag"]);
+      if (t.endsWith("*")) heads.push([t, "Nyheter om " + t.slice(0, -1) + "xyz idag"]);
+    }
+    for (const t of [...inc.phrases, ...inc.caseSensitive, ...inc.caseSensitiveWords]) heads.push([t, "Nyheter om " + t + " idag"]);
+    assert.ok(heads.length >= 15);
+    for (const [term, h] of heads) {
+      assert.equal(logic.matchesKeywords(topicKeywords[topic], h), true, topic + ": " + term);
+      assert.ok(logic.topicsOf(h, null, feeds, topicKeywords).includes(topic), topic + ": " + term);
+    }
+    for (const t of inc.caseSensitiveWords) {
+      for (const v of new Set([t.toLowerCase(), t.toUpperCase(), t[0].toUpperCase() + t.slice(1).toLowerCase()])) {
+        if (v !== t) assert.equal(logic.matchesKeywords(topicKeywords[topic], "Nyheter om " + v + " idag"), false, topic + ": " + v);
+      }
+    }
+  }
+});
+
+test("every exclude phrase hides something and is not dead", () => {
+  for (const topic of logic.KEYWORD_TOPICS) {
+    const raw = rawList(topic);
+    for (const phrase of raw.exclude.phrases) {
+      const h = "Nyheter: " + phrase + " idag";
+      assert.equal(logic.matchesKeywords(topicKeywords[topic], h), false, topic + ": " + phrase);
+      const without = structuredClone(raw);
+      without.exclude.phrases = without.exclude.phrases.filter((p) => p !== phrase);
+      assert.equal(logic.matchesKeywords(logic.validateKeywords(without, topic), h), true, topic + ": " + phrase + " hides nothing");
+    }
+  }
+});
+
+test("topicsOf equals matchesKeywords for raw texts (cleaned once, also with entities)", () => {
+  for (const text of ["<b>AI</b> &amp;amp; Vargen", "&amp;amp;", "Ovä&amp;shy;der", "A&#73;", "Var&#103;en", "", "   "]) {
+    for (const desc of [undefined, null, "", text, "Handlar om &amp;amp; oväder"]) {
+      for (const topic of logic.KEYWORD_TOPICS) {
+        const got = logic.topicsOf(text, desc, [{ topic, method: "keywordFilter" }], topicKeywords).includes(topic);
+        assert.equal(got, logic.matchesKeywords(topicKeywords[topic], text, desc), JSON.stringify([text, desc, topic]));
+      }
+    }
+  }
+});
+
 // ---- cleaning ----------------------------------------------------------------
 
 test("cleaning: details", () => {

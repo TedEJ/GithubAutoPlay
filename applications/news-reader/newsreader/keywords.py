@@ -132,10 +132,17 @@ class Keywords:
         or empty description is ignored. The description is only read here; it
         is never returned or stored.
         """
+        return self.matches_cleaned(
+            None if headline is None else clean_headline(headline),
+            None if description is None or description == "" else clean_headline(description))
+
+    def matches_cleaned(self, headline, description=None):
+        """Like `matches` for texts that `clean_headline` has already been applied
+        to exactly once (cleaning is not idempotent: `&amp;amp;` would change again)."""
         for text in (headline, description):
             if text is None or text == "":
                 continue
-            if self._has_hit(clean_headline(text)):
+            if self._has_hit(text):
                 return True
         return False
 
@@ -290,17 +297,21 @@ def load_topic_keywords(topic, directory=None):
 def topics_of(headline, description, feeds, keywords_by_topic):
     """All topics of one item (R13.4), in the order of R13.1, without duplicates.
 
-    `headline` and `description` (may be None) are the texts of the item as the
-    feed gave them; like `Keywords.matches` this cleans them once (R1.3), so the
-    caller does not. `feeds` are the feed entries of the feed URL the item came
-    from: dicts with `topic`, `method` and an optional `matchOn` (R14.2).
-    `keywords_by_topic` maps a topic id to its `Keywords`.
+    `headline` and `description` (may be None) are the RAW texts as the feed gave
+    them: this function cleans each of them once (R1.3) and reuses the result for
+    every `keywordFilter` entry, with the same outcome as `Keywords.matches`. The
+    caller must not clean them first (cleaning twice can change the text).
+    `feeds` are the feed entries of the feed URL the item came from: dicts with
+    `topic`, `method` and an optional `matchOn` (R14.2). `keywords_by_topic` maps
+    a topic id to its `Keywords`.
 
     A `feed` entry always gives its topic; a `keywordFilter` entry gives it when
     the topic's list matches, and with `matchOn` `title` only the headline is
     read. `categoryFilter` is not supported (raw entries carry no categories).
     """
     found = set()
+    clean_h = clean_d = None
+    cleaned = False
     for feed in feeds:
         topic, method = feed["topic"], feed["method"]
         if topic not in TOPIC_ORDER:
@@ -311,8 +322,12 @@ def topics_of(headline, description, feeds, keywords_by_topic):
             keywords = keywords_by_topic.get(topic)
             if keywords is None:
                 raise ValueError("topic %r needs a keyword list" % (topic,))
-            text = None if feed.get("matchOn") == "title" else description
-            if keywords.matches(headline, text):
+            if not cleaned:
+                clean_h = None if headline is None else clean_headline(headline)
+                clean_d = None if description is None or description == "" else clean_headline(description)
+                cleaned = True
+            text = None if feed.get("matchOn") == "title" else clean_d
+            if keywords.matches_cleaned(clean_h, text):
                 found.add(topic)
         else:
             raise ValueError("unsupported method %r for topic %r" % (method, topic))
