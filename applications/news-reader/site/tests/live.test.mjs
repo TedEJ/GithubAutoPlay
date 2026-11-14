@@ -59,8 +59,12 @@ function newsFile() {
 
 // ---------------------------------------------------------------- the fake page
 
-function fakeStorage(initial = {}) {
-  const data = { ...initial };
+// Q8/D43: the default topic is Alla nyheter. Most tests were written for the list of
+// Politik, so a storage made here already holds that choice; `fresh: true` leaves out
+// the topic, for the tests of the default and of the migration.
+const POLITICS = { "newsReader.selectedTopic": "politics" };
+function fakeStorage(initial = {}, { fresh = false } = {}) {
+  const data = fresh ? { ...initial } : { ...POLITICS, ...initial };
   const writes = [];
   return {
     data,
@@ -752,7 +756,8 @@ test("storage that throws: the live items still work and nothing is retried agai
   const storage = { getItem() { throw new Error("x"); }, setItem() { throw new Error("x"); } };
   const t = setup({ storage });
   await t.instance.start();
-  assert.equal(headlines(t.byId).length, 5);
+  // Nothing can be read, so the default topic Alla nyheter is chosen (D43): every item of the file and of SR.
+  assert.equal(headlines(t.byId).length, 6);
 });
 
 test("a hostile news.json cannot bring SR items into the saved copy or the page", async () => {
@@ -972,6 +977,17 @@ function pickTopic(byId, id) {
 }
 const srTitles = (byId) => headlines(byId).filter((h) => h.includes(SR_MARK)).map((h) => h.replace(" " + SR_MARK, ""));
 
+test("F8: with nothing saved the topic is Alla nyheter, so every SR headline is shown (D43)", async () => {
+  await withSpy(async () => {
+    const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["sveriges-radio"]' }, { fresh: true }) });
+    t.state.feed.body = topicFeed();
+    await t.instance.start();
+    assert.deepEqual(srTitles(t.byId), ["Riksdagen debatterar ett", "Vargen sedd i skogen två",
+      "ChatGPT får ny version tre", "Fotbollsmatch fyra", "Regeringen och vargen fem"]);
+    assert.equal(t.storage.data["newsReader.selectedTopic"], undefined);
+  });
+});
+
 test("F8: one request serves all topics; the topic choice filters the SR items and makes no request", async () => {
   await withSpy(async () => {
     const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["sveriges-radio"]' }) });
@@ -979,7 +995,7 @@ test("F8: one request serves all topics; the topic choice filters the SR items a
     await t.instance.start();
     assert.equal(t.feedCalls().length, 1);
     const callsBefore = t.calls.length;
-    // The default topic is still Politik (Q8 is open).
+    // The saved topic is Politik (fakeStorage holds it unless `fresh`).
     assert.deepEqual(srTitles(t.byId), ["Riksdagen debatterar ett", "Regeringen och vargen fem"]);
     pickTopic(t.byId, "all-news");
     assert.deepEqual(srTitles(t.byId), ["Riksdagen debatterar ett", "Vargen sedd i skogen två",

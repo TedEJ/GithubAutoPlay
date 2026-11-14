@@ -851,9 +851,9 @@
   // ------------------------------------------------------------------------
   // The reader's topic choice (R18.1 to R18.6, step F7)
 
-  // The topic that is chosen when nothing usable is saved (R18.3, D38). F8 may
-  // change it to "all-news" (Q8): this is the one place.
-  const DEFAULT_TOPIC = "politics";
+  // The topic that is chosen when nothing usable is saved (R18.3). The owner decided
+  // on 2026-11-14 that it is "all-news" (Q8, D43); this is the one place.
+  const DEFAULT_TOPIC = "all-news";
 
   // The Riksdagen source id, for the one-time migration of R18.4. Later sources
   // need their own decision: there is no generic rule.

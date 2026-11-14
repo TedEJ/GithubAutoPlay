@@ -774,16 +774,20 @@ test("exports", () => {
 const TOPIC_LIST = [{ id: "all-news", label: "Alla nyheter" }, { id: "politics", label: "Politik" },
   { id: "nature", label: "Natur" }, { id: "ai", label: "AI" }];
 
-test("readSavedTopic: a saved offered id is used; missing, unknown or not offered gives Politik (R18.3, D38)", () => {
+test("readSavedTopic: a saved offered id is used; missing, unknown or not offered gives Alla nyheter (R18.3, D43)", () => {
   const all = TOPIC_LIST.map((t) => t.id);
-  assert.equal(logic.DEFAULT_TOPIC, "politics");
+  assert.equal(logic.DEFAULT_TOPIC, "all-news");
   for (const id of all) assert.equal(logic.readSavedTopic(id, all), id);
   for (const bad of [null, undefined, "", "sport", "AI", " ai", '"ai"', "ai\n", 5, {}, ["ai"]]) {
-    assert.equal(logic.readSavedTopic(bad, all), "politics", String(bad));
+    assert.equal(logic.readSavedTopic(bad, all), "all-news", String(bad));
   }
   // A saved topic that the sources do not offer (any more) is ignored.
-  assert.equal(logic.readSavedTopic("nature", ["all-news", "politics"]), "politics");
-  // When the default is not offered either, the first offered topic; none at all gives null.
+  assert.equal(logic.readSavedTopic("nature", ["all-news", "politics"]), "all-news");
+  // A saved Politik that is still offered is kept.
+  assert.equal(logic.readSavedTopic("politics", ["all-news", "politics"]), "politics");
+  // When all-news is not offered, the first offered topic (not Politik as such); none at all gives null.
+  assert.equal(logic.readSavedTopic(null, ["politics", "ai"]), "politics");
+  assert.equal(logic.readSavedTopic("nature", ["ai", "politics"]), "ai");
   assert.equal(logic.readSavedTopic(null, ["ai", "nature"]), "ai");
   assert.equal(logic.readSavedTopic("ai", []), null);
 });
@@ -812,13 +816,13 @@ test("filterByTopic: membership, an item with several topics is in each, no list
   assert.equal(JSON.stringify(items), copy, "the input is not changed");
 });
 
-test("migrateSavedChoice: Riksdagen is added once to a saved non-empty choice, with the topic Politik (R18.4, R16.9)", () => {
+test("migrateSavedChoice: Riksdagen is added once to a saved non-empty choice, with the default topic Alla nyheter (R18.4, R16.9, D43)", () => {
   const enabled = [{ id: "svt" }, { id: "sveriges-radio" }, { id: "riksdagen" }];
-  assert.deepEqual(logic.migrateSavedChoice('["svt"]', null, enabled), { selected: ["svt", "riksdagen"], topic: "politics" });
+  assert.deepEqual(logic.migrateSavedChoice('["svt"]', null, enabled), { selected: ["svt", "riksdagen"], topic: "all-news" });
   assert.deepEqual(logic.migrateSavedChoice('["sveriges-radio","svt"]', undefined, enabled),
-    { selected: ["sveriges-radio", "svt", "riksdagen"], topic: "politics" });
+    { selected: ["sveriges-radio", "svt", "riksdagen"], topic: "all-news" });
   // Unknown saved ids are kept as they are (parseSelected drops them later).
-  assert.deepEqual(logic.migrateSavedChoice('["gone"]', null, enabled), { selected: ["gone", "riksdagen"], topic: "politics" });
+  assert.deepEqual(logic.migrateSavedChoice('["gone"]', null, enabled), { selected: ["gone", "riksdagen"], topic: "all-news" });
 });
 
 test("migrateSavedChoice: skipped when there is nothing to do (R18.4)", () => {
