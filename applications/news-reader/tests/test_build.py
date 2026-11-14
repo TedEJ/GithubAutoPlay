@@ -15,7 +15,8 @@ from newsreader.parse import MAX_RESPONSE_BYTES
 from tests.fakes import (BROWSER_FEED_URL, FEED_URL, GOOD_FEED, NOW, ROBOTS_URL, FakeFetch,
                             APP, browser_source, politics, rss, source)
 
-ITEM_FIELDS = {"id", "sourceId", "sourceName", "title", "url", "published", "publishedDisplay"}
+ITEM_FIELDS_V1 = {"id", "sourceId", "sourceName", "title", "url", "published", "publishedDisplay"}
+ITEM_FIELDS = ITEM_FIELDS_V1 | {"topics"}  # R1.5
 ROBOTS_OK = b"User-agent: *\nAllow: /\n"
 
 
@@ -37,12 +38,15 @@ def test_success_writes_expected_news_json(project):
     fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED})
     document = run(project, fetch)
     assert read_news(project) == document
-    assert document["version"] == 1
-    assert document["category"] == "politics-sweden"
+    assert document["version"] == 2
+    assert "category" not in document
+    assert document["topics"] == ["all-news", "politics", "nature", "ai"]
     assert document["generatedAt"] == "2026-11-13T12:00:00Z"
     assert document["generatedAtDisplay"] == "2026-11-13 13:00"
-    assert document["sources"] == [{"id": "test-news", "name": "Test News", "status": "ok",
-                                    "lastSuccess": "2026-11-13T12:00:00Z", "itemCount": 2}]
+    assert document["sources"] == [{
+        "id": "test-news", "name": "Test News", "status": "ok",
+        "lastSuccess": "2026-11-13T12:00:00Z", "itemCount": 2,
+        "feeds": [{"topic": "politics", "status": "ok", "lastSuccess": "2026-11-13T12:00:00Z", "itemCount": 2}]}]
     titles = [i["title"] for i in document["items"]]
     assert titles == ["Riksdagen debatterar exempelfrågan", "Regeringen presenterar ett påhittat förslag"]
     first = document["items"][0]
@@ -51,6 +55,7 @@ def test_success_writes_expected_news_json(project):
     assert first["published"] == "2026-11-13T11:00:00Z"
     assert first["publishedDisplay"] == "2026-11-13 12:00"
     assert first["url"] == "https://news.example.invalid/a/1"
+    assert first["topics"] == ["politics"]
 
 
 def test_news_json_is_utf8_with_swedish_letters(project):
@@ -75,8 +80,8 @@ def test_output_folder_has_the_copied_files(project):
     out = project.out
     assert (out / "logic.js").read_bytes() == (project.root / "site" / "logic.js").read_bytes()
     assert not (out / "tests").exists()  # site/tests is not copied
-    for name in ("sources.json", "politics-keywords.json"):
-        assert (out / name).read_bytes() == (project.root / name).read_bytes()
+    for name in ("sources.json", "politics-keywords.json", "nature-keywords.json", "ai-keywords.json"):
+        assert (out / name).read_bytes() == (project.root / name).read_bytes()  # R14.5
     assert (out / "news.json").exists()
 
 
@@ -141,6 +146,7 @@ def test_failing_source_keeps_previous_items_within_24_hours(project):
     assert entry["itemCount"] == 1
     assert [i["title"] for i in document["items"]] == ["Gammal riksdagsrubrik"]
     assert set(document["items"][0]) == ITEM_FIELDS
+    assert document["items"][0]["topics"] == ["politics"]  # a version 1 file: its items are politics (R19.4)
 
 
 def test_failing_source_drops_previous_items_at_24_hours(project):
@@ -367,10 +373,11 @@ def test_browser_source_is_skipped_and_never_listed(project):
 
 
 def test_real_sources_json_the_build_never_requests_sveriges_radio(project, tmp_path):
+    svt_feed = rss(("Riksdagen röstar om ett påhittat ärende", "/x", "Fri, 13 Nov 2026 11:00:00 GMT")
+                   ).replace(b"news.example.invalid", b"www.svt.se")
     fetch = FakeFetch({"https://www.svt.se/robots.txt": ROBOTS_OK,
-                       "https://www.svt.se/nyheter/inrikes/rss.xml": rss(
-                           ("Riksdagen röstar om ett påhittat ärende", "/x", "Fri, 13 Nov 2026 11:00:00 GMT")
-                       ).replace(b"news.example.invalid", b"www.svt.se"),
+                       "https://www.svt.se/nyheter/rss.xml": svt_feed,
+                       "https://www.svt.se/nyheter/inrikes/rss.xml": svt_feed,
                        "https://api.sr.se/api/rss/program/83": rss(
                            ("Riksdagen hos Ekot påhittad", "/artikel/1", "Fri, 13 Nov 2026 11:00:00 GMT"))})
     out = tmp_path / "real-out"
@@ -403,13 +410,14 @@ def test_assert_storable_refuses_browser_and_not_stored_sources():
 
 
 def test_final_guard_refuses_an_item_of_a_browser_source():
+    topics = ["all-news", "politics", "nature", "ai"]
     document = {"sources": [{"id": "test-news"}],
                 "items": [{"sourceId": "live-radio", "title": "Riksdagen (påhittad)"}]}
     with pytest.raises(BuildError, match="refusing"):
-        build_module._check_document(document, [source(), browser_source()])
+        build_module._check_document(document, [source(), browser_source()], topics)
     document = {"sources": [{"id": "live-radio"}], "items": []}
     with pytest.raises(BuildError, match="refusing"):
-        build_module._check_document(document, [source(), browser_source()])
+        build_module._check_document(document, [source(), browser_source()], topics)
 
 
 # --- invalid configuration -------------------------------------------------
@@ -461,8 +469,34 @@ def test_invalid_keywords_file_fails_and_writes_nothing(project):
 
 def test_missing_keywords_file_fails(project):
     (project.root / "politics-keywords.json").unlink()
-    with pytest.raises(BuildError, match="politics-keywords.json"):
+    with pytest.raises(BuildError, match="politics-keywords.json: file not found"):
         run(project, FakeFetch())
+    assert not project.out.exists()
+
+
+@pytest.mark.parametrize("name", ["nature-keywords.json", "ai-keywords.json"])
+def test_missing_or_invalid_keyword_file_of_another_topic_fails_even_if_no_source_uses_it(project, name):
+    # R14.5, R17.5: every file named in sources.json is loaded, not only those a feed needs.
+    (project.root / name).write_text('{"version": 2}', encoding="utf-8")
+    with pytest.raises(BuildError, match=name):
+        run(project, FakeFetch())
+    (project.root / name).unlink()
+    with pytest.raises(BuildError, match=name + ": file not found"):
+        run(project, FakeFetch())
+    assert not project.out.exists()
+
+
+def test_a_keyword_file_for_the_wrong_topic_fails(project):
+    # The file named for ai holds the politics list: its topic does not match (R17.5).
+    (project.root / "ai-keywords.json").write_bytes((project.root / "politics-keywords.json").read_bytes())
+    with pytest.raises(BuildError, match="ai-keywords.json: topic must be 'ai'"):
+        run(project, FakeFetch())
+
+
+def test_the_real_keyword_files_all_load():
+    topics, _ = build_module.load_configuration(APP / "sources.json")
+    keywords = build_module.load_keyword_files(APP, topics)
+    assert sorted(keywords) == ["ai", "nature", "politics"]
 
 
 @pytest.mark.parametrize("where", ["", "site"])
@@ -514,7 +548,8 @@ def test_python_dash_m_entry_point_with_the_projects_own_files(tmp_path, monkeyp
     """Runs `python -m newsreader --out <dir>` through runpy, with the real fetch layer replaced."""
     svt_feed = rss(("Regeringen och riksdagen i en påhittad fråga", "/nyheter/inrikes/exempel",
                     "Fri, 13 Nov 2026 11:00:00 GMT")).replace(b"news.example.invalid", b"www.svt.se")
-    fake = FakeFetch({"https://www.svt.se/nyheter/inrikes/rss.xml": svt_feed})
+    fake = FakeFetch({"https://www.svt.se/nyheter/rss.xml": svt_feed,
+                      "https://www.svt.se/nyheter/inrikes/rss.xml": svt_feed})
     monkeypatch.setattr(fetch_module, "fetch_url", fake)
     out = tmp_path / "build"
     monkeypatch.setattr(sys, "argv", ["newsreader", "--out", str(out)])
@@ -524,9 +559,14 @@ def test_python_dash_m_entry_point_with_the_projects_own_files(tmp_path, monkeyp
     assert info.value.code == 0
     document = json.loads((out / "news.json").read_text(encoding="utf-8"))
     assert [s["id"] for s in document["sources"]] == ["svt"]
-    assert fake.calls == ["https://www.svt.se/robots.txt", "https://www.svt.se/nyheter/inrikes/rss.xml"]
+    assert fake.calls == ["https://www.svt.se/robots.txt", "https://www.svt.se/nyheter/rss.xml",
+                          "https://www.svt.se/nyheter/inrikes/rss.xml"]
+    assert document["items"][0]["topics"] == ["all-news", "politics"]
     assert (out / "sources.json").read_bytes() == (APP / "sources.json").read_bytes()
-    assert (out / "politics-keywords.json").exists() and (out / "logic.js").exists()
+    for name in ("politics-keywords.json", "nature-keywords.json", "ai-keywords.json", "logic.js"):
+        assert (out / name).exists()
+    printed = capsys.readouterr().out
+    assert "svt: ok, 1 items" in printed and "  all-news: ok, 1 items" in printed
 
 
 # --- review round 1 -----------------------------------------------------
@@ -693,6 +733,8 @@ def test_file_symlinks_inside_site_are_not_followed(project, tmp_path):
 # --- sources.json version 2: feeds per source, one fetch per distinct URL (F3: R14, R15.1) -----
 
 OTHER_URL = "https://news.example.invalid/all/rss.xml"
+ALL_TOPICS = ["all-news", "politics", "nature", "ai"]
+HOST = "https://news.example.invalid"
 
 
 def svt_shaped(**changes):
@@ -710,81 +752,388 @@ def feed_requests(fetch):
     return [c for c in fetch.calls if not c.endswith("/robots.txt")]
 
 
+def stamp(hour, minute=0):
+    return "Fri, 13 Nov 2026 %02d:%02d:00 GMT" % (hour, minute)
+
+
+def by_url(document):
+    return {i["url"][len(HOST):]: i for i in document["items"]}
+
+
+def feed_of(document, topic, source_id="test-news"):
+    return next(f for f in source_entry(document, source_id)["feeds"] if f["topic"] == topic)
+
+
+# Invented feeds for the SVT-shaped source: OTHER_URL is the broad feed, FEED_URL the domestic one.
+BROAD = rss(
+    ("Regeringen testar ChatGPT i ett naturreservat", "/b/1", stamp(11)),   # all-news, nature, ai (broad feed)
+    ("Naturreservat vid sjön får nya stigar", "/b/2", stamp(10)),           # all-news, nature
+    ("ChatGPT i skolan", "/b/3", stamp(9)),                                 # all-news, ai
+    ("Vädret blir fint i helgen", "/b/4", stamp(8)),                        # all-news
+    ("Riksdagen debatterar i den broad-feeden", "/b/5", stamp(7)),          # all-news only: politics comes from the other feed
+)
+DOMESTIC = rss(
+    ("Regeringen testar ChatGPT i ett naturreservat", "/b/1", stamp(11)),   # the same article: politics is joined
+    ("Riksdagen debatterar exempelfrågan", "/d/1", stamp(10, 30)),          # politics
+    ("Vädret är en inrikesfråga", "/d/2", stamp(9, 30)),                    # no keyword: in no topic
+)
+
+
+def full_fetch(**changes):
+    responses = {ROBOTS_URL: ROBOTS_OK, OTHER_URL: BROAD, FEED_URL: DOMESTIC}
+    responses.update(changes)
+    return FakeFetch(responses)
+
+
 def test_distinct_feed_urls_are_collected_once_each_in_order(project):
     assert build_module.distinct_feed_urls(svt_shaped(), ("all-news", "politics", "nature", "ai")) == [OTHER_URL, FEED_URL]
+    assert build_module.distinct_feed_urls(svt_shaped()) == [OTHER_URL, FEED_URL]  # BUILD_TOPICS: all four
     assert build_module.distinct_feed_urls(svt_shaped(), ("nature", "ai")) == [OTHER_URL]
     assert build_module.distinct_feed_urls(svt_shaped(), ("politics",)) == [FEED_URL]
     assert build_module.distinct_feed_urls(svt_shaped(), ()) == []
+    assert build_module.BUILD_TOPICS == ("all-news", "politics", "nature", "ai")
 
 
-def test_all_topics_cost_one_request_per_distinct_url(project, monkeypatch):
-    # The fetching part of R15.1 with every topic switched on (F5 does it for real): the address
-    # that three topics share is requested once, the other once, robots.txt once per host.
-    monkeypatch.setattr(build_module, "BUILD_TOPICS", ("all-news", "politics", "nature", "ai"))
+def test_all_topics_cost_one_request_per_distinct_url(project):
+    # R15.1: the address that three topics share is requested once, the other once,
+    # robots.txt once per host (not counted).
     project.write_sources(svt_shaped())
-    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED, OTHER_URL: GOOD_FEED})
+    fetch = full_fetch()
     document = run(project, fetch)
     assert sorted(feed_requests(fetch)) == sorted([FEED_URL, OTHER_URL])
     assert fetch.calls.count(ROBOTS_URL) == 1
     assert source_entry(document)["status"] == "ok"
 
 
-def test_all_topics_one_address_for_every_entry_is_one_request(project, monkeypatch):
-    monkeypatch.setattr(build_module, "BUILD_TOPICS", ("all-news", "politics", "nature", "ai"))
+def test_all_topics_one_address_for_every_entry_is_one_request(project):
     feeds = [{"topic": t, "method": "feed" if t == "all-news" else "keywordFilter", "url": FEED_URL}
-             for t in ("all-news", "politics", "nature", "ai")]
+             for t in ALL_TOPICS]
     project.write_sources(source(feeds=feeds))
     fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED})
     run(project, fetch)
     assert feed_requests(fetch) == [FEED_URL]
 
 
-def test_a_failing_second_address_fails_the_source_and_stops_further_requests(project, monkeypatch):
-    monkeypatch.setattr(build_module, "BUILD_TOPICS", ("all-news", "politics"))
+def test_items_get_their_topics_and_an_article_in_two_feeds_is_one_item_with_joined_topics(project):
     project.write_sources(svt_shaped())
-    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, OTHER_URL: FetchError("timeout", "timeout"), FEED_URL: GOOD_FEED})
+    document = run(project, full_fetch())
+    items = by_url(document)
+    assert len(document["items"]) == len({i["url"] for i in document["items"]}) == 6
+    assert items["/b/1"]["topics"] == ["all-news", "politics", "nature", "ai"]  # R13.5: union, order of R13.1
+    assert items["/b/2"]["topics"] == ["all-news", "nature"]
+    assert items["/b/3"]["topics"] == ["all-news", "ai"]
+    assert items["/b/4"]["topics"] == ["all-news"]
+    assert items["/b/5"]["topics"] == ["all-news"]  # "Riksdagen" in the broad feed: the politics rule is on the other feed (R13.3)
+    assert items["/d/1"]["topics"] == ["politics"]
+    assert "/d/2" not in items  # no topic: dropped (R13.3)
+    assert all(set(i) == ITEM_FIELDS for i in document["items"])
+    assert [i["published"] for i in document["items"]] == sorted((i["published"] for i in document["items"]), reverse=True)
+
+
+def test_status_per_source_and_feed_when_everything_works(project):
+    project.write_sources(svt_shaped())
+    document = run(project, full_fetch())
+    entry = source_entry(document)
+    assert entry["status"] == "ok" and entry["lastSuccess"] == "2026-11-13T12:00:00Z"
+    assert entry["itemCount"] == 6 and "message" not in entry
+    assert entry["feeds"] == [
+        {"topic": t, "status": "ok", "lastSuccess": "2026-11-13T12:00:00Z", "itemCount": n}
+        for t, n in (("all-news", 5), ("politics", 2), ("nature", 2), ("ai", 2))]
+    text = (project.out / "news.json").read_text(encoding="utf-8")
+    assert "news.example.invalid/all/rss.xml" not in text  # no feed address in news.json (R19.3)
+
+
+def test_the_cap_is_per_source_and_topic_and_an_item_keeps_only_the_topics_it_was_kept_in(project):
+    feeds = [{"topic": "all-news", "method": "feed", "url": OTHER_URL},
+             {"topic": "politics", "method": "keywordFilter", "url": OTHER_URL}]
+    project.write_sources(source(feeds=feeds))
+    plain = [("Vanlig nyhet %d" % n, "/p/%d" % n, stamp(11, 59 - n)) for n in range(24)]
+    old_politics = ("Riksdagen om en gammal fråga", "/p/old", stamp(1))      # oldest of 25: not in the 20 newest
+    document = run(project, FakeFetch({ROBOTS_URL: ROBOTS_OK, OTHER_URL: rss(*plain, old_politics)}))
+    items = by_url(document)
+    assert len(document["items"]) == 21  # the 21st plain item has no topic left and is dropped
+    assert sum("all-news" in i["topics"] for i in document["items"]) == 20
+    assert items["/p/old"]["topics"] == ["politics"]  # cut from all-news, kept in politics (R13.6)
+    assert "/p/23" not in items and "/p/19" in items
+    feeds_out = {f["topic"]: f["itemCount"] for f in source_entry(document)["feeds"]}
+    assert feeds_out == {"all-news": 20, "politics": 1}
+    assert source_entry(document)["itemCount"] == 21
+
+
+def test_an_item_older_than_seven_days_is_dropped_in_every_topic(project):
+    old = rss(("Riksdagen i en gammal fråga", "/o/1", "Thu, 05 Nov 2026 11:00:00 GMT"),
+              ("Riksdagen i en ny fråga", "/o/2", stamp(11)))
+    project.write_sources(svt_shaped())
+    document = run(project, full_fetch(**{OTHER_URL: old, FEED_URL: old}))
+    assert [i["url"][len(HOST):] for i in document["items"]] == ["/o/2"]
+
+
+# --- one failing feed (R15.2, R19.3, R19.4) ---------------------------------
+
+def previous_v2(path, feed_success, items, source_success=None):
+    """A previous news.json of version 2 for the SVT-shaped source. `feed_success`: topic -> lastSuccess."""
+    document = {
+        "version": 2, "generatedAt": "2026-11-13T10:00:00Z", "generatedAtDisplay": "x", "topics": ALL_TOPICS,
+        "sources": [{"id": "test-news", "name": "Test News", "status": "ok",
+                     "lastSuccess": source_success or min(feed_success.values()), "itemCount": len(items),
+                     "feeds": [{"topic": t, "status": "ok", "lastSuccess": feed_success[t], "itemCount": 0}
+                               for t in ALL_TOPICS if t in feed_success]}],
+        "items": [{"id": "0123456789abcdef", "sourceId": "test-news", "sourceName": "Test News",
+                   "title": title, "url": HOST + path, "published": "2026-11-13T09:00:00Z",
+                   "publishedDisplay": "2026-11-13 10:00", "topics": topics} for title, path, topics in items]}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+
+def hours_ago(hours, minutes=0):
+    return (NOW - timedelta(hours=hours, minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def test_one_failing_feed_does_not_hide_the_others_and_does_not_stop_further_requests(project):
+    # The F3 rule "stop after the first failing address" is gone: a failure is per URL (R15.2).
+    project.write_sources(svt_shaped())
+    fetch = full_fetch(**{OTHER_URL: FetchError("timeout", "timeout")})
     document = run(project, fetch)
-    assert source_entry(document)["status"] == "error"
-    assert feed_requests(fetch) == [OTHER_URL]
+    assert feed_requests(fetch) == [OTHER_URL, FEED_URL]
+    entry = source_entry(document)
+    assert entry["status"] == "error" and entry["message"] == "fetch failed: timeout"
+    statuses = {f["topic"]: f["status"] for f in entry["feeds"]}
+    assert statuses == {"all-news": "error", "politics": "ok", "nature": "error", "ai": "error"}
+    assert "message" not in feed_of(document, "politics")
+    assert feed_of(document, "nature")["message"] == "fetch failed: timeout"  # the three entries share it
+    assert [i["url"][len(HOST):] for i in document["items"]] == ["/b/1", "/d/1"]  # the politics feed is current
+    assert entry["lastSuccess"] is None  # three feeds have never succeeded
 
 
-def test_the_build_evaluates_only_the_politics_feed_for_now(project):
-    # R14.7: with all four feed entries present, the build fetches one address (politics)
-    # and the items are those the politics feed gives, so news.json is as before F3.
+def test_the_fallback_is_per_feed_and_keeps_only_the_topics_of_the_failed_feed(project):
     project.write_sources(svt_shaped())
-    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED, OTHER_URL: rss(("Riksdagen i allt", "/z/9", "Fri, 13 Nov 2026 11:00:00 GMT"))})
+    previous_v2(project.out / "news.json",
+                {"all-news": hours_ago(2), "politics": hours_ago(1), "nature": hours_ago(2), "ai": hours_ago(2)},
+                [("Gammal nyhet om allt", "/old/1", ["all-news", "politics"]),
+                 ("Gammal naturnyhet", "/old/2", ["all-news", "nature"]),
+                 ("Bara politik förut", "/old/3", ["politics"])])
+    fetch = full_fetch(**{OTHER_URL: FetchError("timeout", "timeout")})
+    document = run(project, fetch)
+    items = by_url(document)
+    # The failed feed entries are all-news, nature and ai: only those topics come back from the old file.
+    assert items["/old/1"]["topics"] == ["all-news"]
+    assert items["/old/2"]["topics"] == ["all-news", "nature"]
+    assert "/old/3" not in items  # politics is current (its feed worked), so its old items are not added
+    assert items["/d/1"]["topics"] == ["politics"] and items["/b/1"]["topics"] == ["politics"]
+    entry = source_entry(document)
+    assert entry["status"] == "error"
+    assert entry["lastSuccess"] == hours_ago(2)  # the oldest lastSuccess of the feeds
+    assert feed_of(document, "all-news") == {"topic": "all-news", "status": "error", "lastSuccess": hours_ago(2),
+                                             "itemCount": 2, "message": "fetch failed: timeout"}
+    assert feed_of(document, "politics")["lastSuccess"] == "2026-11-13T12:00:00Z"
+
+
+def test_a_fresh_item_and_its_old_copy_are_one_item_with_the_fresh_text_and_joined_topics(project):
+    project.write_sources(svt_shaped())
+    previous_v2(project.out / "news.json",
+                {"all-news": hours_ago(1), "politics": hours_ago(1), "nature": hours_ago(1), "ai": hours_ago(1)},
+                [("Gammal rubrik", "/d/1", ["all-news", "nature"])])
+    document = run(project, full_fetch(**{OTHER_URL: FetchError("timeout", "timeout")}))
+    item = by_url(document)["/d/1"]
+    assert item["title"] == "Riksdagen debatterar exempelfrågan"
+    assert item["topics"] == ["all-news", "politics", "nature"]
+
+
+def test_the_fallback_is_refused_per_feed_after_24_hours(project):
+    project.write_sources(svt_shaped())
+    previous_v2(project.out / "news.json",
+                {"all-news": hours_ago(24), "politics": hours_ago(1), "nature": hours_ago(23, 59), "ai": hours_ago(30)},
+                [("Gammal nyhet", "/old/1", ["all-news", "nature", "ai"])])
+    document = run(project, full_fetch(**{OTHER_URL: FetchError("timeout", "timeout")}))
+    old = by_url(document)["/old/1"]
+    assert old["topics"] == ["nature"]  # only the feed that failed less than 24 hours after its success
+    assert feed_of(document, "all-news")["lastSuccess"] == hours_ago(24)  # the last real success is kept
+    assert feed_of(document, "ai")["itemCount"] == 0 and feed_of(document, "nature")["itemCount"] == 1
+
+
+def test_the_cap_is_applied_again_after_previous_items_are_added(project):
+    feeds = [{"topic": "all-news", "method": "feed", "url": OTHER_URL},
+             {"topic": "nature", "method": "keywordFilter", "url": FEED_URL}]
+    project.write_sources(source(feeds=feeds))
+    previous_v2(project.out / "news.json", {"all-news": hours_ago(1), "nature": hours_ago(1)},
+                [("Gammal nyhet %d" % n, "/old/%d" % n, ["all-news"]) for n in range(25)])
+    nature = rss(("Naturreservat vid sjön", "/n/1", stamp(8)), ("Naturreservat vid havet", "/n/2", stamp(7)))
+    document = run(project, FakeFetch({ROBOTS_URL: ROBOTS_OK, OTHER_URL: FetchError("timeout", "timeout"),
+                                       FEED_URL: nature}))
+    assert feed_of(document, "all-news")["itemCount"] == 20  # 25 old items, 20 kept
+    assert feed_of(document, "nature")["itemCount"] == 2
+    assert len(document["items"]) == 22
+    # The old items have the time 09:00, newer than the nature items; the 20 newest per topic are kept.
+    assert {"/n/1", "/n/2"} <= set(by_url(document))
+
+
+def test_a_version_1_previous_file_gives_politics_to_the_politics_feed_only(project):
+    project.write_sources(svt_shaped())
+    last = hours_ago(1)
+    previous_file(project.out / "news.json", last)  # version 1: one item, one source lastSuccess
+    document = run(project, full_fetch(**{FEED_URL: FetchError("timeout", "timeout"),
+                                          OTHER_URL: FetchError("timeout", "timeout")}))
+    assert [i["title"] for i in document["items"]] == ["Gammal riksdagsrubrik"]
+    assert document["items"][0]["topics"] == ["politics"]
+    assert feed_of(document, "politics")["lastSuccess"] == last and feed_of(document, "politics")["itemCount"] == 1
+    for topic in ("all-news", "nature", "ai"):
+        assert feed_of(document, topic)["lastSuccess"] is None and feed_of(document, topic)["itemCount"] == 0
+    assert source_entry(document)["lastSuccess"] is None  # some feed never succeeded
+
+
+def test_a_version_1_previous_file_next_to_a_working_feed_is_not_added_to_it(project):
+    project.write_sources(svt_shaped())
+    previous_file(project.out / "news.json", hours_ago(1))
+    document = run(project, full_fetch())
+    assert "Gammal riksdagsrubrik" not in [i["title"] for i in document["items"]]
+
+
+def test_previous_items_with_wrong_topics_or_fields_are_not_kept(project):
+    project.write_sources(svt_shaped())
+    previous_v2(project.out / "news.json", {t: hours_ago(1) for t in ALL_TOPICS},
+                [("Bra", "/old/ok", ["all-news"]), ("Tom lista", "/old/1", []),
+                 ("Okänt ämne", "/old/2", ["sport"]), ("Fel typ", "/old/3", "all-news")])
+    document = run(project, full_fetch(**{OTHER_URL: FetchError("timeout", "timeout")}))
+    assert "/old/ok" in by_url(document)
+    assert not {"/old/1", "/old/2", "/old/3"} & set(by_url(document))
+    # A version 1 item (seven fields) inside a version 2 file is not trusted either.
+    path = project.out / "news.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["items"] = [{k: v for k, v in data["items"][0].items() if k != "topics"}]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    document = run(project, full_fetch(**{OTHER_URL: FetchError("timeout", "timeout")}))
+    assert "/old/ok" not in by_url(document)
+
+
+def test_an_unknown_previous_version_is_ignored(project):
+    project.write_sources(svt_shaped())
+    previous_v2(project.out / "news.json", {t: hours_ago(1) for t in ALL_TOPICS}, [("Gammal", "/old/1", ["all-news"])])
+    data = json.loads((project.out / "news.json").read_text(encoding="utf-8"))
+    data["version"] = 3
+    (project.out / "news.json").write_text(json.dumps(data), encoding="utf-8")
+    document = run(project, full_fetch(**{OTHER_URL: FetchError("timeout", "timeout")}))
+    assert "/old/1" not in by_url(document)
+
+
+def test_a_blocked_address_marks_every_feed_entry_that_uses_it_and_keeps_nothing(project):
+    project.write_sources(svt_shaped())
+    previous_v2(project.out / "news.json", {t: hours_ago(1) for t in ALL_TOPICS}, [("Gammal", "/old/1", ["all-news"])])
+    robots = b"User-agent: *\nDisallow: /all/\n"
+    fetch = full_fetch(**{ROBOTS_URL: robots})
+    document = run(project, fetch)
+    assert feed_requests(fetch) == [FEED_URL]  # robots.txt read once; the blocked address is not requested
+    assert fetch.calls.count(ROBOTS_URL) == 1
+    statuses = {f["topic"]: f["status"] for f in source_entry(document)["feeds"]}
+    assert statuses == {"all-news": "blocked-by-robots", "politics": "ok", "nature": "blocked-by-robots",
+                        "ai": "blocked-by-robots"}
+    entry = source_entry(document)
+    assert entry["status"] == "blocked-by-robots" and entry["message"] == "robots.txt does not allow this address"
+    assert "/old/1" not in by_url(document)  # a blocked feed keeps nothing (R6.6)
+    assert [i["url"][len(HOST):] for i in document["items"]] == ["/b/1", "/d/1"]  # only what the politics feed gave
+
+
+def test_the_worst_status_and_the_message_of_the_first_feed_with_it(project):
+    # all-news fails (error), politics is blocked: the source is `error`, with the message of the
+    # first feed that has that status.
+    project.write_sources(svt_shaped())
+    robots = b"User-agent: *\nDisallow: /politics/\n"
+    fetch = full_fetch(**{ROBOTS_URL: robots, OTHER_URL: FetchError("status", "HTTP status 500", 500)})
+    document = run(project, fetch)
+    entry = source_entry(document)
+    assert [f["status"] for f in entry["feeds"]] == ["error", "blocked-by-robots", "error", "error"]
+    assert entry["status"] == "error" and entry["message"] == "fetch failed: HTTP status 500"
+    assert feed_of(document, "politics")["message"] == "robots.txt does not allow this address"
+
+
+def test_unreadable_robots_marks_every_feed_of_the_host_as_error(project):
+    project.write_sources(svt_shaped())
+    fetch = full_fetch(**{ROBOTS_URL: FetchError("timeout", "timeout")})
+    document = run(project, fetch)
+    assert feed_requests(fetch) == []
+    assert [f["status"] for f in source_entry(document)["feeds"]] == ["error"] * 4
+    assert fetch.calls.count(ROBOTS_URL) == 1
+
+
+def test_a_category_filter_feed_fails_only_its_own_address(project):
+    feeds = [{"topic": "all-news", "method": "feed", "url": OTHER_URL},
+             {"topic": "politics", "method": "categoryFilter", "url": FEED_URL}]
+    project.write_sources(source(feeds=feeds))
+    document = run(project, full_fetch())
+    assert feed_of(document, "all-news")["status"] == "ok" and feed_of(document, "all-news")["itemCount"] == 5
+    politics_feed = feed_of(document, "politics")
+    assert politics_feed["status"] == "error" and "categoryFilter" in politics_feed["message"]
+    assert "ValueError" in politics_feed["message"] and "selection failed" in politics_feed["message"]
+
+
+def test_a_source_that_offers_one_topic_only_requests_only_its_address(project):
+    # R13.7: a topic without a feed entry is not an error and not a request.
+    project.write_sources(source(feeds=[{"topic": "nature", "method": "keywordFilter", "url": FEED_URL}]))
+    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: rss(("Naturreservat vid sjön", "/n/1", stamp(9)),
+                                                           ("Riksdagen debatterar", "/n/2", stamp(8)))})
     document = run(project, fetch)
     assert feed_requests(fetch) == [FEED_URL]
-    assert [i["url"] for i in document["items"]] == [
-        "https://news.example.invalid/a/1", "https://news.example.invalid/a/2"]
-    assert document["version"] == 1 and document["category"] == "politics-sweden"
+    assert [(i["url"][len(HOST):], i["topics"]) for i in document["items"]] == [("/n/1", ["nature"])]
+    assert [f["topic"] for f in source_entry(document)["feeds"]] == ["nature"]
 
 
-def test_the_politics_method_is_the_one_of_its_own_feed_entry(project):
+def test_the_same_article_twice_in_one_feed_keeps_the_first_and_joins_topics(project):
     feeds = [{"topic": "all-news", "method": "feed", "url": FEED_URL},
-             {"topic": "politics", "method": "keywordFilter", "url": FEED_URL}]
+             {"topic": "ai", "method": "keywordFilter", "url": FEED_URL}]
     project.write_sources(source(feeds=feeds))
-    document = run(project, FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED}))
-    assert document["items"] and all("Väder" not in i["title"] for i in document["items"])
+    twice = rss(("Första rubriken", "/t/1", stamp(9)), ("ChatGPT i andra rubriken", "/t/1?utm=x", stamp(8)))
+    document = run(project, FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: twice}))
+    assert [(i["title"], i["topics"]) for i in document["items"]] == [("Första rubriken", ["all-news", "ai"])]
 
 
-def test_a_source_without_a_politics_feed_gives_nothing_and_no_request(project):
-    # R13.7: a topic that a source does not offer is not an error.
-    project.write_sources(source(feeds=[{"topic": "nature", "method": "keywordFilter", "url": FEED_URL}]))
-    fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED})
-    document = run(project, fetch)
-    assert fetch.calls == []
-    entry = source_entry(document)
-    assert entry["status"] == "ok" and entry["itemCount"] == 0 and document["items"] == []
+def test_news_json_of_the_real_sources_has_the_svt_items_with_topics_and_two_feed_requests(tmp_path):
+    svt_all = "https://www.svt.se/nyheter/rss.xml"
+    svt_domestic = "https://www.svt.se/nyheter/inrikes/rss.xml"
+
+    def feed(*items):
+        return rss(*items).replace(b"news.example.invalid", b"www.svt.se")
+
+    fetch = FakeFetch({
+        "https://www.svt.se/robots.txt": ROBOTS_OK,
+        svt_all: feed(("Naturreservat vid sjön får nya stigar", "/nyheter/a", stamp(11)),
+                      ("Regeringen testar ChatGPT", "/nyheter/inrikes/b", stamp(10))),
+        svt_domestic: feed(("Regeringen testar ChatGPT", "/nyheter/inrikes/b", stamp(10)))})
+    document = build(tmp_path / "real", NOW, fetch)
+    assert fetch.calls == ["https://www.svt.se/robots.txt", svt_all, svt_domestic]  # two feed requests (R15.1)
+    items = {i["url"]: i for i in document["items"]}
+    assert items["https://www.svt.se/nyheter/a"]["topics"] == ["all-news", "nature"]
+    assert items["https://www.svt.se/nyheter/inrikes/b"]["topics"] == ["all-news", "politics", "ai"]
+    assert [f["topic"] for f in source_entry(document, "svt")["feeds"]] == ALL_TOPICS
+    assert document["topics"] == ALL_TOPICS
 
 
-def test_the_real_file_costs_one_svt_feed_request_and_no_sveriges_radio_request(tmp_path):
-    svt_feed = "https://www.svt.se/nyheter/inrikes/rss.xml"
-    fetch = FakeFetch({"https://www.svt.se/robots.txt": ROBOTS_OK,
-                       svt_feed: rss(("Riksdagen röstar om ett påhittat ärende", "/x", "Fri, 13 Nov 2026 11:00:00 GMT")
-                                     ).replace(b"news.example.invalid", b"www.svt.se")})
-    build(tmp_path / "real", NOW, fetch)
-    assert fetch.calls == ["https://www.svt.se/robots.txt", svt_feed]
+def test_the_output_guard_refuses_a_document_that_breaks_the_shape(project):
+    good_item = {"id": "a", "sourceId": "test-news", "sourceName": "T", "title": "t", "url": "u",
+                 "published": None, "publishedDisplay": "Tid saknas", "topics": ["politics"]}
+    good_feed = {"topic": "politics", "status": "ok", "lastSuccess": None, "itemCount": 1}
+    good = {"version": 2, "topics": ALL_TOPICS, "items": [good_item],
+            "sources": [{"id": "test-news", "status": "ok", "feeds": [good_feed]}]}
+    build_module._check_document(good, [source()], ALL_TOPICS)  # no error
+    bad_items = [dict(good_item, topics=[]), dict(good_item, topics=["ai", "politics"]),
+                 dict(good_item, topics=["politics", "politics"]), dict(good_item, topics=["sport"]),
+                 {k: v for k, v in good_item.items() if k != "topics"}]
+    for item in bad_items:
+        with pytest.raises(BuildError, match="internal error"):
+            build_module._check_document(dict(good, items=[item]), [source()], ALL_TOPICS)
+    for change in ({"version": 1}, {"topics": ["politics"]},
+                   {"sources": [{"id": "test-news", "status": "error", "feeds": [good_feed]}]},  # no message
+                   {"sources": [{"id": "test-news", "status": "ok", "feeds": [dict(good_feed, topic="sport")]}]}):
+        with pytest.raises(BuildError, match="internal error"):
+            build_module._check_document(dict(good, **change), [source()], ALL_TOPICS)
+
+
+def test_cli_prints_the_status_of_each_feed(project, capsys):
+    project.write_sources(svt_shaped())
+    fetch = full_fetch(**{OTHER_URL: FetchError("timeout", "timeout")})
+    assert main(["--out", str(project.out)], fetch=fetch, now=NOW, root=project.root) == 0
+    out = capsys.readouterr().out
+    assert "test-news: error, 2 items (fetch failed: timeout)" in out
+    assert "  politics: ok, 2 items" in out
+    assert "  nature: error, 0 items (fetch failed: timeout)" in out
 
 
 def test_a_version_1_sources_file_fails_the_build_and_writes_nothing(project):

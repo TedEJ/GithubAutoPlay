@@ -142,8 +142,8 @@ def test_the_real_file_is_valid_and_costs_two_svt_requests_and_one_sveriges_radi
     all_topics = tuple(TOPIC_IDS)
     assert distinct_feed_urls(by_id["svt"], all_topics) == [SVT_ALL, SVT_INRIKES]
     assert distinct_feed_urls(by_id["sveriges-radio"], all_topics) == [SR_URL]
-    # Until F5 the build evaluates politics only: one SVT address.
-    assert distinct_feed_urls(by_id["svt"]) == [SVT_INRIKES]
+    # From F5 the build evaluates all four topics: two SVT feed requests (R15.1).
+    assert distinct_feed_urls(by_id["svt"]) == [SVT_ALL, SVT_INRIKES]
 
 
 def test_shared_cases_has_the_expected_sections():

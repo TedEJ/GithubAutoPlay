@@ -35,3 +35,31 @@ class NewsItem:
     def as_dict(self):
         """The item as it is written to `news.json` (field order of design 7.4)."""
         return {f.name: getattr(self, f.name) for f in fields(self)}
+
+
+@dataclass(frozen=True)
+class TopicItem:
+    """One item of `news.json` version 2: the seven fields of R1.1 and `topics` (R1.5).
+
+    `topics` is a non-empty tuple of topic ids in the order of R13.1, without duplicates.
+    """
+
+    id: str
+    sourceId: str
+    sourceName: str
+    title: str
+    url: str
+    published: "str | None"
+    publishedDisplay: str
+    topics: tuple
+
+    @classmethod
+    def of(cls, item, topics):
+        """An item of `select_items`' shape plus its topics."""
+        return cls(*(getattr(item, f.name) for f in fields(NewsItem)), tuple(topics))
+
+    def as_dict(self):
+        """The item as it is written to `news.json` (field order of design 7.7)."""
+        result = {f.name: getattr(self, f.name) for f in fields(self)}
+        result["topics"] = list(self.topics)
+        return result

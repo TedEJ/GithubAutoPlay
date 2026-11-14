@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from tests.fakes import APP, browser_source, source, sources_file
+from tests.fakes import APP, TOPICS, browser_source, source, sources_file
 
 
 @pytest.fixture
@@ -22,6 +22,8 @@ def project(tmp_path):
     p = Project()
     p.root.mkdir()
     shutil.copytree(APP / "site", p.root / "site", ignore=shutil.ignore_patterns("__pycache__"))
-    shutil.copyfile(APP / "politics-keywords.json", p.root / "politics-keywords.json")
+    for topic in TOPICS:
+        if "keywords" in topic:
+            shutil.copyfile(APP / topic["keywords"], p.root / topic["keywords"])
     p.write_sources(source(), browser_source())
     return p
