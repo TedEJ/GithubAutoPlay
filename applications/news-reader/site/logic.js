@@ -721,6 +721,67 @@
     return sortItems(items, false).slice(0, MAX_ITEMS);
   }
 
+  // Raw entries of one source -> the items to show for every topic of the source
+  // (step F8; R7.4, R13.3, R13.6, R19.7). The same steps as selectItems, but the topics
+  // of each entry come from topicsOf over all the feed entries of the source, so one
+  // response serves all topics (R15.3). The 20 newest items are kept per topic; an
+  // item keeps only the topics in which it was kept and is dropped when it has none.
+  // Each item has the eight fields of R1.5 (`topics` included) and nothing else.
+  // `source.feeds`: [{topic, method, matchOn?}]; `keywordsByTopic`: a plain object or
+  // a Map from topic id to validateKeywords output, which must hold a list for every
+  // keywordFilter feed (the caller leaves out a feed whose list could not be read).
+  function selectTopicItems(entries, source, keywordsByTopic, now) {
+    const nowMs = toMillis(now);
+    const feeds = Array.isArray(source.feeds) ? source.feeds.filter((f) => f && TOPIC_ORDER.includes(f.topic)) : [];
+    if (feeds.length === 0) throw new Error("source " + JSON.stringify(source.id) + " has no feed entry");
+    for (const feed of feeds) {
+      if (feed.method !== "feed" && feed.method !== "keywordFilter") {
+        throw new Error("unsupported method " + JSON.stringify(feed.method) + " for source " + JSON.stringify(source.id));
+      }
+    }
+    const cutoffMs = nowMs - MAX_AGE_MS;
+    const seen = new Set();
+    const found = [];
+    for (const entry of entries) {
+      const raw = entryFields(entry);
+      const title = cleanHeadline(raw.title);
+      if (title === "") continue;
+      const normalised = checkUrl(raw.link, source.allowedHosts);
+      if (normalised === null || seen.has(normalised)) continue;
+      seen.add(normalised);
+      const topics = topicsOf(raw.title, raw.description, feeds, keywordsByTopic);
+      if (topics.length === 0) continue;
+      const seconds = parseTime(raw.timeText);
+      let published = null;
+      if (seconds !== null) {
+        if (seconds * 1000 < cutoffMs) continue;
+        if (seconds * 1000 <= nowMs + FUTURE_LIMIT_MS) published = formatUtc(seconds);
+      }
+      found.push({
+        item: {
+          id: itemId(normalised),
+          sourceId: source.id,
+          sourceName: source.name,
+          title,
+          url: stripWs(raw.link),
+          published,
+          publishedDisplay: displayTime(published),
+        },
+        topics,
+      });
+    }
+    const kept = new Map(); // item id -> topics in which it was kept
+    for (const topic of TOPIC_ORDER) {
+      const own = sortItems(found.filter((f) => f.topics.includes(topic)).map((f) => f.item), false);
+      for (const item of own.slice(0, MAX_ITEMS)) {
+        if (!kept.has(item.id)) kept.set(item.id, new Set());
+        kept.get(item.id).add(topic);
+      }
+    }
+    const items = sortItems(found.filter((f) => kept.has(f.item.id)).map((f) => f.item), false);
+    return items.map((item) => ({ ...item, topics: TOPIC_ORDER.filter((t) => kept.get(item.id).has(t)) }));
+  }
+
   // Newest first by `published` (fixed-width UTC text), `null` last. Ties: by
   // `sourceId` first when `bySource` is true (R5.5), then by title (code
   // points), then the input order (the sort is stable). Returns a new array.
@@ -868,6 +929,7 @@
     generatedAt,
     generatedAtDisplay,
     selectItems,
+    selectTopicItems,
     sortItems,
     mergeItems,
     liveFetchAllowed,

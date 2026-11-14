@@ -1,7 +1,7 @@
 // The news reader page: headlines from news.json (the build sources), the reader's
 // choice of topic (Ämnen, step F7) and of sources, an offline copy, notices (step
 // S10), and the live fetch of the sources that the page reads itself, today
-// Sveriges Radio (step S11).
+// Sveriges Radio (step S11) with all the topics of one response (step F8).
 //
 // This is a thin layer. The rules (URL check, time display, sorting, the call
 // limits of the live fetch) live in logic.js; the request and the Atom parsing
@@ -51,7 +51,6 @@
     keywordNote: "Urval med nyckelord – ungefärligt",
     noTime: "Tid saknas",
     topicsHeading: "Ämnen",
-    notVisibleYet: "Visas inte än", // R18.9, until F8
   };
 
   // The line that must follow the credit text of Riksdagen (R16.5, D38). One
@@ -97,19 +96,25 @@
         fetchedBy: raw.fetchedBy,
         allowedHosts: hosts.slice(),
         method,
-        // The topics the source offers, each with its method (R18.5, R13.7). The
-        // address and `matchOn` stay in the file.
-        feeds: TOPICS.filter((t) => feedList.some((f) => f.topic === t)).map((t) => ({
-          topic: t,
-          method: String(feedList.find((f) => f.topic === t).method),
-        })),
+        // The topics the source offers, each with its method (R18.5, R13.7) and, for
+        // a title-only keyword match, `matchOn` (R14.2). The address stays in the file.
+        feeds: TOPICS.filter((t) => feedList.some((f) => f.topic === t)).map((t) => {
+          const feed = feedList.find((f) => f.topic === t);
+          const entry = { topic: t, method: String(feed.method) };
+          if (feed.matchOn === "title") entry.matchOn = "title";
+          return entry;
+        }),
       };
       // The credit text that the page must show with the items (R16.5).
       if (isText(raw.credit, MAX_NAME)) source.credit = raw.credit;
       // The address of a feed that the page fetches itself (R7.1): from
-      // sources.json, never written in this script. Only https is accepted.
+      // sources.json, never written in this script. Only https is accepted. The page
+      // makes one request per fetch round (R15.3), so all the feed entries of the
+      // source must use one and the same address; with none or several the address is
+      // empty and the source shows the failure status (D42).
       if (raw.fetchedBy === "browser") {
-        const url = isObject(category) ? category.url : "";
+        const urls = new Set(feedList.map((f) => f.url));
+        const url = urls.size === 1 ? Array.from(urls)[0] : "";
         source.url = isText(url, MAX_URL) && /^https:\/\/[^\s]+$/.test(url) ? url : "";
       }
       result.push(source);
@@ -124,7 +129,13 @@
     const result = [];
     for (const id of TOPICS) {
       const raw = data.topics.slice(0, TOPICS.length * 4).find((t) => isObject(t) && t.id === id);
-      if (raw && isText(raw.label, MAX_NAME)) result.push({ id, label: raw.label });
+      if (raw && isText(raw.label, MAX_NAME)) {
+        const entry = { id, label: raw.label };
+        // The keyword file of the topic (R14.1): only a name of the form
+        // <id>-keywords.json is accepted, so it cannot hold a path.
+        if (typeof raw.keywords === "string" && raw.keywords === id + "-keywords.json") entry.keywords = raw.keywords;
+        result.push(entry);
+      }
     }
     return result;
   }
@@ -308,17 +319,16 @@
 
   // The list: the chosen sources' items that belong to the chosen topic (R18.2),
   // merged and sorted by logic.js (R5.5). `liveItems` (optional): a Map from the id of
-  // a source that the page fetches itself to its items in memory. Until F8 those
-  // items have no topics and count as Politik only (R18.9): they are in the list for
-  // that topic and for no other.
+  // a source that the page fetches itself to its items in memory, each with its
+  // `topics` (F8): they are filtered by the topic like the others.
   function visibleItems(news, selected, liveItems, topic) {
     const chosen = topic === undefined ? logic.DEFAULT_TOPIC : topic;
     const lists = selected.map((id) => {
       const fromFile = news
         ? logic.filterByTopic(news.items.filter((item) => item.sourceId === id), chosen)
         : [];
-      const live = chosen === "politics" && liveItems && liveItems.get(id);
-      return live ? fromFile.concat(live) : fromFile;
+      const live = liveItems ? liveItems.get(id) : undefined;
+      return live ? fromFile.concat(logic.filterByTopic(live, chosen)) : fromFile;
     });
     return logic.mergeItems(lists);
   }
@@ -357,12 +367,15 @@
   // its state ({status: "idle" | "loading" | "ok" | "error", fetchedAt, items})
   // or undefined; `chosen` is false when the reader has unticked the source (then
   // nothing is requested). The text of a failure holds the source name only.
-  function browserStatus(source, live, chosen) {
+  // One request serves all topics (R15.3), so there is one status, not one per topic;
+  // the count is that of the chosen topic `topic` (all items without it).
+  function browserStatus(source, live, chosen, topic) {
     if (chosen === false) return "Inte vald – ingen hämtning";
     if (!live || live.status === "idle") return "Inte hämtad ännu";
     if (live.status === "error") return source.name + " kunde inte hämtas just nu";
     if (live.status === "loading") return "Hämtar …";
-    return "Hämtad " + clockTime(live.fetchedAt) + ", " + countText(live.items.length);
+    const shown = topic === undefined ? live.items : logic.filterByTopic(live.items, topic);
+    return "Hämtad " + clockTime(live.fetchedAt) + " (en hämtning för alla ämnen), " + countText(shown.length);
   }
 
   // The status of a build source for the chosen topic (R18.5): the status of the
@@ -399,9 +412,14 @@
       if (!feed) {
         status = "Erbjuder inte ämnet " + labelOf(chosen);
       } else if (source.fetchedBy === "browser") {
-        status = !isChosen || chosen === "politics"
-          ? browserStatus(source, live && live.get(source.id), isChosen)
-          : TEXT.notVisibleYet;
+        const state = live && live.get(source.id);
+        status = browserStatus(source, state, isChosen, chosen);
+        // A keyword list that could not be read (D42): the items count under Alla
+        // nyheter only for those topics, and the row says so. Labels only, no content.
+        if (isChosen && state && state.status === "ok" && state.missing && state.missing.length > 0) {
+          status += ". Nyckelord saknas för " + joinNames(state.missing.map(labelOf)) +
+            ": de rubrikerna visas bara under Alla nyheter";
+        }
       } else {
         status = buildStatus(source, news, chosen);
       }
@@ -471,7 +489,8 @@
       // Sveriges Radio and any other source the page fetches itself. Memory
       // only (R7.3): source id -> {last, inFlight, status, fetchedAt, items}.
       live: new Map(),
-      keywords: null,
+      // Validated keyword lists by topic id, and the file names (from sources.json).
+      keywords: new Map(),
     };
     const pendingLive = new Set();
     const sourceEls = new Map();
@@ -522,11 +541,13 @@
       const items = currentItems();
       // R8.4: only when news were loaded, nothing is left to show and no chosen
       // source is still being fetched.
-      // A live source contributes nothing under other topics until F8, so it is
-      // waited for under Politik only.
-      const waiting = state.topic === "politics" && state.selected.some((id) => {
+      // A chosen live source that offers the topic and is still being fetched is
+      // waited for.
+      const waiting = state.selected.some((id) => {
         const live = state.live.get(id);
-        return live !== undefined && live.status === "loading";
+        const source = (state.sources || []).find((s) => s.id === id);
+        return live !== undefined && live.status === "loading" && source !== undefined &&
+          logic.offersTopic(source, state.topic);
       });
       const showEmpty = state.news !== null && items.length === 0 && !waiting;
       const emptyText = logic.emptyNoticeText(
@@ -718,6 +739,7 @@
         const live = state.live.get(source.id);
         if (source.fetchedBy === "browser" && live && !state.selected.includes(source.id)) {
           live.items = [];
+          live.missing = [];
           if (!live.inFlight) live.status = "idle";
         }
       }
@@ -750,7 +772,7 @@
     function liveOf(id) {
       let live = state.live.get(id);
       if (!live) {
-        live = { last: null, inFlight: false, status: "idle", fetchedAt: null, items: [] };
+        live = { last: null, inFlight: false, status: "idle", fetchedAt: null, items: [], missing: [] };
         state.live.set(id, live);
       }
       return live;
@@ -763,9 +785,25 @@
       let controller = null;
       let timer = null;
       try {
-        if (!state.keywords) {
-          state.keywords = logic.validateKeywords(await fetchJson("politics-keywords.json"));
+        // The lists of the topics this source filters by keywords, fetched from the
+        // build folder under the names in sources.json, once per page; only a source
+        // that is chosen gets here (R15.3). A list that cannot be read or is invalid
+        // leaves its topic out for this round (D42); it is tried again next time.
+        const wanted = [];
+        for (const feed of source.feeds) {
+          if (feed.method === "keywordFilter" && !wanted.includes(feed.topic)) wanted.push(feed.topic);
         }
+        const missing = [];
+        await Promise.all(wanted.map(async (topic) => {
+          if (state.keywords.has(topic)) return;
+          try {
+            const entry = state.topics.find((t) => t.id === topic);
+            if (!entry || !entry.keywords) throw new Error("no keyword file");
+            state.keywords.set(topic, logic.validateKeywords(await fetchJson(entry.keywords), topic));
+          } catch (e) {
+            missing.push(topic);
+          }
+        }));
         if (typeof env.AbortController === "function") {
           controller = new env.AbortController();
           timer = env.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -774,24 +812,30 @@
           signal: controller ? controller.signal : undefined,
           DOMParser: env.DOMParser,
         });
-        const items = logic.selectItems(entries, {
+        // One response, all topics (R15.3, R7.4): a feed whose keyword list is missing
+        // is left out, so its topic is simply not given to any item. "all-news" is a
+        // `feed` entry and is always given.
+        const items = logic.selectTopicItems(entries, {
           id: source.id,
           name: source.name,
           allowedHosts: source.allowedHosts,
-          feeds: [{ topic: "politics", method: source.method }],
+          feeds: source.feeds.filter((f) => f.method !== "keywordFilter" || !missing.includes(f.topic)),
         }, state.keywords, env.now());
         if (state.selected.includes(source.id)) {
           live.items = items;
+          live.missing = missing;
           live.fetchedAt = env.now();
           live.status = "ok";
         } else {
           // Unticked while the request ran: nothing is kept.
           live.items = [];
+          live.missing = [];
           live.status = "idle";
         }
       } catch (e) {
         // Nothing from the error is used: not its message, not its type.
         live.items = [];
+        live.missing = [];
         live.status = "error";
       } finally {
         if (timer !== null) env.clearTimeout(timer);

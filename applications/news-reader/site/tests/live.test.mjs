@@ -13,7 +13,8 @@ import { FakeDOMParser } from "./xml-fake.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const realSources = JSON.parse(fs.readFileSync(path.join(ROOT, "sources.json"), "utf8"));
-const keywordFile = JSON.parse(fs.readFileSync(path.join(ROOT, "politics-keywords.json"), "utf8"));
+const readKeywords = (topic) => JSON.parse(fs.readFileSync(path.join(ROOT, topic + "-keywords.json"), "utf8"));
+const keywordFile = readKeywords("politics");
 const FEED_URL = realSources.sources.find((s) => s.id === "sveriges-radio").feeds.find((f) => f.topic === "politics").url;
 
 const NOW = Date.parse("2026-11-13T13:30:00Z");
@@ -90,7 +91,8 @@ function setup(options = {}) {
   const intervals = [];
   const calls = []; // every request: [url, init]
   const state = {
-    files: { "sources.json": realSources, "news.json": newsFile(), "politics-keywords.json": keywordFile },
+    files: { "sources.json": realSources, "news.json": newsFile(), "politics-keywords.json": keywordFile,
+      "nature-keywords.json": readKeywords("nature"), "ai-keywords.json": readKeywords("ai") },
     feed: { body: srFeed(), status: 200, throws: false, gate: null, headers: {}, raw: null },
     ...options,
   };
@@ -198,7 +200,8 @@ test("the status of the source: fetched time and count in Källor, and in the li
   await t.instance.start();
   assert.match(srRow(t.byId), /Sveriges Radio/);
   assert.match(srRow(t.byId), /Urval med nyckelord – ungefärligt/);
-  assert.match(srRow(t.byId), /Hämtad 14:30, 3 rubriker/);
+  assert.doesNotMatch(srRow(t.byId), /Nyckelord saknas/);
+  assert.match(srRow(t.byId), /Hämtad 14:30 \(en hämtning för alla ämnen\), 3 rubriker/);
   assert.equal(t.byId.updated.textContent, "Nyheter uppdaterade 2026-11-13 14:05 · Sveriges Radio hämtad 14:30");
   assert.equal(t.byId["bottom-line"].textContent,
     "Rubriker och länkar från SVT och Sveriges Radio. Klicka för att läsa hos källan.");
@@ -238,7 +241,7 @@ test("unticking Sveriges Radio hides and drops its items; ticking again within 5
   assert.equal(headlines(t.byId).length, 5);
 });
 
-test("only Sveriges Radio chosen, topic Natur, live fetch pending: the empty notice shows at once (R18.9)", async () => {
+test("only Sveriges Radio chosen, topic Natur, live fetch pending: the page waits, no stopgap text (F8)", async () => {
   let release;
   const gate = new Promise((r) => { release = r; });
   const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["sveriges-radio"]',
@@ -247,12 +250,15 @@ test("only Sveriges Radio chosen, topic Natur, live fetch pending: the empty not
   const started = t.instance.start();
   await t.wait();
   await t.wait();
-  assert.match(srRow(t.byId), /Visas inte än/);
-  assert.equal(t.byId.empty.hidden, false, "SR gives nothing under Natur, so nothing is waited for");
-  assert.equal(t.byId.empty.textContent, "Inga nyheter i ämnet Natur från valda källor.");
+  assert.match(srRow(t.byId), /Hämtar …/);
+  assert.doesNotMatch(srRow(t.byId), /Visas inte än/);
+  assert.equal(t.byId.empty.hidden, true, "SR offers Natur and is being fetched, so it is waited for");
   release();
   await started;
+  // The made-up feed has no nature item: the empty notice of the topic.
   assert.equal(t.byId.empty.hidden, false);
+  assert.equal(t.byId.empty.textContent, "Inga nyheter i ämnet Natur från valda källor.");
+  assert.match(srRow(t.byId), /Hämtad 14:30 \(en hämtning för alla ämnen\), 0 rubriker/);
 });
 
 test("only Sveriges Radio chosen: its items alone; nothing matching gives the empty notice, not while it loads", async () => {
@@ -324,7 +330,7 @@ test("the request: the address from sources.json, credentials omit, cache no-sto
   assert.equal(timer.cleared, true);
   // Nothing else is requested from anywhere else.
   const other = t.calls.map(([u]) => u).filter((u) => u !== FEED_URL).sort();
-  assert.deepEqual(other, ["news.json", "politics-keywords.json", "sources.json"]);
+  assert.deepEqual(other, ["ai-keywords.json", "nature-keywords.json", "news.json", "politics-keywords.json", "sources.json"]);
 });
 
 test("a source without a usable https address is never requested and shows the failure status", async () => {
@@ -599,7 +605,7 @@ for (const [name, apply] of Object.entries(FAILURES)) {
       await t.instance.start();
       if (name === "no usable item") {
         // A feed that parses but has nothing to show is a success with no items.
-        assert.match(srRow(t.byId), /Hämtad 14:30, 0 rubriker/);
+        assert.match(srRow(t.byId), /Hämtad 14:30 \(en hämtning för alla ämnen\), 0 rubriker/);
       } else {
         assert.match(srRow(t.byId), /Sveriges Radio kunde inte hämtas just nu/);
         assert.ok(!t.byId.updated.textContent.includes("Sveriges Radio hämtad"));
@@ -625,16 +631,26 @@ test("a failure after a success removes the old items (nothing stale is shown) a
   assert.match(srRow(t.byId), /Sveriges Radio kunde inte hämtas just nu/);
 });
 
-test("the keyword list cannot be read: the source fails, no request goes to the feed", async () => {
-  for (const bad of [undefined, "<html>", { version: 1 }, { version: 1, category: "politics-sweden", include: "x" }]) {
-    const t = setup();
-    if (bad === undefined) delete t.state.files["politics-keywords.json"];
-    else t.state.files["politics-keywords.json"] = bad;
-    await t.instance.start();
-    assert.equal(t.feedCalls().length, 0);
-    assert.match(srRow(t.byId), /Sveriges Radio kunde inte hämtas just nu/);
-    assert.equal(headlines(t.byId).length, 2);
-  }
+test("a keyword list cannot be read (D42): one request is still made, its topic is left out, the row says so, nothing in the console", async () => {
+  await withSpy(async () => {
+    for (const bad of [undefined, "<html>", { version: 1 }, { version: 1, category: "politics-sweden", include: "x" },
+      { ...keywordFile, topic: "nature" }]) {
+      const t = setup();
+      if (bad === undefined) delete t.state.files["politics-keywords.json"];
+      else t.state.files["politics-keywords.json"] = bad;
+      await t.instance.start();
+      assert.equal(t.feedCalls().length, 1);
+      const row = srRow(t.byId);
+      assert.match(row, /Hämtad 14:30/);
+      assert.match(row, /Nyckelord saknas för Politik: de rubrikerna visas bara under Alla nyheter/);
+      assert.ok(!row.includes("SRMARK"));
+      // Under Politik SR gives nothing; under Alla nyheter every entry.
+      assert.equal(headlines(t.byId).filter((h) => h.includes("SRMARK")).length, 0);
+      const radio = t.byId.topics.children[0].children[0];
+      radio.checked = true; radio.fire("change");
+      assert.equal(headlines(t.byId).filter((h) => h.includes("SRMARK")).length, 4);
+    }
+  });
 });
 
 test("SVT fails and Sveriges Radio works: the saved SVT copy with its notice, and the SR items", async () => {
@@ -792,14 +808,20 @@ test("browserStatus: the texts", () => {
   assert.equal(app.browserStatus(source, { status: "loading" }), "Hämtar …");
   assert.equal(app.browserStatus(source, { status: "error" }), "Sveriges Radio kunde inte hämtas just nu");
   assert.equal(app.browserStatus(source, { status: "ok", fetchedAt: Date.parse("2026-07-01T10:07:00Z"), items: [{}] }),
-    "Hämtad 12:07, 1 rubrik");
+    "Hämtad 12:07 (en hämtning för alla ämnen), 1 rubrik");
+  const two = { status: "ok", fetchedAt: Date.parse("2026-07-01T10:07:00Z"),
+    items: [{ topics: ["all-news"] }, { topics: ["all-news", "ai"] }] };
+  assert.match(app.browserStatus(source, two, true, "ai"), /, 1 rubrik$/);
+  assert.match(app.browserStatus(source, two, true, "all-news"), /, 2 rubriker$/);
+  assert.match(app.browserStatus(source, two, true, "nature"), /, 0 rubriker$/);
 });
 
 test("visibleItems with live items: merged and sorted with the others", () => {
   const sources = app.validateSources(realSources);
   const news = app.validateNews(newsFile(), sources, NOW);
   const live = new Map([["sveriges-radio", [{ id: "q", sourceId: "sveriges-radio", sourceName: "Sveriges Radio",
-    title: "SR", url: "https://www.sverigesradio.se/artikel/1", published: "2026-11-13T12:00:00Z", publishedDisplay: "x" }]]]);
+    title: "SR", url: "https://www.sverigesradio.se/artikel/1", published: "2026-11-13T12:00:00Z", publishedDisplay: "x",
+    topics: ["all-news", "politics"] }]]]);
   assert.deepEqual(app.visibleItems(news, ["svt", "sveriges-radio"], live).map((i) => i.title),
     ["SVT: rubrik om regeringen", "SR", "SVT: rubrik om riksdagen"]);
   assert.deepEqual(app.visibleItems(news, ["svt"], live).map((i) => i.sourceId), ["svt", "svt"]);
@@ -859,7 +881,7 @@ test("ticking Sveriges Radio the first time in a page load fetches at once; the 
   for (let i = 0; i < 10; i++) await t.wait();
   assert.equal(t.feedCalls().length, 1);
   assert.equal(headlines(t.byId).length, 5);
-  assert.match(srRow(t.byId), /Hämtad 14:30, 3 rubriker/);
+  assert.match(srRow(t.byId), /Hämtad 14:30 \(en hämtning för alla ämnen\), 3 rubriker/);
 });
 
 test("ticking another source does not fetch Sveriges Radio; ticking SR twice quickly gives one request", async () => {

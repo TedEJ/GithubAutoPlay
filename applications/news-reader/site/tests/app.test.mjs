@@ -69,7 +69,7 @@ test("validateSources: the real Riksdagen entry is switched off (D41) and left o
   assert.equal(riksdagen.credit, "Källa: Sveriges riksdag");
   assert.deepEqual(riksdagen.feeds, [
     { topic: "all-news", method: "feed" }, { topic: "politics", method: "feed" },
-    { topic: "ai", method: "keywordFilter" }]); // no Natur (D24)
+    { topic: "ai", method: "keywordFilter", matchOn: "title" }]); // no Natur (D24); matchOn is kept for F8
   assert.deepEqual(riksdagen.allowedHosts, ["riksdagen.se"]);
 });
 
@@ -112,10 +112,11 @@ test("validateSources reads version 2: the politics feed entry gives the method 
   const got = app.validateSources(v2File());
   const feeds = [{ topic: "all-news", method: "feed" }, { topic: "politics", method: "keywordFilter" },
     { topic: "nature", method: "keywordFilter" }, { topic: "ai", method: "keywordFilter" }];
+  const withTitle = (list) => list.map((f) => (f.topic === "ai" ? { ...f, matchOn: "title" } : f));
   assert.deepEqual(got, [
-    { id: "b", name: "Build", fetchedBy: "build", allowedHosts: ["example.invalid"], method: "keywordFilter", feeds },
+    { id: "b", name: "Build", fetchedBy: "build", allowedHosts: ["example.invalid"], method: "keywordFilter", feeds: withTitle(feeds) },
     { id: "l", name: "Live", fetchedBy: "browser", allowedHosts: ["example.invalid"], method: "keywordFilter", url: LIVE,
-      feeds: feeds.map((f) => (f.topic === "all-news" ? f : { ...f, method: "keywordFilter" })) },
+      feeds },
   ]);
 });
 
@@ -149,7 +150,8 @@ test("validateSources: a source without a politics entry has no method and no ad
   const [b, l] = app.validateSources(data);
   assert.equal(b.method, "");
   assert.equal(l.method, "");
-  assert.equal(l.url, "");
+  // F8: the address is the one address of all the feed entries, so it stays without a politics entry.
+  assert.equal(l.url, LIVE);
   for (const feeds of [undefined, null, "x", [], [null, 5, { topic: "politics" }]]) {
     const copy = v2File();
     copy.sources[0].feeds = feeds;
@@ -405,11 +407,11 @@ test("visibleItems: until F7 only the items of Politik are shown, so the list is
   assert.deepEqual(app.visibleItems(news, []), []);
 });
 
-test("visibleItems: live items have no topics and are all shown next to the Politik items of the file", () => {
+test("visibleItems: live items with topics are shown by topic next to the Politik items of the file", () => {
   const news = app.validateNews(newsFileV2(), SOURCES, NOW);
   const live = new Map([["sveriges-radio", [{ id: "l1", sourceId: "sveriges-radio", sourceName: "Sveriges Radio",
     title: "Ekot-rubrik", url: "https://www.sverigesradio.se/artikel/9", published: "2026-11-13T13:20:00Z",
-    publishedDisplay: "2026-11-13 14:20" }]]]);
+    publishedDisplay: "2026-11-13 14:20", topics: ["all-news", "politics"] }]]]);
   assert.deepEqual(app.visibleItems(news, ["svt", "sveriges-radio"], live).map((i) => i.title),
     ["Ekot-rubrik", "Nyare rubrik om regeringen", "Äldre rubrik om riksdagen"]);
 });
@@ -880,7 +882,7 @@ test("refresh: a load that is already running is not started twice", async () =>
   release();
   await Promise.all([first, second, third]);
   assert.deepEqual(calls.filter((u) => u.endsWith(".json")).sort(),
-    ["news.json", "politics-keywords.json", "sources.json"]);
+    ["ai-keywords.json", "nature-keywords.json", "news.json", "politics-keywords.json", "sources.json"]);
   await instance.load();
   assert.equal(calls.filter((u) => u === "news.json").length, 2);
 });
@@ -1120,7 +1122,7 @@ test("topics: switching shows the items of that topic at once, an item with seve
   assert.equal(byId.empty.hidden, true);
 });
 
-test("topics: the source rows follow the topic: offered topics, Erbjuder inte ämnet, Visas inte än, the count of the visible items (R18.5)", async () => {
+test("topics: the source rows follow the topic: offered topics, Erbjuder inte ämnet, the count of the visible items (R18.5)", async () => {
   const { instance, byId } = f7Setup();
   await instance.start();
   const rd = () => rowOf(byId, "Riksdagen").textContent;
@@ -1133,7 +1135,7 @@ test("topics: the source rows follow the topic: offered topics, Erbjuder inte ä
   pick(byId, "Natur");
   assert.equal(statusOf(byId, "SVT"), "Hämtad, 2 rubriker");
   assert.equal(statusOf(byId, "Riksdagen"), "Erbjuder inte ämnet Natur");
-  assert.equal(statusOf(byId, "Sveriges Radio"), "Visas inte än");
+  assert.doesNotMatch(statusOf(byId, "Sveriges Radio"), /Visas inte än/); // F8: no stopgap any more
   pick(byId, "AI");
   assert.match(rd(), /Urval med nyckelord – ungefärligt/); // ai: keywordFilter
   assert.equal(statusOf(byId, "Riksdagen"), "Hämtad, 1 rubrik");
@@ -1356,16 +1358,22 @@ test("topics: a sources.json without a topics list gives no choice and keeps Pol
 
 // The pure parts.
 
-test("visibleItems: by topic membership, live items count as Politik only until F8 (R18.2, R18.9)", () => {
+test("visibleItems: by topic membership, live items by their own topics (R18.2, F8)", () => {
   const news = app.validateNews(newsFileF7(), SOURCES_ON, NOW);
   const live = new Map([["sveriges-radio", [{ id: "l1", sourceId: "sveriges-radio", sourceName: "Sveriges Radio",
     title: "Ekot", url: "https://www.sverigesradio.se/artikel/9", published: "2026-11-13T13:20:00Z",
-    publishedDisplay: "x" }]]]);
+    publishedDisplay: "x", topics: ["all-news", "politics"] }]]]);
   const all = ["svt", "sveriges-radio", "riksdagen"];
   assert.deepEqual(app.visibleItems(news, all, live, "politics").map((i) => i.title),
     ["Ekot", "SVT politik", "Riksdagen proposition", "Riksdagen AI-betänkande"]);
-  for (const topic of ["all-news", "nature", "ai"]) {
+  assert.ok(app.visibleItems(news, all, live, "all-news").some((i) => i.title === "Ekot"));
+  for (const topic of ["nature", "ai"]) {
     assert.ok(!app.visibleItems(news, all, live, topic).some((i) => i.title === "Ekot"), topic);
+  }
+  // An item without a list of topics is in no topic.
+  const bare = new Map([["sveriges-radio", [{ ...live.get("sveriges-radio")[0], topics: undefined }]]]);
+  for (const topic of ["all-news", "politics", "nature", "ai"]) {
+    assert.ok(!app.visibleItems(news, all, bare, topic).some((i) => i.title === "Ekot"), topic);
   }
   assert.deepEqual(app.visibleItems(news, all, live, "nature").map((i) => i.title), ["SVT natur", "SVT AI och natur"]);
   assert.deepEqual(app.visibleItems(news, ["riksdagen"], live, "nature"), []);
@@ -1380,7 +1388,7 @@ test("sourceRows: topics, credit and status by chosen topic", () => {
   assert.equal(rows[2].credit, "Källa: Sveriges riksdag");
   assert.equal(rows[2].topics, "Ämnen: Alla nyheter, Politik, AI");
   assert.equal(rows[0].credit, "");
-  assert.equal(app.sourceRows(SOURCES_ON, news, ["sveriges-radio"], undefined, "ai", topics)[1].status, "Visas inte än");
+  assert.equal(app.sourceRows(SOURCES_ON, news, ["sveriges-radio"], undefined, "ai", topics)[1].status, "Inte hämtad ännu");
 });
 
 test("buildStatus: a failed feed of the chosen topic shows its own failure, other topics stay Hämtad", () => {
@@ -1471,8 +1479,11 @@ for (const name of ["index.html", "app.js", "atom.js", "style.css"]) {
 test("app.js: only the own files are fetched by name; the feed address comes from sources.json", () => {
   const text = read("app.js");
   const calls = text.match(/fetchJson\("[^"]*"\)/g) || [];
-  assert.deepEqual(calls.sort(),
-    ['fetchJson("news.json")', 'fetchJson("politics-keywords.json")', 'fetchJson("sources.json")']);
+  assert.deepEqual(calls.sort(), ['fetchJson("news.json")', 'fetchJson("sources.json")']);
+  // The keyword files are fetched under the names that sources.json gives (F8), never by a name in the script.
+  assert.deepEqual(text.match(/fetchJson\(entry\.keywords\)/g), ["fetchJson(entry.keywords)"]);
+  assert.ok(!/-keywords\.json/.test(text.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n").replace(/"-keywords\.json"/g, "")),
+    "no keyword file name in app.js except the name rule");
   // One call of fetch for the own files, and the feed request goes through atom.js.
   assert.equal((text.match(/env\.fetch\(/g) || []).length, 1);
   assert.equal((text.match(/atom\.fetchAtom\(/g) || []).length, 1);
