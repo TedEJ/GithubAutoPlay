@@ -147,9 +147,9 @@ def test_the_real_file_is_valid_and_costs_two_svt_requests_and_one_sveriges_radi
 
 
 def test_shared_cases_has_the_expected_sections():
-    # The section names may grow in F4 (`topics`); the sections of S2 must stay.
+    # Created empty in S2; later steps fill the sections (F4 adds `topics`), so only the shape is checked.
     cases = json.loads((ROOT / "tests" / "shared-cases.json").read_text(encoding="utf-8"))
-    assert {"cleaning", "time", "keywords"} <= set(cases)
+    assert set(cases) == {"cleaning", "time", "keywords", "topics"}
     assert all(isinstance(v, list) for v in cases.values())
 
 

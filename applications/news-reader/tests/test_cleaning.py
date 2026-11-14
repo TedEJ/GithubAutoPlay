@@ -16,8 +16,8 @@ REQUIRED_KINDS = [
 ]
 
 
-def test_shared_file_has_the_three_sections():
-    assert set(SHARED) == {"cleaning", "time", "keywords"}
+def test_shared_file_has_its_sections():
+    assert set(SHARED) == {"cleaning", "time", "keywords", "topics"}
     for section in SHARED.values():
         assert isinstance(section, list)
 

@@ -12,13 +12,15 @@ const here = new URL(".", import.meta.url);
 const readJson = (rel) => JSON.parse(readFileSync(new URL(rel, here), "utf-8"));
 const shared = readJson("../../tests/shared-cases.json");
 const keywordData = readJson("../../politics-keywords.json");
+const topicKeywords = Object.fromEntries(
+  logic.KEYWORD_TOPICS.map((t) => [t, logic.validateKeywords(readJson("../../" + logic.keywordFileName(t)), t)]));
 const sources = readJson("../../sources.json").sources;
 const keywords = logic.validateKeywords(keywordData);
 
 // ---- shared cases ------------------------------------------------------------
 
-test("shared cases file has the three sections, all non-empty", () => {
-  assert.deepEqual(Object.keys(shared).sort(), ["cleaning", "keywords", "time"]);
+test("shared cases file has its sections, all non-empty", () => {
+  assert.deepEqual(Object.keys(shared).sort(), ["cleaning", "keywords", "time", "topics"]);
   for (const section of Object.values(shared)) assert.ok(section.length > 0);
 });
 
@@ -38,8 +40,75 @@ test("shared cases: time (published and publishedDisplay)", () => {
 
 test("shared cases: keywords", () => {
   for (const c of shared.keywords) {
-    const got = logic.matchesKeywords(keywords, c.input.headline, c.input.description);
+    const list = topicKeywords[c.input.topic || "politics"]; // a missing topic means politics (R17.4)
+    const got = logic.matchesKeywords(list, c.input.headline, c.input.description);
     assert.equal(got, c.expected.match, c.id);
+  }
+});
+
+test("shared cases: topics (R13.4)", () => {
+  for (const c of shared.topics) {
+    const got = logic.topicsOf(c.input.headline, c.input.description, c.input.feeds, topicKeywords);
+    assert.deepEqual(got, c.expected, c.id);
+  }
+});
+
+test("shared cases: topicsOf agrees with the single-topic matching for every keyword case", () => {
+  const feeds = logic.KEYWORD_TOPICS.map((topic) => ({ topic, method: "keywordFilter" }));
+  for (const c of shared.keywords) {
+    const got = logic.topicsOf(c.input.headline, c.input.description, feeds, topicKeywords);
+    assert.equal(got.includes(c.input.topic || "politics"), c.expected.match, c.id);
+  }
+});
+
+// ---- every term of the lists must be reachable (F4 review) -------------------------
+
+const rawList = (topic) => readJson("../../" + logic.keywordFileName(topic));
+
+test("every include term of Natur and AI is reachable and hits its own topic", () => {
+  for (const topic of ["nature", "ai"]) {
+    const inc = rawList(topic).include;
+    const feeds = [{ topic, method: "keywordFilter" }];
+    const heads = [];
+    for (const t of inc.words) {
+      heads.push([t, "Nyheter om " + t.replace(/\*$/, "") + " idag"]);
+      if (t.endsWith("*")) heads.push([t, "Nyheter om " + t.slice(0, -1) + "xyz idag"]);
+    }
+    for (const t of [...inc.phrases, ...inc.caseSensitive, ...inc.caseSensitiveWords]) heads.push([t, "Nyheter om " + t + " idag"]);
+    assert.ok(heads.length >= 15);
+    for (const [term, h] of heads) {
+      assert.equal(logic.matchesKeywords(topicKeywords[topic], h), true, topic + ": " + term);
+      assert.ok(logic.topicsOf(h, null, feeds, topicKeywords).includes(topic), topic + ": " + term);
+    }
+    for (const t of inc.caseSensitiveWords) {
+      for (const v of new Set([t.toLowerCase(), t.toUpperCase(), t[0].toUpperCase() + t.slice(1).toLowerCase()])) {
+        if (v !== t) assert.equal(logic.matchesKeywords(topicKeywords[topic], "Nyheter om " + v + " idag"), false, topic + ": " + v);
+      }
+    }
+  }
+});
+
+test("every exclude phrase hides something and is not dead", () => {
+  for (const topic of logic.KEYWORD_TOPICS) {
+    const raw = rawList(topic);
+    for (const phrase of raw.exclude.phrases) {
+      const h = "Nyheter: " + phrase + " idag";
+      assert.equal(logic.matchesKeywords(topicKeywords[topic], h), false, topic + ": " + phrase);
+      const without = structuredClone(raw);
+      without.exclude.phrases = without.exclude.phrases.filter((p) => p !== phrase);
+      assert.equal(logic.matchesKeywords(logic.validateKeywords(without, topic), h), true, topic + ": " + phrase + " hides nothing");
+    }
+  }
+});
+
+test("topicsOf equals matchesKeywords for raw texts (cleaned once, also with entities)", () => {
+  for (const text of ["<b>AI</b> &amp;amp; Vargen", "&amp;amp;", "Ovä&amp;shy;der", "A&#73;", "Var&#103;en", "", "   "]) {
+    for (const desc of [undefined, null, "", text, "Handlar om &amp;amp; oväder"]) {
+      for (const topic of logic.KEYWORD_TOPICS) {
+        const got = logic.topicsOf(text, desc, [{ topic, method: "keywordFilter" }], topicKeywords).includes(topic);
+        assert.equal(got, logic.matchesKeywords(topicKeywords[topic], text, desc), JSON.stringify([text, desc, topic]));
+      }
+    }
   }
 });
 
@@ -61,16 +130,40 @@ test("cleaning: details", () => {
 // ---- keywords ----------------------------------------------------------------
 
 test("keywords: validation follows keywords.py", () => {
-  const ok = { version: 1, category: "politics-sweden",
-    include: { words: ["Riksdag*"], caseSensitive: ["(S)"] }, exclude: { words: ["Moderat"], phrases: ["Tyska Regeringen"] } };
+  const ok = { version: 2, topic: "politics",
+    include: { words: ["Riksdag*"], phrases: ["Ny Riksdag"], caseSensitive: ["(S)"], caseSensitiveWords: ["AI"] },
+    exclude: { words: ["Moderat"], phrases: ["Tyska Regeringen"] } };
   const k = logic.validateKeywords(ok);
   assert.ok(k.includePrefixes.includes("riksdag"));
   assert.ok(k.excludeWords.has("moderat"));
   assert.deepEqual(k.excludePhrases, [["tyska", "regeringen"]]);
   assert.deepEqual(k.caseSensitive, ["(S)"]);
+  assert.deepEqual(k.includePhrases, [["ny", "riksdag"]]);
+  assert.ok(k.caseSensitiveWords.has("AI"));
+  assert.equal(k.topic, "politics");
   const bad = (change) => assert.throws(() => logic.validateKeywords(change(structuredClone(ok))), logic.KeywordsError);
-  bad((d) => { d.version = 2; return d; });
-  bad((d) => { d.category = "x"; return d; });
+  bad((d) => { d.version = 1; return d; });
+  bad((d) => { delete d.topic; d.category = "politics-sweden"; return d; });
+  bad((d) => { d.topic = "sport"; return d; });
+  bad((d) => { d.topic = "all-news"; return d; });
+  bad((d) => { delete d.include.phrases; return d; });
+  bad((d) => { delete d.include.caseSensitiveWords; return d; });
+  bad((d) => { d.include.phrases = ["riksdag"]; return d; });
+  bad((d) => { d.include.phrases = ["ny riksdag*"]; return d; });
+  bad((d) => { d.include.phrases = ["ny  riksdag"]; return d; });
+  bad((d) => { d.include.phrases = ["ny, riksdag"]; return d; });
+  bad((d) => { d.include.phrases = ["ny riksdag", "Ny Riksdag"]; return d; });
+  bad((d) => { d.include.phrases = [""]; return d; });
+  bad((d) => { d.include.phrases = " "; return d; });
+  bad((d) => { d.include.caseSensitiveWords = ["AI Sweden"]; return d; });
+  bad((d) => { d.include.caseSensitiveWords = ["AI-lag"]; return d; });
+  bad((d) => { d.include.caseSensitiveWords = ["AI*"]; return d; });
+  bad((d) => { d.include.caseSensitiveWords = ["2026"]; return d; });
+  bad((d) => { d.include.caseSensitiveWords = [" AI"]; return d; });
+  bad((d) => { d.include.caseSensitiveWords = ["A\u030a"]; return d; }); // not NFC
+  bad((d) => { d.include.caseSensitiveWords = ["AI", "AI"]; return d; });
+  bad((d) => { d.include.caseSensitiveWords = [""]; return d; });
+  bad((d) => { d.include.caseSensitiveWords = [5]; return d; });
   bad((d) => { d.extra = 1; return d; });
   bad((d) => { d.include.words = ["a b"]; return d; });
   bad((d) => { d.include.words = ["riksdag", "RIKSDAG"]; return d; });
@@ -83,8 +176,87 @@ test("keywords: validation follows keywords.py", () => {
   bad((d) => { d.exclude.words = ["mod*"]; return d; });
   bad((d) => { d.exclude.phrases = ["ensam"]; return d; });
   bad((d) => { d.exclude.phrases = ["två  ord"]; return d; });
-  bad((d) => { d.include.words = []; d.include.caseSensitive = []; return d; });
+  bad((d) => { d.include = { words: [], phrases: [], caseSensitive: [], caseSensitiveWords: [] }; return d; });
   bad(() => null);
+  // `topic` given: the file must belong to it (R17.5)
+  assert.equal(logic.validateKeywords(ok, "politics").topic, "politics");
+  assert.throws(() => logic.validateKeywords(ok, "ai"), logic.KeywordsError);
+  const only = (include) => ({ ...structuredClone(ok), include: { words: [], phrases: [], caseSensitive: [], caseSensitiveWords: [], ...include } });
+  assert.ok(logic.validateKeywords(only({ phrases: ["ny riksdag"] })));
+  assert.ok(logic.validateKeywords(only({ caseSensitiveWords: ["AI"] })));
+});
+
+test("keywords: the topic files are named by topic and loaded by name", () => {
+  assert.deepEqual(logic.TOPIC_ORDER, ["all-news", "politics", "nature", "ai"]);
+  assert.deepEqual(logic.KEYWORD_TOPICS.map(logic.keywordFileName),
+    ["politics-keywords.json", "nature-keywords.json", "ai-keywords.json"]);
+  for (const topic of logic.KEYWORD_TOPICS) assert.equal(topicKeywords[topic].topic, topic);
+  const ai = readJson("../../ai-keywords.json");
+  assert.ok(ai.include.caseSensitiveWords.includes("AI"));
+  for (const t of ["artificiell intelligens", "artificial intelligence", "machine learning", "language model"]) {
+    assert.ok(ai.include.phrases.includes(t), t);
+  }
+  assert.ok(!ai.include.words.includes("ai") && !ai.include.words.includes("ai*") && !ai.include.words.includes("ki"));
+  const nature = readJson("../../nature-keywords.json");
+  for (const t of ["natur*", "djur*", "miljö*", "klimat*", "storm*", "väder*"]) assert.ok(!nature.include.words.includes(t), t);
+  for (const t of logic.KEYWORD_TOPICS) {
+    const raw = readJson("../../" + logic.keywordFileName(t));
+    for (const term of [...raw.include.words, ...raw.include.phrases, ...raw.exclude.words, ...raw.exclude.phrases]) {
+      assert.equal(term, term.toLowerCase(), term);
+    }
+  }
+});
+
+function custom(include, exclude = {}) {
+  return logic.validateKeywords({ version: 2, topic: "ai",
+    include: { words: [], phrases: [], caseSensitive: [], caseSensitiveWords: [], ...include },
+    exclude: { words: [], phrases: [], ...exclude } });
+}
+
+test("keywords: include phrases need the words in sequence and respect exclude phrases (R17.3)", () => {
+  const k = custom({ phrases: ["Machine Learning"] });
+  assert.equal(logic.matchesKeywords(k, "Machine learning är kul"), true);
+  assert.equal(logic.matchesKeywords(k, "MACHINE LEARNING"), true);
+  assert.equal(logic.matchesKeywords(k, "Learning machine"), false);
+  assert.equal(logic.matchesKeywords(k, "Machine and learning"), false);
+  assert.equal(logic.matchesKeywords(k, "Machines learning"), false);
+  // exclude words do not apply to include phrases
+  assert.equal(logic.matchesKeywords(custom({ phrases: ["machine learning"] }, { words: ["machine", "learning"] }), "Machine learning"), true);
+  // an exclude phrase marks positions; an include phrase over a marked position is not a hit
+  const m = custom({ phrases: ["machine learning"], words: ["zzz"] }, { phrases: ["learning conference"] });
+  assert.equal(logic.matchesKeywords(m, "machine learning conference"), false);
+  assert.equal(logic.matchesKeywords(m, "machine learning conference and machine learning"), true);
+  assert.equal(logic.matchesKeywords(m, "machine learning"), true);
+});
+
+test("keywords: case-sensitive words are whole words with exact case and no exclusion (R17.3)", () => {
+  const k = custom({ caseSensitiveWords: ["AI", "Åre"] });
+  for (const text of ["AI", "Ny AI-lag", "(AI)", "Åre skidar"]) assert.equal(logic.matchesKeywords(k, text), true, text);
+  for (const text of ["AIK", "FAIR", "Ai Weiwei", "ai", "aI", "AI2", "AI2024 är fel", "MAIL", "åre"]) {
+    assert.equal(logic.matchesKeywords(k, text), false, text);
+  }
+  const x = custom({ caseSensitiveWords: ["AI"], caseSensitive: ["(AI)"] }, { phrases: ["ai regler"], words: ["ai"] });
+  assert.equal(logic.matchesKeywords(x, "AI regler"), true);
+  assert.equal(logic.matchesKeywords(x, "Nya (AI) regler"), true);
+  const n = custom({ caseSensitiveWords: ["\u00c5re"] });
+  assert.equal(logic.matchesKeywords(n, "A\u030are skidar"), true);
+  assert.equal(logic.matchesKeywords(n, "a\u030are skidar"), false);
+});
+
+test("topicsOf: order, no duplicates, matchOn title, errors (R13.4)", () => {
+  const kwFeeds = logic.KEYWORD_TOPICS.map((topic) => ({ topic, method: "keywordFilter" }));
+  assert.deepEqual(logic.topicsOf("Regeringen testar AI mot översvämning", null, [...kwFeeds].reverse().concat([{ topic: "all-news", method: "feed" }]), topicKeywords),
+    ["all-news", "politics", "nature", "ai"]);
+  assert.deepEqual(logic.topicsOf("AI", null, [kwFeeds[2], kwFeeds[2]], topicKeywords), ["ai"]);
+  assert.deepEqual(logic.topicsOf("AI", null, [], topicKeywords), []);
+  assert.deepEqual(logic.topicsOf("x", "AI", [{ topic: "ai", method: "keywordFilter", matchOn: "title" }], topicKeywords), []);
+  assert.deepEqual(logic.topicsOf("x", "AI", [{ topic: "ai", method: "keywordFilter" }], new Map(Object.entries(topicKeywords))), ["ai"]);
+  assert.throws(() => logic.topicsOf("x", null, [{ topic: "sport", method: "feed" }], topicKeywords), Error);
+  assert.throws(() => logic.topicsOf("x", null, [{ topic: "ai", method: "categoryFilter" }], topicKeywords), Error);
+  assert.throws(() => logic.topicsOf("x", null, [{ topic: "ai", method: "magic" }], topicKeywords), Error);
+  assert.throws(() => logic.topicsOf("x", null, [{ topic: "ai", method: "keywordFilter" }], {}), Error);
+  assert.throws(() => logic.topicsOf("x", null, [{ topic: "ai", method: "keywordFilter" }], { toString: 1 }), Error);
+  assert.throws(() => logic.topicsOf("x", null, [{ topic: "all-news", method: "keywordFilter" }], topicKeywords), Error);
 });
 
 test("keywords: the real file loads and matches as described", () => {
@@ -438,8 +610,8 @@ test("url: the host check refuses user info with a colon or on a subdomain", () 
 });
 
 test("keywords: adjacent and overlapping exclude phrases are all removed together (rule 4)", () => {
-  const make = (include) => logic.validateKeywords({ version: 1, category: "politics-sweden",
-    include: { words: include, caseSensitive: [] }, exclude: { words: [], phrases: ["a b", "b c"] } });
+  const make = (include) => logic.validateKeywords({ version: 2, topic: "politics",
+    include: { words: include, phrases: [], caseSensitive: [], caseSensitiveWords: [] }, exclude: { words: [], phrases: ["a b", "b c"] } });
   const k = make(["c", "d"]);
   assert.equal(logic.matchesKeywords(k, "a b c"), false);   // "c" is removed with the phrase "b c"
   assert.equal(logic.matchesKeywords(k, "a b c d"), true);
@@ -452,8 +624,8 @@ test("keywords: adjacent and overlapping exclude phrases are all removed togethe
 });
 
 test("keywords: caseSensitive terms are compared with the NFC form of the text", () => {
-  const k = logic.validateKeywords({ version: 1, category: "politics-sweden",
-    include: { words: ["zzz"], caseSensitive: ["\u00e9(S)", "\u00c5(S)"] }, exclude: { words: [], phrases: [] } });
+  const k = logic.validateKeywords({ version: 2, topic: "politics",
+    include: { words: ["zzz"], phrases: [], caseSensitive: ["\u00e9(S)", "\u00c5(S)"], caseSensitiveWords: [] }, exclude: { words: [], phrases: [] } });
   assert.equal(logic.matchesKeywords(k, "e\u0301(S)"), true);
   assert.equal(logic.matchesKeywords(k, "\u00e9(S)"), true);
   assert.equal(logic.matchesKeywords(k, "A\u030a(S)"), true);

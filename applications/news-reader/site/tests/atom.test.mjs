@@ -15,6 +15,8 @@ const sourcesFile = JSON.parse(fs.readFileSync(path.join(ROOT, "sources.json"), 
 const SR = sourcesFile.sources.find((s) => s.id === "sveriges-radio");
 const keywords = logic.validateKeywords(JSON.parse(fs.readFileSync(path.join(ROOT, "politics-keywords.json"), "utf8")));
 const shared = JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "shared-cases.json"), "utf8"));
+const topicKeywords = Object.fromEntries(logic.KEYWORD_TOPICS.map((t) => [t, logic.validateKeywords(
+  JSON.parse(fs.readFileSync(path.join(ROOT, logic.keywordFileName(t)), "utf8")), t)]));
 const NOW = Date.parse("2026-11-13T13:30:00Z");
 const NS = "http://www.w3.org/2005/Atom";
 const opts = { DOMParser: FakeDOMParser };
@@ -51,9 +53,9 @@ function feed(entries, ns = NS) {
     + entries.join("") + "</feed>";
 }
 
-const select = (entries) => logic.selectItems(entries, {
+const select = (entries, list = keywords) => logic.selectItems(entries, {
   id: SR.id, name: SR.name, allowedHosts: SR.allowedHosts, feeds: SR.feeds,
-}, keywords, NOW);
+}, list, NOW);
 
 // ---------------------------------------------------------------- parsing
 
@@ -266,7 +268,7 @@ test("keyword selection is the same as the shared cases (R4.5), also through XML
       summary: description === undefined || description === null ? null : description,
       link: "https://www.sverigesradio.se/artikel/" + (1000 + n),
     })]);
-    const items = select(atom.parseAtom(xml, opts));
+    const items = select(atom.parseAtom(xml, opts), topicKeywords[c.input.topic || "politics"]);
     assert.equal(items.length === 1, c.expected.match, c.id);
     n++;
   }

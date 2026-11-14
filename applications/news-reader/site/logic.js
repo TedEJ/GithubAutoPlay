@@ -133,25 +133,50 @@
     return body;
   }
 
-  // The parsed politics-keywords.json -> a validated keyword object, with the
-  // same rules and the same normalisation as newsreader/keywords.py. (A
-  // duplicate key inside a JSON object cannot be seen after JSON.parse; the
-  // Python side rejects it and the file is shared.)
-  function validateKeywords(data) {
-    checkKeys(data, ["version", "category", "include", "exclude"], "file");
-    if (data.version !== 1) throw new KeywordsError("version must be 1");
-    if (data.category !== "politics-sweden") throw new KeywordsError("category must be 'politics-sweden'");
+  // R13.1: the topic ids in their fixed order; all but `all-news` have a keyword file.
+  const TOPIC_ORDER = ["all-news", "politics", "nature", "ai"];
+  const KEYWORD_TOPICS = TOPIC_ORDER.filter((t) => t !== "all-news");
+
+  // `<topic id>-keywords.json` (R14.1, R17.1).
+  function keywordFileName(topic) {
+    return topic + "-keywords.json";
+  }
+
+  function phraseWords(phrase, where) {
+    const words = splitWords(phrase);
+    if (words.length < 2 || words.join(" ") !== phrase) {
+      throw new KeywordsError(where + ": two or more words separated by single spaces, no other characters: " + JSON.stringify(phrase));
+    }
+    return words;
+  }
+
+  // The parsed <topic>-keywords.json -> a validated keyword object, with the
+  // same rules and the same normalisation as newsreader/keywords.py. `topic`
+  // is the topic id the file must belong to (R17.5); without it the file's own
+  // `topic` must be a keyword topic. (A duplicate key inside a JSON object
+  // cannot be seen after JSON.parse; the Python side rejects it and the file
+  // is shared.)
+  function validateKeywords(data, topic) {
+    checkKeys(data, ["version", "topic", "include", "exclude"], "file");
+    if (data.version !== 2) throw new KeywordsError("version must be 2");
+    if (topic !== undefined && topic !== null) {
+      if (data.topic !== topic) throw new KeywordsError("topic must be " + JSON.stringify(topic));
+    } else if (!KEYWORD_TOPICS.includes(data.topic)) {
+      throw new KeywordsError("topic must be one of " + KEYWORD_TOPICS.join(", "));
+    }
     const inc = data.include;
     const exc = data.exclude;
-    checkKeys(inc, ["words", "caseSensitive"], "include");
+    checkKeys(inc, ["words", "phrases", "caseSensitive", "caseSensitiveWords"], "include");
     checkKeys(exc, ["words", "phrases"], "exclude");
 
     const incWords = stringList(inc.words, "include.words", true);
+    const incPhrases = stringList(inc.phrases, "include.phrases", true);
     const caseTerms = stringList(inc.caseSensitive, "include.caseSensitive", false);
+    const caseWords = stringList(inc.caseSensitiveWords, "include.caseSensitiveWords", false);
     const excWords = stringList(exc.words, "exclude.words", true);
     const excPhrases = stringList(exc.phrases, "exclude.phrases", true);
-    if (incWords.length === 0 && caseTerms.length === 0) {
-      throw new KeywordsError("the include lists are both empty");
+    if (incWords.length + incPhrases.length + caseTerms.length + caseWords.length === 0) {
+      throw new KeywordsError("the include lists are all empty");
     }
 
     const exact = [];
@@ -164,35 +189,47 @@
       if (term.endsWith("*")) throw new KeywordsError("exclude.words: no wildcard allowed: " + JSON.stringify(term));
       singleWord(term, "exclude.words");
     }
-    const phrases = [];
-    for (const phrase of excPhrases) {
-      const words = splitWords(phrase);
-      if (words.length < 2 || words.join(" ") !== phrase) {
-        throw new KeywordsError("exclude.phrases: two or more words separated by single spaces, no other characters: " + JSON.stringify(phrase));
-      }
-      phrases.push(words);
-    }
+    const includePhrases = incPhrases.map((p) => phraseWords(p, "include.phrases"));
+    const phrases = excPhrases.map((p) => phraseWords(p, "exclude.phrases"));
     for (const term of caseTerms) {
       if (term === term.toLowerCase() && term === term.toUpperCase()) {
         throw new KeywordsError("include.caseSensitive: term has no letters, use words: " + JSON.stringify(term));
       }
     }
+    for (const term of caseWords) {
+      const words = splitWords(term);
+      if (words.length !== 1 || words[0] !== term) {
+        throw new KeywordsError("include.caseSensitiveWords: not exactly one word (letters and digits): " + JSON.stringify(term));
+      }
+      if (!/\p{L}/u.test(term)) {
+        throw new KeywordsError("include.caseSensitiveWords: term has no letters: " + JSON.stringify(term));
+      }
+    }
     return {
+      topic: data.topic,
       includeExact: new Set(exact),
       includePrefixes: prefixes,
+      includePhrases,
       caseSensitive: caseTerms,
+      caseSensitiveWords: new Set(caseWords),
       excludeWords: new Set(excWords),
       excludePhrases: phrases,
     };
   }
 
-  // Rule 6 and rules 2 to 5 of keywords.py for one cleaned text.
+  // Rules 2 to 6 of keywords.py for one cleaned text.
   function hasHit(keywords, text) {
     text = text.normalize("NFC");
     for (const term of keywords.caseSensitive) {
       if (text.includes(term)) return true;
     }
-    const words = splitWords(text).map((w) => w.toLowerCase());
+    const original = splitWords(text);
+    if (keywords.caseSensitiveWords.size > 0) {
+      for (const word of original) {
+        if (keywords.caseSensitiveWords.has(word)) return true;
+      }
+    }
+    const words = original.map((w) => w.toLowerCase());
     const removed = new Array(words.length).fill(false);
     for (const phrase of keywords.excludePhrases) {
       const n = phrase.length;
@@ -212,17 +249,72 @@
         if (word.startsWith(prefix)) return true;
       }
     }
+    for (const phrase of keywords.includePhrases) {
+      const n = phrase.length;
+      for (let i = 0; i + n <= words.length; i++) {
+        let same = true;
+        for (let j = 0; j < n; j++) {
+          if (words[i + j] !== phrase[j] || removed[i + j]) { same = false; break; }
+        }
+        if (same) return true;
+      }
+    }
     return false;
   }
 
-  // True if the item is about Swedish politics (R4.4). Both texts are cleaned
-  // first; a missing or empty description is ignored.
+  // True if the item matches this topic's list (R4.4, R17.1). Both texts are
+  // cleaned first; a missing or empty description is ignored.
   function matchesKeywords(keywords, headline, description) {
+    return matchesCleaned(keywords,
+      headline === undefined || headline === null ? null : cleanHeadline(headline),
+      description === undefined || description === null || description === "" ? null : cleanHeadline(description));
+  }
+
+  // Like matchesKeywords for texts that cleanHeadline has already been applied
+  // to exactly once (cleaning is not idempotent).
+  function matchesCleaned(keywords, headline, description) {
     for (const text of [headline, description]) {
       if (text === undefined || text === null || text === "") continue;
-      if (hasHit(keywords, cleanHeadline(text))) return true;
+      if (hasHit(keywords, text)) return true;
     }
     return false;
+  }
+
+  // All topics of one item (R13.4), in the order of R13.1, without duplicates.
+  // `feeds` are the feed entries of the feed URL the item came from
+  // (`{topic, method, matchOn?}`); `keywordsByTopic` maps a topic id to the
+  // result of validateKeywords (a plain object or a Map). Same rules as
+  // topics_of in keywords.py; `headline` and `description` are the RAW texts as
+  // the feed gave them: each is cleaned once here and reused for every
+  // keywordFilter entry, so the caller must not clean them first.
+  function topicsOf(headline, description, feeds, keywordsByTopic) {
+    const lookup = (topic) => (keywordsByTopic instanceof Map
+      ? keywordsByTopic.get(topic)
+      : (Object.prototype.hasOwnProperty.call(keywordsByTopic, topic) ? keywordsByTopic[topic] : undefined));
+    const found = new Set();
+    let cleanH = null;
+    let cleanD = null;
+    let cleaned = false;
+    for (const feed of feeds) {
+      const topic = feed.topic;
+      const method = feed.method;
+      if (!TOPIC_ORDER.includes(topic)) throw new Error("unknown topic " + JSON.stringify(topic));
+      if (method === "feed") {
+        found.add(topic);
+      } else if (method === "keywordFilter") {
+        const keywords = lookup(topic);
+        if (!keywords) throw new Error("topic " + JSON.stringify(topic) + " needs a keyword list");
+        if (!cleaned) {
+          cleanH = headline === undefined || headline === null ? null : cleanHeadline(headline);
+          cleanD = description === undefined || description === null || description === "" ? null : cleanHeadline(description);
+          cleaned = true;
+        }
+        if (matchesCleaned(keywords, cleanH, feed.matchOn === "title" ? null : cleanD)) found.add(topic);
+      } else {
+        throw new Error("unsupported method " + JSON.stringify(method) + " for topic " + JSON.stringify(topic));
+      }
+    }
+    return TOPIC_ORDER.filter((t) => found.has(t));
   }
 
   // ------------------------------------------------------------------------
@@ -692,8 +784,12 @@
     KeywordsError,
     cleanHeadline,
     splitWords,
+    TOPIC_ORDER,
+    KEYWORD_TOPICS,
+    keywordFileName,
     validateKeywords,
     matchesKeywords,
+    topicsOf,
     parseUrl,
     checkUrl,
     sha256Hex,
