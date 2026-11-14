@@ -777,6 +777,73 @@
     return elapsed >= LIVE_MIN_GAP_MS;
   }
 
+  // ------------------------------------------------------------------------
+  // The reader's topic choice (R18.1 to R18.6, step F7)
+
+  // The topic that is chosen when nothing usable is saved (R18.3, D38). F8 may
+  // change it to "all-news" (Q8): this is the one place.
+  const DEFAULT_TOPIC = "politics";
+
+  // The Riksdagen source id, for the one-time migration of R18.4. Later sources
+  // need their own decision: there is no generic rule.
+  const MIGRATED_SOURCE = "riksdagen";
+
+  // Saved text -> a topic id. `offered`: the ids the page lists (R18.1). A missing,
+  // unknown or not offered value gives the default, and when the default is not
+  // offered either, the first offered topic (null when none is).
+  function readSavedTopic(text, offered) {
+    if (typeof text === "string" && offered.includes(text)) return text;
+    if (offered.includes(DEFAULT_TOPIC)) return DEFAULT_TOPIC;
+    return offered.length > 0 ? offered[0] : null;
+  }
+
+  // The topics to list: the ids of `topics` ([{id, label}] in the order of R13.1)
+  // that at least one source offers (R18.1). A source is {feeds: [{topic}]}.
+  function offeredTopics(topics, sources) {
+    return topics.filter((t) => sources.some((s) => s.feeds.some((f) => f.topic === t.id)));
+  }
+
+  // Does this source have a feed entry for the topic (R13.7, R18.5)?
+  function offersTopic(source, topic) {
+    return source.feeds.some((f) => f.topic === topic);
+  }
+
+  // The items that belong to the topic (R18.2): membership of `item.topics`, so an
+  // item with several topics is in each. An item without a list is in none.
+  function filterByTopic(items, topic) {
+    return items.filter((item) => Array.isArray(item.topics) && item.topics.includes(topic));
+  }
+
+  // The one-time migration of R18.4 / R16.9. Arguments: the saved text of
+  // `selectedSources`, the saved text of `selectedTopic` (null when missing) and the
+  // enabled sources ({id}). Returns null when nothing is to be done, else
+  // {selected: [ids], topic} that the page writes at once. Done only when: no topic
+  // is saved yet; a choice is saved and is a non-empty list of strings (an empty
+  // list is a valid choice); the migrated source is enabled; and it is not in the
+  // list yet. The ids already in the list keep their order and the source is added
+  // last.
+  function migrateSavedChoice(selectedText, topicText, sources) {
+    if (topicText !== null && topicText !== undefined) return null;
+    if (typeof selectedText !== "string" || selectedText.length === 0 || selectedText.length > 10000) return null;
+    let data;
+    try {
+      data = JSON.parse(selectedText);
+    } catch (e) {
+      return null;
+    }
+    if (!Array.isArray(data) || data.length === 0 || !data.every((v) => typeof v === "string")) return null;
+    if (!sources.some((s) => s.id === MIGRATED_SOURCE) || data.includes(MIGRATED_SOURCE)) return null;
+    return { selected: data.concat([MIGRATED_SOURCE]), topic: DEFAULT_TOPIC };
+  }
+
+  // The text for an empty list (R8.4, R18.6). `chosen`: the chosen sources
+  // ({feeds}); `label`: the label of the chosen topic, for example "Natur".
+  function emptyNoticeText(chosen, topic, label) {
+    if (chosen.length === 0) return "Inga nyheter från valda källor.";
+    if (!chosen.some((s) => offersTopic(s, topic))) return "Valda källor erbjuder inte ämnet " + label + ".";
+    return "Inga nyheter i ämnet " + label + " från valda källor.";
+  }
+
   const api = {
     version() { return 1; },
     MAX_ITEMS,
@@ -804,6 +871,14 @@
     sortItems,
     mergeItems,
     liveFetchAllowed,
+    DEFAULT_TOPIC,
+    MIGRATED_SOURCE,
+    readSavedTopic,
+    offeredTopics,
+    offersTopic,
+    filterByTopic,
+    migrateSavedChoice,
+    emptyNoticeText,
   };
 
   if (typeof module !== "undefined" && module.exports) {

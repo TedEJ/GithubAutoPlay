@@ -1,6 +1,7 @@
-// The news reader page: SVT headlines from news.json, the reader's choice of
-// sources, an offline copy, notices (step S10), and the live fetch of the sources
-// that the page reads itself, today Sveriges Radio (step S11).
+// The news reader page: headlines from news.json (the build sources), the reader's
+// choice of topic (Ämnen, step F7) and of sources, an offline copy, notices (step
+// S10), and the live fetch of the sources that the page reads itself, today
+// Sveriges Radio (step S11).
 //
 // This is a thin layer. The rules (URL check, time display, sorting, the call
 // limits of the live fetch) live in logic.js; the request and the Atom parsing
@@ -25,6 +26,7 @@
 
   const KEY_SELECTED = "newsReader.selectedSources";
   const KEY_LAST_NEWS = "newsReader.lastNews";
+  const KEY_TOPIC = "newsReader.selectedTopic"; // R18.3: one topic id, nothing else
 
   const REFRESH_MS = 10 * 60 * 1000; // R8.1
   const STALE_MS = 3 * 60 * 60 * 1000; // R8.3
@@ -48,7 +50,16 @@
     loading: "Laddar nyheter …",
     keywordNote: "Urval med nyckelord – ungefärligt",
     noTime: "Tid saknas",
+    topicsHeading: "Ämnen",
+    notVisibleYet: "Visas inte än", // R18.9, until F8
   };
+
+  // The line that must follow the credit text of Riksdagen (R16.5, D38). One
+  // constant, so that the owner can change it in one line (the Riksdag's terms do not
+  // let the service use the name Sveriges riksdag apart from the credit; the
+  // alternative is "Sidan har inget samband med riksdagen.").
+  const DISCLAIMER_RIKSDAGEN = "Sidan har inget samband med Sveriges riksdag.";
+  const DISCLAIMERS = { riksdagen: DISCLAIMER_RIKSDAGEN };
 
   function isObject(value) {
     return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -76,7 +87,8 @@
       // Version 2 (R14.7): the feed entry of the topic Politik; `credit`, `linkHosts`
       // and `matchOn` are accepted and ignored here. Without such an entry the
       // source has no method and no address.
-      const category = Array.isArray(raw.feeds) ? raw.feeds.find((f) => isObject(f) && f.topic === "politics") : undefined;
+      const feedList = Array.isArray(raw.feeds) ? raw.feeds.filter((f) => isObject(f)) : [];
+      const category = feedList.find((f) => f.topic === "politics");
       const method = isObject(category) && typeof category.method === "string" ? category.method : "";
       seen.add(raw.id);
       const source = {
@@ -85,7 +97,15 @@
         fetchedBy: raw.fetchedBy,
         allowedHosts: hosts.slice(),
         method,
+        // The topics the source offers, each with its method (R18.5, R13.7). The
+        // address and `matchOn` stay in the file.
+        feeds: TOPICS.filter((t) => feedList.some((f) => f.topic === t)).map((t) => ({
+          topic: t,
+          method: String(feedList.find((f) => f.topic === t).method),
+        })),
       };
+      // The credit text that the page must show with the items (R16.5).
+      if (isText(raw.credit, MAX_NAME)) source.credit = raw.credit;
       // The address of a feed that the page fetches itself (R7.1): from
       // sources.json, never written in this script. Only https is accepted.
       if (raw.fetchedBy === "browser") {
@@ -97,15 +117,36 @@
     return result.length > 0 ? result : null;
   }
 
+  // The parsed sources.json -> the topics in the order of R13.1 as [{id, label}],
+  // from the `topics` list of the file (only known ids with a text label).
+  function readTopicList(data) {
+    if (!isObject(data) || !Array.isArray(data.topics)) return [];
+    const result = [];
+    for (const id of TOPICS) {
+      const raw = data.topics.slice(0, TOPICS.length * 4).find((t) => isObject(t) && t.id === id);
+      if (raw && isText(raw.label, MAX_NAME)) result.push({ id, label: raw.label });
+    }
+    return result;
+  }
+
   // "SVT", "SVT och Sveriges Radio", "A, B och C".
   function joinNames(names) {
     if (names.length <= 1) return names.join("");
     return names.slice(0, -1).join(", ") + " och " + names[names.length - 1];
   }
 
-  function bottomLine(sources) {
-    return "Rubriker och länkar från " + joinNames(sources.map((s) => s.name)) +
+  // R8.7, R18.7: every enabled source, then the credit text of each source that has
+  // an item in the list (R16.5), with the line that must follow it. `items` is the
+  // list on the screen; without it no credit is shown.
+  function bottomLine(sources, items) {
+    let text = "Rubriker och länkar från " + joinNames(sources.map((s) => s.name)) +
       ". Klicka för att läsa hos källan.";
+    for (const source of sources) {
+      if (!source.credit || !(items || []).some((i) => i.sourceId === source.id)) continue;
+      text += " " + source.credit + ".";
+      if (DISCLAIMERS[source.id]) text += " " + DISCLAIMERS[source.id];
+    }
+    return text;
   }
 
   // ------------------------------------------------------------------------
@@ -265,18 +306,18 @@
   // ------------------------------------------------------------------------
   // What the page shows
 
-  // The list: the chosen sources' items, merged and sorted by logic.js (R5.5).
-  // `liveItems` (optional): a Map from the id of a source that the page fetches
-  // itself to its items in memory. Until the topic choice of F7, the page shows
-  // only the items of news.json that belong to Politik (R19.8), so the list is the
-  // one it was before news.json had topics; live items have no topics before F8
-  // and are all shown.
-  function visibleItems(news, selected, liveItems) {
+  // The list: the chosen sources' items that belong to the chosen topic (R18.2),
+  // merged and sorted by logic.js (R5.5). `liveItems` (optional): a Map from the id of
+  // a source that the page fetches itself to its items in memory. Until F8 those
+  // items have no topics and count as Politik only (R18.9): they are in the list for
+  // that topic and for no other.
+  function visibleItems(news, selected, liveItems, topic) {
+    const chosen = topic === undefined ? logic.DEFAULT_TOPIC : topic;
     const lists = selected.map((id) => {
       const fromFile = news
-        ? news.items.filter((item) => item.sourceId === id && item.topics.includes("politics"))
+        ? logic.filterByTopic(news.items.filter((item) => item.sourceId === id), chosen)
         : [];
-      const live = liveItems && liveItems.get(id);
+      const live = chosen === "politics" && liveItems && liveItems.get(id);
       return live ? fromFile.concat(live) : fromFile;
     });
     return logic.mergeItems(lists);
@@ -290,14 +331,14 @@
     if (fromSaved) {
       notices.push({
         kind: "offline",
-        text: "Offline – visar sparade SVT-nyheter från " + news.generatedAtDisplay,
+        text: "Offline – visar sparade nyheter från " + news.generatedAtDisplay,
       });
     }
     const generated = logic.parseTime(news.generatedAt);
     if (generated !== null && nowMs - generated * 1000 > STALE_MS) {
       notices.push({
         kind: "stale",
-        text: "SVT-nyheterna kan vara gamla – senast uppdaterade " + news.generatedAtDisplay,
+        text: "Nyheterna kan vara gamla – senast uppdaterade " + news.generatedAtDisplay,
       });
     }
     return notices;
@@ -324,33 +365,56 @@
     return "Hämtad " + clockTime(live.fetchedAt) + ", " + countText(live.items.length);
   }
 
-  function buildStatus(source, news) {
+  // The status of a build source for the chosen topic (R18.5): the status of the
+  // feed of that topic in news.json, or the source-level fields when the file has no
+  // feeds (a version 1 file). The count is the number of items of the source that
+  // are shown for the topic (F7), so it equals what the reader sees.
+  function buildStatus(source, news, topic) {
     if (!news) return "Status okänd";
     const entry = news.sources.find((s) => s.id === source.id);
     if (!entry) return "Status okänd";
-    // Until the topic choice of F7 the page shows Politik only, so the row uses the
-    // status and count of the feed of Politik when the entry has feeds (R19.8); a
-    // failure of another feed does not show here. Without feeds (a version 1 file)
-    // the source-level fields are used.
-    const feed = Array.isArray(entry.feeds) ? entry.feeds.find((f) => f.topic === "politics") : undefined;
+    const chosen = topic === undefined ? logic.DEFAULT_TOPIC : topic;
+    const feed = Array.isArray(entry.feeds) ? entry.feeds.find((f) => f.topic === chosen) : undefined;
     const shown = feed || entry;
-    if (shown.status === "ok") return "Hämtad, " + countText(shown.itemCount);
+    if (shown.status === "ok") {
+      const count = logic.filterByTopic(news.items.filter((i) => i.sourceId === source.id), chosen).length;
+      return "Hämtad, " + countText(count);
+    }
     if (shown.status === "blocked-by-robots") return "Blockerad enligt källans robots.txt";
     if (shown.lastSuccess === null) return "Kunde inte hämtas";
     return "Kunde inte hämtas sedan " + logic.displayTime(shown.lastSuccess);
   }
 
-  // The rows of "Källor" (R4.6): name, note and status of each enabled source.
-  function sourceRows(sources, news, selected, live) {
-    return sources.map((source) => ({
-      id: source.id,
-      name: source.name,
-      checked: selected.includes(source.id),
-      note: source.method === "keywordFilter" ? TEXT.keywordNote : "",
-      status: source.fetchedBy === "browser"
-        ? browserStatus(source, live && live.get(source.id), selected.includes(source.id))
-        : buildStatus(source, news),
-    }));
+  // The rows of "Källor" (R4.6, R18.5): name, the topics the source offers, the note
+  // for a keyword selection, the credit and the status for the chosen topic.
+  // `topics`: [{id, label}] of the page (for the labels); `topic`: the chosen id.
+  function sourceRows(sources, news, selected, live, topic, topics) {
+    const chosen = topic === undefined ? logic.DEFAULT_TOPIC : topic;
+    const labels = new Map((topics || []).map((t) => [t.id, t.label]));
+    const labelOf = (id) => labels.get(id) || id;
+    return sources.map((source) => {
+      const feed = source.feeds.find((f) => f.topic === chosen);
+      const isChosen = selected.includes(source.id);
+      let status;
+      if (!feed) {
+        status = "Erbjuder inte ämnet " + labelOf(chosen);
+      } else if (source.fetchedBy === "browser") {
+        status = !isChosen || chosen === "politics"
+          ? browserStatus(source, live && live.get(source.id), isChosen)
+          : TEXT.notVisibleYet;
+      } else {
+        status = buildStatus(source, news, chosen);
+      }
+      return {
+        id: source.id,
+        name: source.name,
+        checked: isChosen,
+        topics: labels.size > 0 ? "Ämnen: " + source.feeds.map((f) => labelOf(f.topic)).join(", ") : "",
+        note: feed && feed.method === "keywordFilter" ? TEXT.keywordNote : "",
+        credit: source.credit || "",
+        status,
+      };
+    });
   }
 
   // ------------------------------------------------------------------------
@@ -390,7 +454,7 @@
     const storage = getStorage(env.window);
     const el = {};
     for (const id of ["updated", "refresh", "notices", "headlines", "empty", "sources", "sources-section",
-      "bottom-line"]) {
+      "topics", "topics-section", "bottom-line"]) {
       el[id] = doc.getElementById(id);
     }
 
@@ -399,6 +463,9 @@
       news: null,
       fromSaved: false,
       selected: [],
+      // The topics the page lists ([{id, label}], R18.1) and the chosen one (R18.3).
+      topics: [],
+      topic: logic.DEFAULT_TOPIC,
       loading: false,
       lastLoad: 0,
       // Sveriges Radio and any other source the page fetches itself. Memory
@@ -409,6 +476,8 @@
     const pendingLive = new Set();
     const sourceEls = new Map();
     let sourcesBuilt = "";
+    let topicsBuilt = "";
+    const topicEls = new Map();
     // What is on the screen now. A part is only rewritten when its key changes,
     // so that the keyboard focus stays where it is and a screen reader does not
     // read the same notice again after every reload.
@@ -440,16 +509,29 @@
       return map;
     }
 
+    function topicLabel() {
+      const found = state.topics.find((t) => t.id === state.topic);
+      return found ? found.label : state.topic;
+    }
+
+    function currentItems() {
+      return visibleItems(state.news, state.selected, liveItems(), state.topic);
+    }
+
     function renderList() {
-      const items = visibleItems(state.news, state.selected, liveItems());
+      const items = currentItems();
       // R8.4: only when news were loaded, nothing is left to show and no chosen
       // source is still being fetched.
-      const waiting = state.selected.some((id) => {
+      // A live source contributes nothing under other topics until F8, so it is
+      // waited for under Politik only.
+      const waiting = state.topic === "politics" && state.selected.some((id) => {
         const live = state.live.get(id);
         return live !== undefined && live.status === "loading";
       });
       const showEmpty = state.news !== null && items.length === 0 && !waiting;
-      const key = JSON.stringify([state.news !== null, showEmpty, items]);
+      const emptyText = logic.emptyNoticeText(
+        (state.sources || []).filter((s) => state.selected.includes(s.id)), state.topic, topicLabel());
+      const key = JSON.stringify([state.news !== null, showEmpty, emptyText, items]);
       if (key === listKey) return;
       listKey = key;
       // Keep the focus on a headline link that is still in the list.
@@ -482,7 +564,7 @@
         li.appendChild(meta);
         el.headlines.appendChild(li);
       }
-      el.empty.textContent = TEXT.empty;
+      el.empty.textContent = emptyText;
       el.empty.hidden = !showEmpty;
       if (focusedId !== null && linkById.has(focusedId)) linkById.get(focusedId).focus();
     }
@@ -491,8 +573,7 @@
       const news = state.news;
       const parts = [];
       if (news && state.sources) {
-        const names = state.sources.filter((s) => s.fetchedBy === "build").map((s) => s.name);
-        parts.push(joinNames(names) + " uppdaterad " + news.generatedAtDisplay);
+        parts.push("Nyheter uppdaterade " + news.generatedAtDisplay); // R18.8
       }
       if (state.sources) {
         for (const source of state.sources) {
@@ -510,7 +591,7 @@
     function renderSources() {
       el["sources-section"].hidden = !state.sources;
       if (!state.sources) return;
-      const rows = sourceRows(state.sources, state.news, state.selected, state.live);
+      const rows = sourceRows(state.sources, state.news, state.selected, state.live, state.topic, state.topics);
       const signature = rows.map((r) => r.id).join("|");
       if (signature !== sourcesBuilt) {
         sourcesBuilt = signature;
@@ -533,34 +614,87 @@
           const info = doc.createElement("span");
           info.setAttribute("id", infoId);
           info.className = "source-info";
+          const topics = makeText("span", "source-topics", "");
           const note = makeText("span", "source-note", "");
+          const credit = makeText("span", "source-credit", "");
           const status = makeText("span", "source-status", "");
+          info.appendChild(topics);
           info.appendChild(note);
+          info.appendChild(credit);
           info.appendChild(status);
           li.appendChild(input);
           li.appendChild(label);
           li.appendChild(info);
           el.sources.appendChild(li);
-          sourceEls.set(row.id, { input, note, status });
+          sourceEls.set(row.id, { input, topics, note, credit, status });
         });
       }
       for (const row of rows) {
         const parts = sourceEls.get(row.id);
         parts.input.checked = row.checked;
+        parts.topics.textContent = row.topics;
+        parts.topics.hidden = row.topics === "";
         parts.note.textContent = row.note;
         parts.note.hidden = row.note === "";
+        parts.credit.textContent = row.credit;
+        parts.credit.hidden = row.credit === "";
         parts.status.textContent = row.status;
       }
     }
 
     function renderBottom() {
-      el["bottom-line"].textContent = state.sources ? bottomLine(state.sources) : "";
+      el["bottom-line"].textContent = state.sources ? bottomLine(state.sources, currentItems()) : "";
+    }
+
+    // "Ämnen" (R18.1): one radio button per topic, built once per list of topics so
+    // that the focus stays where it is; later calls only set which one is chosen.
+    function renderTopics() {
+      el["topics-section"].hidden = !state.sources || state.topics.length === 0;
+      if (!state.sources) return;
+      const signature = state.topics.map((t) => t.id + "=" + t.label).join("|");
+      if (signature !== topicsBuilt) {
+        topicsBuilt = signature;
+        topicEls.clear();
+        el.topics.replaceChildren();
+        state.topics.forEach((topic, index) => {
+          const row = doc.createElement("div");
+          row.className = "topic-row";
+          const id = "topic-rb-" + index;
+          const input = doc.createElement("input");
+          input.setAttribute("type", "radio");
+          input.setAttribute("name", "topic");
+          input.setAttribute("id", id);
+          input.addEventListener("change", () => {
+            if (input.checked) onTopic(topic.id);
+          });
+          const label = makeText("label", "topic-name", topic.label);
+          label.setAttribute("for", id);
+          row.appendChild(input);
+          row.appendChild(label);
+          el.topics.appendChild(row);
+          topicEls.set(topic.id, input);
+        });
+      }
+      for (const [id, input] of topicEls) input.checked = id === state.topic;
     }
 
     function renderAll() {
       renderNotices();
       renderHeader();
+      renderTopics();
       renderList();
+      renderSources();
+      renderBottom();
+    }
+
+    // A new topic: saved (the id only, R18.3) and shown at once. No request is made
+    // (R18.2, R15.3).
+    function onTopic(id) {
+      if (id === state.topic || !state.topics.some((t) => t.id === id)) return;
+      state.topic = id;
+      writeKey(storage, KEY_TOPIC, id);
+      renderList();
+      renderTopics();
       renderSources();
       renderBottom();
     }
@@ -574,6 +708,10 @@
         .map((s) => s.id);
       const ticked = state.selected.filter((id) => !before.includes(id));
       writeKey(storage, KEY_SELECTED, JSON.stringify(state.selected));
+      // The topic is saved with the choice, so that the one-time migration of R18.4
+      // (which runs only without a saved topic) never adds a source the reader has
+      // unticked since.
+      writeKey(storage, KEY_TOPIC, state.topic);
       // An unticked live source keeps nothing in memory. Its time of last request
       // stays, so the call limits hold across unticking and ticking.
       for (const source of state.sources) {
@@ -588,6 +726,7 @@
       if (ticked.length > 0) startLive("choose", ticked);
       renderList();
       renderSources();
+      renderBottom();
     }
 
     async function fetchJson(url) {
@@ -700,10 +839,20 @@
       state.lastLoad = env.now();
       try {
         if (!state.sources) {
-          const sources = validateSources(await fetchJson("sources.json"));
+          const file = await fetchJson("sources.json");
+          const sources = validateSources(file);
           if (!sources) throw new Error("no usable sources");
           state.sources = sources;
+          state.topics = logic.offeredTopics(readTopicList(file), sources);
+          // The one-time addition of Riksdagen to a saved choice (R18.4, R16.9).
+          const migrated = logic.migrateSavedChoice(readKey(storage, KEY_SELECTED), readKey(storage, KEY_TOPIC), sources);
+          if (migrated) {
+            writeKey(storage, KEY_SELECTED, JSON.stringify(migrated.selected));
+            writeKey(storage, KEY_TOPIC, migrated.topic);
+          }
           state.selected = parseSelected(readKey(storage, KEY_SELECTED), sources);
+          state.topic = logic.readSavedTopic(readKey(storage, KEY_TOPIC), state.topics.map((t) => t.id)) ||
+            logic.DEFAULT_TOPIC;
         }
         startLive(trigger || "refresh");
         const fresh = validateNews(await fetchJson("news.json"), state.sources, env.now());
@@ -729,6 +878,7 @@
       const html = doc.documentElement;
       html.className = html.className ? html.className + " js" : "js";
       el["sources-section"].hidden = true;
+      el["topics-section"].hidden = true;
       el.empty.hidden = true;
       noticesKey = "loading";
       el.notices.replaceChildren();
@@ -759,10 +909,13 @@
   const api = {
     KEY_SELECTED,
     KEY_LAST_NEWS,
+    KEY_TOPIC,
+    DISCLAIMER_RIKSDAGEN,
     REFRESH_MS,
     STALE_MS,
     TEXT,
     validateSources,
+    readTopicList,
     validateNews,
     parseSavedNews,
     parseSelected,

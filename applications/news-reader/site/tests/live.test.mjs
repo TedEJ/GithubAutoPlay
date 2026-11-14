@@ -199,7 +199,7 @@ test("the status of the source: fetched time and count in Källor, and in the li
   assert.match(srRow(t.byId), /Sveriges Radio/);
   assert.match(srRow(t.byId), /Urval med nyckelord – ungefärligt/);
   assert.match(srRow(t.byId), /Hämtad 14:30, 3 rubriker/);
-  assert.equal(t.byId.updated.textContent, "SVT uppdaterad 2026-11-13 14:05 · Sveriges Radio hämtad 14:30");
+  assert.equal(t.byId.updated.textContent, "Nyheter uppdaterade 2026-11-13 14:05 · Sveriges Radio hämtad 14:30");
   assert.equal(t.byId["bottom-line"].textContent,
     "Rubriker och länkar från SVT och Sveriges Radio. Klicka för att läsa hos källan.");
 });
@@ -238,6 +238,23 @@ test("unticking Sveriges Radio hides and drops its items; ticking again within 5
   assert.equal(headlines(t.byId).length, 5);
 });
 
+test("only Sveriges Radio chosen, topic Natur, live fetch pending: the empty notice shows at once (R18.9)", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["sveriges-radio"]',
+    "newsReader.selectedTopic": "nature" }) });
+  t.state.feed.gate = gate;
+  const started = t.instance.start();
+  await t.wait();
+  await t.wait();
+  assert.match(srRow(t.byId), /Visas inte än/);
+  assert.equal(t.byId.empty.hidden, false, "SR gives nothing under Natur, so nothing is waited for");
+  assert.equal(t.byId.empty.textContent, "Inga nyheter i ämnet Natur från valda källor.");
+  release();
+  await started;
+  assert.equal(t.byId.empty.hidden, false);
+});
+
 test("only Sveriges Radio chosen: its items alone; nothing matching gives the empty notice, not while it loads", async () => {
   let release;
   const gate = new Promise((r) => { release = r; });
@@ -257,7 +274,8 @@ test("only Sveriges Radio chosen: its items alone; nothing matching gives the em
   t2.state.feed.body = '<feed xmlns="' + NS + '">' + srEntry("Sport", 1, "2026-11-13T13:20:00Z", "Fotboll") + "</feed>";
   await t2.instance.start();
   assert.equal(t2.byId.empty.hidden, false);
-  assert.equal(t2.byId.empty.textContent, "Inga nyheter från valda källor.");
+  // Riksdagen is switched off (D41), so the migration adds nothing; the chosen source offers Politik.
+  assert.equal(t2.byId.empty.textContent, "Inga nyheter i ämnet Politik från valda källor.");
 });
 
 test("the SVT items are shown when Sveriges Radio is still being fetched (SVT never waits for it)", async () => {
@@ -626,7 +644,7 @@ test("SVT fails and Sveriges Radio works: the saved SVT copy with its notice, an
   const t = setup({ storage });
   delete t.state.files["news.json"];
   await t.instance.start();
-  assert.match(t.byId.notices.children[0].textContent, /^Offline – visar sparade SVT-nyheter/);
+  assert.match(t.byId.notices.children[0].textContent, /^Offline – visar sparade nyheter/);
   assert.equal(headlines(t.byId).length, 5);
 });
 
@@ -664,8 +682,8 @@ test("the failure status names the source and says nothing about the kind of fai
     const t = setup();
     apply(t.state);
     await t.instance.start();
-      const row = srRow(t.byId).replace("Urval med nyckelord – ungefärligt", "");
-    assert.equal(row, "Sveriges Radio" + "Sveriges Radio kunde inte hämtas just nu", name);
+    const status = t.byId.sources.children[1].find((n) => n.className === "source-status")[0].textContent;
+    assert.equal(status, "Sveriges Radio kunde inte hämtas just nu", name);
   }
 });
 
@@ -699,7 +717,11 @@ test("memory only: choosing sources writes only the ids; the saved copy after a 
   box.fire("change");
   box.checked = true;
   box.fire("change");
-  assert.equal(storage.data["newsReader.selectedSources"], '["svt","sveriges-radio"]');
+  assert.equal(storage.data["newsReader.selectedSources"], '["svt","sveriges-radio"]'); // Riksdagen is switched off (D41): no migration
+  // Only ids are written: the sources and the topic id (R18.3).
+  assert.deepEqual(Object.keys(storage.data).sort(),
+    ["newsReader.lastNews", "newsReader.selectedSources", "newsReader.selectedTopic"]);
+  assert.equal(storage.data["newsReader.selectedTopic"], "politics");
   // A new page that cannot read news.json shows the saved copy: SVT only, plus the live SR items.
   const second = setup({ storage });
   delete second.state.files["news.json"];
@@ -825,7 +847,7 @@ test("unticked Sveriges Radio: no request on load, timer, Uppdatera or visibilit
   }
   assert.equal(t.feedCalls().length, 0);
   assert.deepEqual(headlines(t.byId), ["SVT: rubrik om regeringen", "SVT: rubrik om riksdagen"]);
-  assert.equal(t.byId.updated.textContent, "SVT uppdaterad 2026-11-13 14:05");
+  assert.equal(t.byId.updated.textContent, "Nyheter uppdaterade 2026-11-13 14:05");
 });
 
 test("ticking Sveriges Radio the first time in a page load fetches at once; the items appear", async () => {

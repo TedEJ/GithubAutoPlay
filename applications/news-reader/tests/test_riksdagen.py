@@ -2,7 +2,7 @@
 
 Uses hand-written, invented samples in the shape of the Riksdag document list and the
 project's own `sources.json` with the Riksdagen entry switched on (the real entry is
-`enabled: false` until F7, R16.9). Nothing touches the network.
+`enabled: false`, R16.9, D41: switched off by the owner). Nothing touches the network.
 """
 import json
 from datetime import datetime, timezone

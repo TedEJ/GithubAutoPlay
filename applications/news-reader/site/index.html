@@ -5,17 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://api.sr.se; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex">
-<title>Svensk politik – rubriker</title>
+<title>Svenska Nyheter - rubriker</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="page-header">
-  <h1>Svensk politik – rubriker</h1>
+  <h1>Svenska Nyheter - rubriker</h1>
   <p id="updated" class="updated"></p>
   <button type="button" id="refresh" class="button needs-js" aria-busy="false">Uppdatera</button>
 </header>
 <main>
   <div id="notices" role="status"></div>
+  <section id="topics-section" aria-labelledby="topics-heading" class="topics-section" hidden>
+    <h2 id="topics-heading">Ämnen</h2>
+    <div id="topics" class="topics" role="radiogroup" aria-labelledby="topics-heading"></div>
+  </section>
   <section aria-labelledby="headlines-heading">
     <h2 id="headlines-heading" class="visually-hidden">Rubriker</h2>
     <ol id="headlines" class="headlines"></ol>
