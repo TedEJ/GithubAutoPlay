@@ -2730,6 +2730,1630 @@
       "expected": {
         "match": true
       }
+    },
+    {
+      "id": "politics-topic-named-match",
+      "input": {
+        "topic": "politics",
+        "headline": "Riksdagen röstar om budgeten"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "politics-topic-named-no-match",
+      "input": {
+        "topic": "politics",
+        "headline": "Vädret i helgen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "politics-topic-named-party",
+      "input": {
+        "topic": "politics",
+        "headline": "Miljöpartiet kräver nya besked"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "politics-topic-named-nature-word-is-not-politics",
+      "input": {
+        "topic": "politics",
+        "headline": "Nytt naturreservat invigs"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "politics-topic-named-ai-word-is-not-politics",
+      "input": {
+        "topic": "politics",
+        "headline": "AI tar över jobben"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-include-naturreservat",
+      "input": {
+        "topic": "nature",
+        "headline": "Nytt naturreservat invigs i Dalarna"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-nationalpark-compound",
+      "input": {
+        "topic": "nature",
+        "headline": "Nationalparkens besökare ökar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-naturvard-prefix",
+      "input": {
+        "topic": "nature",
+        "headline": "Naturvårdsverket varnar för minskad artrikedom"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-natur-exact",
+      "input": {
+        "topic": "nature",
+        "headline": "Vacker natur på Gotland"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-naturen",
+      "input": {
+        "topic": "nature",
+        "headline": "Naturen vaknar efter vintern"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-klimatet",
+      "input": {
+        "topic": "nature",
+        "headline": "Klimatet förändras snabbare än väntat"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-klimatforandringar",
+      "input": {
+        "topic": "nature",
+        "headline": "Klimatförändringarna hotar fjällen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-vaxthusgaser",
+      "input": {
+        "topic": "nature",
+        "headline": "Utsläppen av växthusgaser minskar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-varg",
+      "input": {
+        "topic": "nature",
+        "headline": "Vargen sågs nära byn"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-bjornen",
+      "input": {
+        "topic": "nature",
+        "headline": "Björnen gick i ide tidigt"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-alg-compound",
+      "input": {
+        "topic": "nature",
+        "headline": "Älgjakten startar på måndag"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-rovdjur",
+      "input": {
+        "topic": "nature",
+        "headline": "Rovdjursstammen räknas om"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-oversvamning-aao",
+      "input": {
+        "topic": "nature",
+        "headline": "Översvämningen i Örebro lugnar sig"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-ovader",
+      "input": {
+        "topic": "nature",
+        "headline": "Oväder drar in över Skåne"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-storm",
+      "input": {
+        "topic": "nature",
+        "headline": "Storm väntas över Västkusten"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-stormen",
+      "input": {
+        "topic": "nature",
+        "headline": "Stormen drar västerut"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-torkan",
+      "input": {
+        "topic": "nature",
+        "headline": "Torkan slår mot bönderna"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-skogsbrand",
+      "input": {
+        "topic": "nature",
+        "headline": "Skogsbranden i Dalarna under kontroll"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-smhi",
+      "input": {
+        "topic": "nature",
+        "headline": "SMHI utfärdar gul varning för snö"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-jordbavning",
+      "input": {
+        "topic": "nature",
+        "headline": "Jordbävning skakade kusten"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-include-vulkanutbrott",
+      "input": {
+        "topic": "nature",
+        "headline": "Nytt vulkanutbrott på Island"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-phrase-biologisk-mangfald",
+      "input": {
+        "topic": "nature",
+        "headline": "Hotad biologisk mångfald i havet"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-phrase-global-uppvarmning",
+      "input": {
+        "topic": "nature",
+        "headline": "Global uppvärmning slår rekord igen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-phrase-vilda-djur",
+      "input": {
+        "topic": "nature",
+        "headline": "Fler vilda djur syns i staden"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-phrase-uppercase",
+      "input": {
+        "topic": "nature",
+        "headline": "BIOLOGISK MÅNGFALD I FARA"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-case-insensitive-upper",
+      "input": {
+        "topic": "nature",
+        "headline": "OVÄDER OCH ÖVERSVÄMNING"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-hyphen-splits-words",
+      "input": {
+        "topic": "nature",
+        "headline": "Skogsbrand-rapporten är klar"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-no-match-naturligtvis",
+      "input": {
+        "topic": "nature",
+        "headline": "Naturligtvis vinner laget matchen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-naturgas",
+      "input": {
+        "topic": "nature",
+        "headline": "Priset på naturgas stiger"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-naturalisering",
+      "input": {
+        "topic": "nature",
+        "headline": "Naturalisering av nya medborgare går snabbare"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-party-miljopartiet",
+      "input": {
+        "topic": "nature",
+        "headline": "Miljöpartiet vill ha ny budget"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-klimatpolitik-compound",
+      "input": {
+        "topic": "nature",
+        "headline": "Klimatpolitiken väntar på besked"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-stormakt",
+      "input": {
+        "topic": "nature",
+        "headline": "Stormakterna möts i Genève"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-djur-alone",
+      "input": {
+        "topic": "nature",
+        "headline": "Djur och människor på mässan"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-mangfald-alone",
+      "input": {
+        "topic": "nature",
+        "headline": "Mångfald i biologisk forskning"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-phrase-wrong-order",
+      "input": {
+        "topic": "nature",
+        "headline": "Uppvärmning global kris i bostadsbranschen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-vargas-llosa",
+      "input": {
+        "topic": "nature",
+        "headline": "Vargas Llosa hyllas i Madrid"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-bjorn-the-name",
+      "input": {
+        "topic": "nature",
+        "headline": "Björn Borg hyllas i Stockholm"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-english-nature",
+      "input": {
+        "topic": "nature",
+        "headline": "Nature reserve opens to visitors"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-no-match-unrelated",
+      "input": {
+        "topic": "nature",
+        "headline": "Ny budget i riksdagen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-exclude-phrase-political-climate",
+      "input": {
+        "topic": "nature",
+        "headline": "Det politiska klimatet hårdnar inför valet"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-exclude-phrase-other-hit-remains",
+      "input": {
+        "topic": "nature",
+        "headline": "Det politiska klimatet och klimatet i Arktis"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-exclude-phrase-economic-climate",
+      "input": {
+        "topic": "nature",
+        "headline": "Det ekonomiska klimatet är kyligt"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-exclude-phrase-storm-of-criticism",
+      "input": {
+        "topic": "nature",
+        "headline": "Storm av kritik mot förslaget"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-exclude-phrase-political-storm",
+      "input": {
+        "topic": "nature",
+        "headline": "Politisk storm efter utspelet"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-exclude-phrase-other-hit-remains-storm",
+      "input": {
+        "topic": "nature",
+        "headline": "Storm av kritik när stormen drog in"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-exclude-phrase-storm-kring",
+      "input": {
+        "topic": "nature",
+        "headline": "Storm kring ministerns resa"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-description-hit",
+      "input": {
+        "topic": "nature",
+        "headline": "Varning för halka",
+        "description": "SMHI varnar för snö i norr"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-description-no-match",
+      "input": {
+        "topic": "nature",
+        "headline": "Varning för halka",
+        "description": "Trafikverket varnar för halka i norr"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-description-null",
+      "input": {
+        "topic": "nature",
+        "headline": "Natur",
+        "description": null
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-description-empty",
+      "input": {
+        "topic": "nature",
+        "headline": "Vädret",
+        "description": ""
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "nature-cleaning-tag-inside-word",
+      "input": {
+        "topic": "nature",
+        "headline": "Ovä<b>der</b> i norr"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-cleaning-entity",
+      "input": {
+        "topic": "nature",
+        "headline": "Vargen&nbsp;sågs&nbsp;igen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "nature-unicode-nfd-input",
+      "input": {
+        "topic": "nature",
+        "headline": "Översvämning i dalen"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-case-sensitive-word-upper",
+      "input": {
+        "topic": "ai",
+        "headline": "AI tar över jobben"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-case-sensitive-word-in-sentence",
+      "input": {
+        "topic": "ai",
+        "headline": "Vad kan AI, egentligen?"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-case-sensitive-word-hyphen-before",
+      "input": {
+        "topic": "ai",
+        "headline": "AI-regler klubbas i EU"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-case-sensitive-word-hyphen-after",
+      "input": {
+        "topic": "ai",
+        "headline": "Ny AI-lag på väg"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-case-sensitive-word-brackets",
+      "input": {
+        "topic": "ai",
+        "headline": "Satsningen (AI) startar i höst"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-case-sensitive-word-english",
+      "input": {
+        "topic": "ai",
+        "headline": "Meta unveils AI assistant"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-case-sensitive-word-generative",
+      "input": {
+        "topic": "ai",
+        "headline": "Generativ AI i klassrummet"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-artificiell-intelligens",
+      "input": {
+        "topic": "ai",
+        "headline": "Artificiell intelligens i skolan"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-artificiella-intelligensen",
+      "input": {
+        "topic": "ai",
+        "headline": "Den artificiella intelligensen utvecklas snabbt"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-uppercase",
+      "input": {
+        "topic": "ai",
+        "headline": "ARTIFICIELL INTELLIGENS I VÅRDEN"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-no-break-space-between-words",
+      "input": {
+        "topic": "ai",
+        "headline": "Artificiell intelligens förklarad"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-english-artificial-intelligence",
+      "input": {
+        "topic": "ai",
+        "headline": "Artificial intelligence in healthcare"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-machine-learning",
+      "input": {
+        "topic": "ai",
+        "headline": "Machine learning improves forecasts"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-deep-learning",
+      "input": {
+        "topic": "ai",
+        "headline": "Deep learning i radiologi"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-language-model",
+      "input": {
+        "topic": "ai",
+        "headline": "A new language model tops the benchmarks"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-language-models",
+      "input": {
+        "topic": "ai",
+        "headline": "Language models keep growing"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-neurala-natverk",
+      "input": {
+        "topic": "ai",
+        "headline": "Neurala nätverk förklarat"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-phrase-neural-networks",
+      "input": {
+        "topic": "ai",
+        "headline": "Neural networks learn to draw"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-word-sprakmodell",
+      "input": {
+        "topic": "ai",
+        "headline": "Ny språkmodell lanseras"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-word-sprakmodellerna-prefix",
+      "input": {
+        "topic": "ai",
+        "headline": "Språkmodellerna blir bättre"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-word-maskininlarning",
+      "input": {
+        "topic": "ai",
+        "headline": "Maskininlärning används i vården"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-word-djupinlarning",
+      "input": {
+        "topic": "ai",
+        "headline": "Djupinlärning ger bättre bilder"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-word-chatgpt",
+      "input": {
+        "topic": "ai",
+        "headline": "ChatGPT får nya funktioner"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-word-openai",
+      "input": {
+        "topic": "ai",
+        "headline": "OpenAI presenterar ny version"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-word-anthropic",
+      "input": {
+        "topic": "ai",
+        "headline": "Anthropic öppnar kontor i Stockholm"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-word-chatboten-prefix",
+      "input": {
+        "topic": "ai",
+        "headline": "Chatboten svarade fel"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-word-deepfakes-prefix",
+      "input": {
+        "topic": "ai",
+        "headline": "Deepfakes sprids inför valet"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-word-neuronnaten-prefix",
+      "input": {
+        "topic": "ai",
+        "headline": "Neuronnäten tränas på nya data"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-case-sensitive-word-llm",
+      "input": {
+        "topic": "ai",
+        "headline": "Nya LLM från Europa"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-case-sensitive-word-llms",
+      "input": {
+        "topic": "ai",
+        "headline": "LLMs och upphovsrätt"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-no-match-lowercase-ai",
+      "input": {
+        "topic": "ai",
+        "headline": "ai tar över jobben"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-capital-ai-name",
+      "input": {
+        "topic": "ai",
+        "headline": "Ai Weiwei ställer ut i Stockholm"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-AIK",
+      "input": {
+        "topic": "ai",
+        "headline": "AIK vann derbyt"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-FAIR",
+      "input": {
+        "topic": "ai",
+        "headline": "FAIR-principerna för öppna data"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-AIDS",
+      "input": {
+        "topic": "ai",
+        "headline": "AIDS-forskningen får nya pengar"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-AI2-is-another-word",
+      "input": {
+        "topic": "ai",
+        "headline": "AI2 lanserar modell"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-lowercase-llm",
+      "input": {
+        "topic": "ai",
+        "headline": "Hon läser en llm i Lund"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-KI-is-left-out",
+      "input": {
+        "topic": "ai",
+        "headline": "KI forskar om cancer"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-phrase-broken-by-word",
+      "input": {
+        "topic": "ai",
+        "headline": "Artificiell och intelligens är olika ord"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-phrase-wrong-order",
+      "input": {
+        "topic": "ai",
+        "headline": "Intelligens artificiell"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-deep-alone",
+      "input": {
+        "topic": "ai",
+        "headline": "Deep sea mining startar"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-unrelated",
+      "input": {
+        "topic": "ai",
+        "headline": "Vädret i helgen"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-nature-word",
+      "input": {
+        "topic": "ai",
+        "headline": "Nytt naturreservat invigs"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-no-match-chat-alone",
+      "input": {
+        "topic": "ai",
+        "headline": "Chat om bostadsmarknaden"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-description-hit",
+      "input": {
+        "topic": "ai",
+        "headline": "Ny rapport",
+        "description": "Rapporten handlar om AI i skolan"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-description-lowercase-no-hit",
+      "input": {
+        "topic": "ai",
+        "headline": "Ny rapport",
+        "description": "ai i skolan"
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-description-null",
+      "input": {
+        "topic": "ai",
+        "headline": "AI",
+        "description": null
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-description-empty",
+      "input": {
+        "topic": "ai",
+        "headline": "Ny rapport",
+        "description": ""
+      },
+      "expected": {
+        "match": false
+      }
+    },
+    {
+      "id": "ai-cleaning-tags-around-word",
+      "input": {
+        "topic": "ai",
+        "headline": "<b>AI</b> i skolan"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-cleaning-tag-inside-word-joins",
+      "input": {
+        "topic": "ai",
+        "headline": "A<i>I</i> i skolan"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-cleaning-entity",
+      "input": {
+        "topic": "ai",
+        "headline": "Nya&nbsp;regler&nbsp;för AI"
+      },
+      "expected": {
+        "match": true
+      }
+    },
+    {
+      "id": "ai-unicode-nfd-phrase",
+      "input": {
+        "topic": "ai",
+        "headline": "Maskinlärning och neurala nätverk"
+      },
+      "expected": {
+        "match": true
+      }
+    }
+  ],
+  "topics": [
+    {
+      "id": "topics-all-news-only",
+      "input": {
+        "headline": "Vädret i helgen",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news"
+      ]
+    },
+    {
+      "id": "topics-one-topic-ai",
+      "input": {
+        "headline": "Ny språkmodell lanseras",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "ai"
+      ]
+    },
+    {
+      "id": "topics-one-topic-nature",
+      "input": {
+        "headline": "Vargen sågs nära byn",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "nature"
+      ]
+    },
+    {
+      "id": "topics-several-nature-and-ai",
+      "input": {
+        "headline": "AI förutser oväder",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "nature",
+        "ai"
+      ]
+    },
+    {
+      "id": "topics-politics-and-nature",
+      "input": {
+        "headline": "Regeringen om klimatet",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "politics",
+        "nature"
+      ]
+    },
+    {
+      "id": "topics-all-four",
+      "input": {
+        "headline": "Regeringen testar AI mot översvämning",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "politics",
+        "nature",
+        "ai"
+      ]
+    },
+    {
+      "id": "topics-all-news-only-for-a-sports-headline",
+      "input": {
+        "headline": "AIK vann derbyt",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news"
+      ]
+    },
+    {
+      "id": "topics-politics-excluded-phrase",
+      "input": {
+        "headline": "Tyska regeringen sänker skatten",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news"
+      ]
+    },
+    {
+      "id": "topics-lowercase-ai-gives-no-ai-topic",
+      "input": {
+        "headline": "ai-bilden spreds",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news"
+      ]
+    },
+    {
+      "id": "topics-order-follows-the-topic-order-not-the-feed-order",
+      "input": {
+        "headline": "Regeringen testar AI mot översvämning",
+        "feeds": [
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "politics",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "all-news",
+            "method": "feed"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "politics",
+        "nature",
+        "ai"
+      ]
+    },
+    {
+      "id": "topics-politics-not-offered-by-this-feed",
+      "input": {
+        "headline": "Regeringen faller",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news"
+      ]
+    },
+    {
+      "id": "topics-no-feed-all-news-gives-empty-list",
+      "input": {
+        "headline": "Vädret i helgen",
+        "feeds": [
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "topics-feed-method-always-gives-the-topic",
+      "input": {
+        "headline": "Proposition om skatt",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "feed"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter",
+            "matchOn": "title"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "politics"
+      ]
+    },
+    {
+      "id": "topics-match-on-title-hit",
+      "input": {
+        "headline": "Proposition om AI i skolan",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "feed"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter",
+            "matchOn": "title"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "politics",
+        "ai"
+      ]
+    },
+    {
+      "id": "topics-match-on-title-ignores-description",
+      "input": {
+        "headline": "Proposition om skatt",
+        "description": "Handlar om AI och maskininlärning",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "feed"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter",
+            "matchOn": "title"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "politics"
+      ]
+    },
+    {
+      "id": "topics-without-match-on-description-counts",
+      "input": {
+        "headline": "Proposition om skatt",
+        "description": "Handlar om AI och maskininlärning",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "ai"
+      ]
+    },
+    {
+      "id": "topics-description-null",
+      "input": {
+        "headline": "Vargen sågs nära byn",
+        "description": null,
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "nature"
+      ]
+    },
+    {
+      "id": "topics-description-gives-nature",
+      "input": {
+        "headline": "Veckans nyheter",
+        "description": "SMHI varnar för oväder",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "nature"
+      ]
+    },
+    {
+      "id": "topics-cleaning-tags-and-entities",
+      "input": {
+        "headline": "<i>AI</i> &amp; naturen",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "nature",
+        "ai"
+      ]
+    },
+    {
+      "id": "topics-nfd-input",
+      "input": {
+        "headline": "Översvämning och AI",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "nature",
+            "method": "keywordFilter"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "nature",
+        "ai"
+      ]
     }
   ]
 }

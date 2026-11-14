@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "topic": "ai",
+  "include": {
+    "words": [
+      "chatgpt",
+      "openai",
+      "anthropic",
+      "chatbot*",
+      "språkmodell*",
+      "maskininlärning*",
+      "djupinlärning*",
+      "deepfake*",
+      "neuronnät*"
+    ],
+    "phrases": [
+      "artificiell intelligens",
+      "artificiella intelligensen",
+      "artificial intelligence",
+      "machine learning",
+      "deep learning",
+      "language model",
+      "language models",
+      "neurala nätverk",
+      "neural network",
+      "neural networks"
+    ],
+    "caseSensitive": [],
+    "caseSensitiveWords": [
+      "AI",
+      "LLM",
+      "LLMs"
+    ]
+  },
+  "exclude": {
+    "words": [],
+    "phrases": []
+  }
+}

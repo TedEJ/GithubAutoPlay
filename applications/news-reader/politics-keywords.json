@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "category": "politics-sweden",
+  "version": 2,
+  "topic": "politics",
   "include": {
     "words": [
       "riksdag*",
@@ -21,7 +21,9 @@
       "liberalerna",
       "miljöpartiet"
     ],
-    "caseSensitive": ["(S)", "(M)", "(SD)", "(C)", "(V)", "(KD)", "(L)", "(MP)"]
+    "phrases": [],
+    "caseSensitive": ["(S)", "(M)", "(SD)", "(C)", "(V)", "(KD)", "(L)", "(MP)"],
+    "caseSensitiveWords": []
   },
   "exclude": {
     "words": ["moderat", "moderata"],
