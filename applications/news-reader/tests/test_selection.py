@@ -305,8 +305,8 @@ def test_source_without_keyword_filter_keeps_everything():
 
 
 def test_which_sources_filter_comes_from_sources_json(keywords):
-    # Both current sources say keywordFilter, so both filter.
-    for src in SOURCES.values():
+    # SVT and Sveriges Radio say keywordFilter for politics, so both filter (Riksdagen says feed).
+    for src in (SOURCES["svt"], SOURCES["sveriges-radio"]):
         assert feed_entry(src, "politics")["method"] == "keywordFilter"
         assert select([entry(title="Väder i helgen", link="https://sverigesradio.se/1")],
                       keywords, source=src) == []

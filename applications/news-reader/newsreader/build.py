@@ -51,6 +51,9 @@ KEYWORDS_RE = re.compile(r"^[a-z0-9-]+-keywords\.json$")
 # The topics whose feed entries the build fetches and evaluates: all four from F5 (D31, D38).
 BUILD_TOPICS = TOPIC_IDS
 FETCHED_BY = ("build", "browser")
+# R14.2, R16.7: the one value of the optional source field `timeZone`. It means that the zone or
+# offset written in the feed's dates is wrong and the clock time is Europe/Stockholm time.
+LOCAL_CLOCK_ZONE = "Europe/Stockholm"
 ITEM_FIELDS = ("id", "sourceId", "sourceName", "title", "url", "published", "publishedDisplay")  # R1.1
 ITEM_FIELDS_V2 = ITEM_FIELDS + ("topics",)  # R1.5
 STATUS_RANK = {"ok": 0, "blocked-by-robots": 1, "error": 2}  # R19.3: the worst status wins
@@ -169,6 +172,9 @@ def validate_sources(data):
             _require(isinstance(link_hosts, list) and link_hosts and all(
                 _is_text(h) and h == h.lower() and "/" not in h and _on_hosts(h, hosts) for h in link_hosts),
                 where + "linkHosts must be a non-empty list of lower-case host names on allowedHosts")
+        if "timeZone" in source:
+            _require(source["timeZone"] == LOCAL_CLOCK_ZONE and source["fetchedBy"] == "build",
+                     where + "timeZone is allowed only as \"%s\" on a build source" % LOCAL_CLOCK_ZONE)
         if source["fetchedBy"] == "browser":
             _require(source["storageAllowed"] is False, where + "a browser source must have storageAllowed false (R3.2)")
         else:
@@ -311,7 +317,7 @@ def _previous_items(previous, source, now):
         title, url, published = raw["title"], raw["url"], raw["published"]
         if topics is None or not (isinstance(title, str) and title.strip() and isinstance(url, str)):
             continue
-        normalised = check_url(url, source["allowedHosts"])
+        normalised = check_url(url, source["allowedHosts"], source.get("linkHosts"))
         if normalised is None:
             continue
         if published is not None:
@@ -426,18 +432,19 @@ def _evaluate_feed(entries, feeds, source, keywords_by_topic, now):
         if feed["method"] not in ("feed", "keywordFilter"):
             raise ValueError("unsupported method %r for topic %s" % (feed["method"], feed["topic"]))
     cutoff = now.astimezone(UTC) - MAX_AGE
+    local_clock = source.get("timeZone") == LOCAL_CLOCK_ZONE  # R16.7
     result = []
     for entry in entries:
         title = clean_headline(entry.title)
         if title == "":
             continue
-        normalised = check_url(entry.link, source["allowedHosts"])
+        normalised = check_url(entry.link, source["allowedHosts"], source.get("linkHosts"))
         if normalised is None:
             continue
         topics = topics_of(entry.title, entry.description, feeds, keywords_by_topic)
         if not topics:
             continue
-        published = published_utc(entry.time_text, now)
+        published = published_utc(entry.time_text, now, local_clock)
         if published is not None and parse_time(published) < cutoff:
             continue  # too old; a fresher copy of the same article from another feed can still count
         result.append((normalised, NewsItem(item_id(normalised), source["id"], source["name"], title,

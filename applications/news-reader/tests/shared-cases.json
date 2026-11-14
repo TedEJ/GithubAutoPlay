@@ -194,6 +194,16 @@
       "id": "whitespace-other-unicode-spaces-are-kept",
       "input": "a b　c",
       "expected": "a b　c"
+    },
+    {
+      "id": "riksdagen-title-numeric-entities-and-whitespace",
+      "input": "\n   Budgetpropositionen f&#xF6;r 2027 &#x2013;   Utgiftsomr&#xE5;de 1 Rikets styrelse\n ",
+      "expected": "Budgetpropositionen för 2027 – Utgiftsområde 1 Rikets styrelse"
+    },
+    {
+      "id": "riksdagen-long-title-is-never-cut",
+      "input": "Betänkande om ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende slut",
+      "expected": "Betänkande om ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende ett mycket långt ärende slut"
     }
   ],
   "time": [
@@ -4393,6 +4403,108 @@
         "all-news",
         "nature",
         "ai"
+      ]
+    },
+    {
+      "id": "topics-riksdagen-document-without-ai-word",
+      "input": {
+        "headline": "Regeringens proposition om exempelskatt",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "feed"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter",
+            "matchOn": "title"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "politics"
+      ]
+    },
+    {
+      "id": "topics-riksdagen-ai-word-in-the-title",
+      "input": {
+        "headline": "Betänkande om AI i offentlig sektor",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "feed"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter",
+            "matchOn": "title"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "politics",
+        "ai"
+      ]
+    },
+    {
+      "id": "topics-riksdagen-ai-word-only-in-the-description",
+      "input": {
+        "headline": "Betänkande om kommunal vattenförsörjning",
+        "description": "Handlar om artificiell intelligens och AI",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "feed"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter",
+            "matchOn": "title"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "politics"
+      ]
+    },
+    {
+      "id": "topics-riksdagen-has-no-nature-entry",
+      "input": {
+        "headline": "Betänkande om skydd av vargen och naturreservat",
+        "feeds": [
+          {
+            "topic": "all-news",
+            "method": "feed"
+          },
+          {
+            "topic": "politics",
+            "method": "feed"
+          },
+          {
+            "topic": "ai",
+            "method": "keywordFilter",
+            "matchOn": "title"
+          }
+        ]
+      },
+      "expected": [
+        "all-news",
+        "politics"
       ]
     }
   ]

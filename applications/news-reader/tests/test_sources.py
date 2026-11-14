@@ -15,11 +15,13 @@ from newsreader.build import BuildError, distinct_feed_urls, validate_sources
 ROOT = Path(__file__).resolve().parent.parent
 METHODS = {"feed", "categoryFilter", "keywordFilter"}
 FETCHED_BY = {"build", "browser"}
-ID_ORDER = ["svt", "sveriges-radio"]
+ID_ORDER = ["svt", "sveriges-radio", "riksdagen"]
 TOPIC_IDS = ["all-news", "politics", "nature", "ai"]
 SR_URL = "https://api.sr.se/api/rss/program/83"
 SVT_ALL = "https://www.svt.se/nyheter/rss.xml"
 SVT_INRIKES = "https://www.svt.se/nyheter/inrikes/rss.xml"
+RIKSDAGEN_URL = ("https://data.riksdagen.se/dokumentlista/?doktyp=prop,bet&sort=datum&sortorder=desc"
+                 "&utformat=rss&a=s&sz=50")
 
 
 @pytest.fixture(scope="module")
@@ -57,13 +59,9 @@ def test_keyword_file_names_follow_the_name_rule(config):
             assert topic["keywords"] == topic["id"] + "-keywords.json"
 
 
-def test_exactly_the_two_approved_sources(sources):
+def test_exactly_the_three_approved_sources(sources):
     assert [s["id"] for s in sources] == ID_ORDER
-    assert [s["name"] for s in sources] == ["SVT", "Sveriges Radio"]
-
-
-def test_riksdagen_is_not_added_yet(sources):
-    assert all(s["id"] != "riksdagen" for s in sources)
+    assert [s["name"] for s in sources] == ["SVT", "Sveriges Radio", "Riksdagen"]
 
 
 def test_ids_are_unique(sources):
@@ -136,6 +134,27 @@ def test_svt_is_collected_by_the_build(sources):
         assert feeds[topic]["url"] == SVT_ALL and feeds[topic]["method"] == "keywordFilter"
 
 
+def test_riksdagen_is_a_disabled_build_source_with_three_feeds_on_one_address(sources):
+    # R16.1, R16.2, R16.9: switched on by F7, together with the credit text on the page.
+    rd = next(s for s in sources if s["id"] == "riksdagen")
+    assert rd["name"] == "Riksdagen"
+    assert rd["enabled"] is False
+    assert rd["fetchedBy"] == "build"
+    assert rd["storageAllowed"] is True
+    assert rd["homepage"] == "https://www.riksdagen.se/"
+    assert rd["allowedHosts"] == ["riksdagen.se"]
+    assert rd["linkHosts"] == ["www.riksdagen.se"]
+    assert rd["credit"] == "Källa: Sveriges riksdag"
+    assert rd["timeZone"] == "Europe/Stockholm"
+    feeds = feeds_of(sources, "riksdagen")
+    assert list(feeds) == ["all-news", "politics", "ai"]  # no nature (D24)
+    assert {f["url"] for f in feeds.values()} == {RIKSDAGEN_URL}
+    assert "doktyp=prop,bet&" in RIKSDAGEN_URL and "sz=50" in RIKSDAGEN_URL  # D38: no motions
+    assert feeds["all-news"]["method"] == "feed" and "matchOn" not in feeds["all-news"]
+    assert feeds["politics"]["method"] == "feed" and "matchOn" not in feeds["politics"]
+    assert feeds["ai"]["method"] == "keywordFilter" and feeds["ai"]["matchOn"] == "title"
+
+
 def test_the_real_file_is_valid_and_costs_two_svt_requests_and_one_sveriges_radio_request(config):
     validate_sources(config)
     by_id = {s["id"]: s for s in config["sources"]}
@@ -144,6 +163,9 @@ def test_the_real_file_is_valid_and_costs_two_svt_requests_and_one_sveriges_radi
     assert distinct_feed_urls(by_id["sveriges-radio"], all_topics) == [SR_URL]
     # From F5 the build evaluates all four topics: two SVT feed requests (R15.1).
     assert distinct_feed_urls(by_id["svt"]) == [SVT_ALL, SVT_INRIKES]
+    # R16.3: the three Riksdagen entries cost one request.
+    assert distinct_feed_urls(by_id["riksdagen"]) == [RIKSDAGEN_URL]
+    assert distinct_feed_urls(by_id["riksdagen"], all_topics) == [RIKSDAGEN_URL]
 
 
 def test_shared_cases_has_the_expected_sections():
@@ -212,6 +234,11 @@ INVALID = {
     "linkHosts empty": (lambda d: svt(d).update(linkHosts=[]), "linkHosts"),
     "linkHosts in capitals": (lambda d: svt(d).update(linkHosts=["WWW.svt.se"]), "linkHosts"),
     "linkHosts with a path": (lambda d: svt(d).update(linkHosts=["www.svt.se/x"]), "linkHosts"),
+    "timeZone of another zone": (lambda d: svt(d).update(timeZone="Europe/London"), "timeZone"),
+    "timeZone not text": (lambda d: svt(d).update(timeZone=1), "timeZone"),
+    "timeZone empty": (lambda d: svt(d).update(timeZone=""), "timeZone"),
+    "timeZone in lower case": (lambda d: svt(d).update(timeZone="europe/stockholm"), "timeZone"),
+    "timeZone on a browser source": (lambda d: sr(d).update(timeZone="Europe/Stockholm"), "timeZone"),
     "empty credit": (lambda d: svt(d).update(credit=""), "credit"),
     "credit not text": (lambda d: svt(d).update(credit=["x"]), "credit"),
     "homepage not https": (lambda d: svt(d).update(homepage="http://www.svt.se/"), "homepage"),
@@ -279,6 +306,10 @@ def test_optional_fields_credit_linkhosts_and_matchon_are_accepted(config):
         s["linkHosts"] = ["www.svt.se"]
         s["feeds"][2]["matchOn"] = "title"
     assert validate_sources(mutated(config, add))
+
+
+def test_the_time_zone_field_is_accepted_on_a_build_source(config):
+    assert validate_sources(mutated(config, lambda d: svt(d).update(timeZone="Europe/Stockholm")))
 
 
 def test_a_source_may_leave_out_topics(config):

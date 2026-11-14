@@ -14,6 +14,10 @@ the same results (see the README):
   - A local time that exists twice (the hour repeated when summer time ends,
     02:00-02:59 on the last Sunday of October) is read as the first
     occurrence, with the summer offset (+02:00), so 02:30 becomes 00:30Z.
+* Optional "local clock" reading (R16.7, source field `timeZone`): the zone or offset
+  written in the text is ignored and the stated clock time is read as Europe/Stockholm
+  wall-clock time, with the two rules above for the two switch hours. This is for a
+  source whose offset is known to be wrong (Riksdagen writes `+0200` also in winter).
 * Anything else, an impossible date or time, or a year outside 1970 to 9998
   (checked on the parsed text, before any conversion) gives None.
 * Text is never formatted with strftime (it does not zero-pad years below
@@ -77,8 +81,11 @@ def _build(year, month, day, hour, minute, second, offset):
     return (naive - offset).replace(tzinfo=UTC)
 
 
-def parse_time(text):
+def parse_time(text, local_clock=False):
     """Time text -> aware UTC datetime, or None when it is missing or unusable.
+
+    With `local_clock=True` the zone or offset of the text is ignored and the clock
+    time is read as Europe/Stockholm time (R16.7); the text must still be well formed.
 
     Accepts RFC 822/2822 (`Fri, 13 Nov 2026 14:05:00 +0100`, zone names such
     as GMT, UT, Z, EST...; the weekday is not checked) and ISO 8601
@@ -94,7 +101,7 @@ def parse_time(text):
             month = _MONTHS.get(mon.capitalize())
             if month is None:
                 return None
-            if zone is None:
+            if zone is None or local_clock:
                 offset = None
             elif zone[0] in "+-":
                 offset = _offset(zone)
@@ -106,7 +113,7 @@ def parse_time(text):
         m = _ISO.match(text)
         if m:
             year, month, day, hh, mm, ss, zone = m.groups()
-            if zone is None:
+            if zone is None or local_clock:
                 offset = None
             elif zone in ("Z", "z"):
                 offset = timedelta(0)
@@ -125,13 +132,14 @@ def format_utc(moment):
         m.year, m.month, m.day, m.hour, m.minute, m.second)
 
 
-def published_utc(text, now):
+def published_utc(text, now, local_clock=False):
     """Time text -> `published` (R2.1, R2.2, R2.6): ISO UTC text, or None.
 
     `now` is an aware datetime. A time more than 10 minutes after `now` is
-    treated as missing; exactly 10 minutes ahead is kept.
+    treated as missing; exactly 10 minutes ahead is kept. `local_clock` is passed to
+    `parse_time` (R16.7).
     """
-    moment = parse_time(text)
+    moment = parse_time(text, local_clock)
     if moment is None:
         return None
     try:

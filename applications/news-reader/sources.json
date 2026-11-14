@@ -36,6 +36,23 @@
         { "topic": "nature", "method": "keywordFilter", "url": "https://api.sr.se/api/rss/program/83" },
         { "topic": "ai", "method": "keywordFilter", "url": "https://api.sr.se/api/rss/program/83" }
       ]
+    },
+    {
+      "id": "riksdagen",
+      "name": "Riksdagen",
+      "enabled": false,
+      "fetchedBy": "build",
+      "storageAllowed": true,
+      "homepage": "https://www.riksdagen.se/",
+      "allowedHosts": ["riksdagen.se"],
+      "linkHosts": ["www.riksdagen.se"],
+      "credit": "Källa: Sveriges riksdag",
+      "timeZone": "Europe/Stockholm",
+      "feeds": [
+        { "topic": "all-news", "method": "feed", "url": "https://data.riksdagen.se/dokumentlista/?doktyp=prop,bet&sort=datum&sortorder=desc&utformat=rss&a=s&sz=50" },
+        { "topic": "politics", "method": "feed", "url": "https://data.riksdagen.se/dokumentlista/?doktyp=prop,bet&sort=datum&sortorder=desc&utformat=rss&a=s&sz=50" },
+        { "topic": "ai", "method": "keywordFilter", "matchOn": "title", "url": "https://data.riksdagen.se/dokumentlista/?doktyp=prop,bet&sort=datum&sortorder=desc&utformat=rss&a=s&sz=50" }
+      ]
     }
   ]
 }

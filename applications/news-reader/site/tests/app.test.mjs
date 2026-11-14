@@ -47,6 +47,24 @@ test("validateSources keeps enabled sources and only the fields the page uses", 
   assert.deepEqual(app.validateSources(off).map((s) => s.id), ["svt"]);
 });
 
+test("validateSources: the disabled Riksdagen entry is accepted and left out; an enabled copy is read (F6)", () => {
+  const raw = realSources.sources.find((s) => s.id === "riksdagen");
+  assert.equal(raw.enabled, false);
+  assert.equal(SOURCES.some((s) => s.id === "riksdagen"), false);
+  assert.deepEqual(raw.linkHosts, ["www.riksdagen.se"]);
+  assert.equal(raw.timeZone, "Europe/Stockholm");
+  const on = JSON.parse(JSON.stringify(realSources));
+  on.sources.find((s) => s.id === "riksdagen").enabled = true;
+  const read = app.validateSources(on);
+  assert.deepEqual(read.map((s) => s.id), ["svt", "sveriges-radio", "riksdagen"]);
+  const riksdagen = read.find((s) => s.id === "riksdagen");
+  // Only the fields the page uses: no credit, linkHosts, timeZone or feed list; a build source has no address.
+  assert.deepEqual(Object.keys(riksdagen).sort(), ["allowedHosts", "fetchedBy", "id", "method", "name"]);
+  assert.equal(riksdagen.fetchedBy, "build");
+  assert.equal(riksdagen.method, "feed"); // the politics feed entry
+  assert.deepEqual(riksdagen.allowedHosts, ["riksdagen.se"]);
+});
+
 test("validateSources rejects unusable files", () => {
   for (const bad of [null, [], "x", {}, { version: 3, sources: [] }, { version: 2, sources: [] },
     { version: 2, sources: [{ id: 1 }] }, { version: 2, sources: "x" }]) {
