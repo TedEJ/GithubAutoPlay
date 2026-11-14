@@ -71,7 +71,7 @@ def build_body(issue, summary, closes=False, gates_passed=False,
         "## Issue",
         f"{word} #{issue}",
         "",
-        "The owner closes the issue after the merge.",
+        "The manager closes the issue after the merge.",
         "",
     ]
     if no_auto_merge:
