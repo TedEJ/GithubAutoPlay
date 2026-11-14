@@ -249,8 +249,6 @@ def _verify_error():
 @pytest.mark.parametrize("error", [
     urllib.error.URLError(_verify_error()),          # how urllib wraps it
     _verify_error(),                                  # raised bare
-    urllib.error.URLError(ssl.SSLError("handshake failure")),
-    ssl.SSLError("handshake failure"),
 ])
 def test_certificate_failure_is_its_own_kind_with_a_fixed_message(error):
     with pytest.raises(FetchError) as info:
@@ -260,6 +258,28 @@ def test_certificate_failure_is_its_own_kind_with_a_fixed_message(error):
     assert "full certificate chain" in str(info.value) and "README" in str(info.value)
     for text in ("http", "example", "hostile", "CERTIFICATE_VERIFY", "issuer"):
         assert text not in str(info.value)
+
+
+@pytest.mark.parametrize("error", [urllib.error.URLError(ssl.SSLError("handshake failure")),
+                                   ssl.SSLError("handshake failure")])
+def test_other_tls_errors_stay_network(error):
+    with pytest.raises(FetchError) as info:
+        fetch_url(URL, HOSTS, opener=FakeOpener(error=error))
+    assert info.value.kind == "network" and str(info.value) == "network error"
+
+
+def test_make_fetch_passes_the_context_to_the_opener_used_by_fetch_url(monkeypatch):
+    context = ssl.create_default_context()
+    seen = []
+
+    def fake_make_opener(allowed_hosts, ctx=None):
+        seen.append((tuple(allowed_hosts), ctx))
+        return FakeOpener(FakeResponse(b"<rss/>"))
+
+    monkeypatch.setattr(fetch, "make_opener", fake_make_opener)
+    assert fetch.make_fetch(context)(URL, HOSTS) == b"<rss/>"
+    assert seen == [(tuple(HOSTS), context)]
+    assert seen[0][1] is context
 
 
 def test_make_opener_uses_the_given_context():
@@ -279,7 +299,10 @@ def test_make_ssl_context_keeps_verification_on(tmp_path):
 
 def test_make_ssl_context_refuses_bad_files(tmp_path):
     (tmp_path / "text.pem").write_text("this is not a certificate\n", encoding="ascii")
-    for bad in (tmp_path / "missing.pem", tmp_path, tmp_path / "text.pem"):
+    import base64
+    der = base64.b64decode("".join(l for l in TEST_CERTIFICATE_PEM.splitlines() if "-----" not in l))
+    (tmp_path / "cert.der").write_bytes(der)  # the same certificate, binary: not accepted
+    for bad in (tmp_path / "missing.pem", tmp_path, tmp_path / "text.pem", tmp_path / "cert.der"):
         with pytest.raises(fetch.CaFileError) as info:
             fetch.make_ssl_context(str(bad))
         assert str(tmp_path) not in str(info.value)

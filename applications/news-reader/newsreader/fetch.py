@@ -14,11 +14,11 @@ broken connection and an incomplete body included). Rules:
   than `MAX_RESPONSE_BYTES` (2 MiB); a larger `Content-Length` is refused
   before reading.
 * Only status 200 is a success.
-* Certificate verification is always on. A failed verification (or any TLS handshake
-  problem) is the kind `certificate` with a fixed message; nothing from the exception
-  (which can name the host) is copied. `make_ssl_context(ca_file)` builds the context of
+* Certificate verification is always on. A failed verification (`ssl.SSLCertVerificationError`,
+  also inside `URLError.reason`) is the kind `certificate` with a fixed message; nothing from
+  the exception (which can name the host) is copied. Other TLS errors stay kind `network`. `make_ssl_context(ca_file)` builds the context of
   the command line option `--ca-file`: the default context (CERT_REQUIRED, host name
-  checked, system store) plus the owner's file as an additional trust anchor.
+  checked, system store) plus the owner's PEM file as an additional trust anchor.
 
 The build calls `fetch_url` through an injected function, so every test uses a
 fake with the same signature and never touches the network.
@@ -73,15 +73,16 @@ def make_ssl_context(ca_file):
         context = ssl.create_default_context()
         context.load_verify_locations(cafile=ca_file)
     except ssl.SSLError as exc:
-        raise CaFileError("the file has no usable certificate (PEM or DER)") from exc
+        raise CaFileError("the file has no usable certificate (it must be a PEM file, Base-64 text)") from exc
     except (OSError, ValueError) as exc:
         raise CaFileError("the file does not exist or cannot be read") from exc
     return context
 
 
-def _is_tls_error(exc):
-    """True if `exc`, or the reason it wraps, is an ssl error (certificate or handshake)."""
-    return isinstance(exc, ssl.SSLError) or isinstance(getattr(exc, "reason", None), ssl.SSLError)
+def _is_certificate_error(exc):
+    """True if `exc`, or the reason it wraps, is a certificate verification failure."""
+    return (isinstance(exc, ssl.SSLCertVerificationError)
+            or isinstance(getattr(exc, "reason", None), ssl.SSLCertVerificationError))
 
 
 class _AllowedHostsRedirects(urllib.request.HTTPRedirectHandler):
@@ -134,11 +135,11 @@ def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONS
     except urllib.error.URLError as exc:
         if isinstance(exc.reason, TimeoutError):
             raise FetchError("timeout", "timeout") from exc
-        if _is_tls_error(exc):
+        if _is_certificate_error(exc):
             raise FetchError("certificate", CERTIFICATE_MESSAGE) from exc
         raise FetchError("network", "network error") from exc
     except (OSError, ValueError, http.client.HTTPException) as exc:
-        if _is_tls_error(exc):  # ssl.SSLError is an OSError
+        if _is_certificate_error(exc):  # SSLCertVerificationError is an OSError
             raise FetchError("certificate", CERTIFICATE_MESSAGE) from exc
         # OSError: connection problems; ValueError: includes http.client.InvalidURL;
         # HTTPException: includes IncompleteRead and BadStatusLine.

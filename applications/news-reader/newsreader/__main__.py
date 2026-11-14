@@ -18,7 +18,7 @@ def main(argv=None, fetch=None, now=None, root=None):
     parser.add_argument("--previous", default=None,
                         help="previous news.json for the 24-hour fallback (default: <out>/news.json if it exists)")
     parser.add_argument("--ca-file", default=None, metavar="PATH",
-                        help="PEM or DER file with an extra certificate (for example a missing intermediate "
+                        help="PEM (Base-64 text) file with an extra certificate (for example a missing intermediate "
                              "certificate) to trust in addition to the system store, for every host the build "
                              "fetches; verification stays on")
     args = parser.parse_args(argv)

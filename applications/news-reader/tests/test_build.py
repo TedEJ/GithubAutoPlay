@@ -1255,6 +1255,15 @@ def _ca_file(tmp_path, text=None):
     return path
 
 
+def _der_file(tmp_path):
+    import base64
+    from tests.test_fetch import TEST_CERTIFICATE_PEM
+    body = "".join(l for l in TEST_CERTIFICATE_PEM.splitlines() if "-----" not in l)
+    path = tmp_path / "extra.der"
+    path.write_bytes(base64.b64decode(body))
+    return path
+
+
 def test_cli_ca_file_is_accepted_and_the_context_is_passed_on(project, tmp_path, monkeypatch):
     import ssl
     seen = []
@@ -1276,16 +1285,21 @@ def test_cli_without_ca_file_uses_the_plain_fetch(project, monkeypatch):
     assert main(["--out", str(project.out)], now=NOW, root=project.root) == 0
 
 
-@pytest.mark.parametrize("kind", ["missing", "directory", "text"])
+@pytest.mark.parametrize("kind", ["missing", "directory", "text", "der"])
 def test_cli_bad_ca_file_fails_early_and_writes_nothing(project, tmp_path, capsys, kind):
     path = {"missing": tmp_path / "nope.pem", "directory": tmp_path,
-            "text": _ca_file(tmp_path, "just some text\n")}[kind]
+            "text": _ca_file(tmp_path, "just some text\n"), "der": _der_file(tmp_path)}[kind]
     fetch = FakeFetch({ROBOTS_URL: ROBOTS_OK, FEED_URL: GOOD_FEED})
     with pytest.raises(SystemExit) as info:
         main(["--out", str(project.out), "--ca-file", str(path)], fetch=fetch, now=NOW, root=project.root)
     assert info.value.code == 2
     err = capsys.readouterr().err
-    assert "--ca-file" in err and str(tmp_path) not in err.replace("usage", "")
+    expected = {"missing": "the file does not exist or cannot be read",
+                "directory": "the file does not exist or cannot be read",
+                "text": "the file has no usable certificate (it must be a PEM file, Base-64 text)",
+                "der": "the file has no usable certificate (it must be a PEM file, Base-64 text)"}[kind]
+    assert err.strip().splitlines()[-1] == "python -m newsreader: error: --ca-file: " + expected
+    assert str(tmp_path) not in err
     assert fetch.calls == [] and not project.out.exists()
 
 

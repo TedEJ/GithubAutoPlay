@@ -112,10 +112,10 @@ If a source shows `certificate could not be verified (the server may not send it
 
 To fix it on your computer:
 1. Open the site of the failing host in a browser (for example `https://data.riksdagen.se/`), open the certificate details (the padlock) and the certification path.
-2. Select the intermediate certificate, not the site's own certificate and not the root, and export it as "Base-64 encoded X.509 (.CER)" or PEM, for example `riksdagen-intermediate.pem`.
+2. Select the intermediate certificate, not the site's own certificate and not the root, and export it as "Base-64 encoded X.509 (.CER)" (a PEM text file that starts with `-----BEGIN CERTIFICATE-----`), for example `riksdagen-intermediate.pem`. The binary "DER encoded" format is not accepted.
 3. Run the build with the file: `python -m newsreader --out build --ca-file path\to\riksdagen-intermediate.pem`
 
-Certificate verification stays on, with host name checking. The file is only an additional trust anchor: the build trusts its certificates in addition to the system store, for all hosts it fetches in that run (so only use a certificate you exported yourself from a site you trust). A path that does not exist, a folder, or a file without a certificate stops the build before anything is fetched or written (exit code 2). Nothing else is added: Python's own handling of `SSL_CERT_FILE` and `SSL_CERT_DIR` is unchanged.
+Certificate verification stays on, with host name checking. The file (PEM only) is only an additional trust anchor: the build trusts its certificates in addition to the system store, for all hosts it fetches in that run (so only use a certificate you exported yourself from a site you trust). A path that does not exist, a folder, a DER (binary) file, or a file without a PEM certificate stops the build before anything is fetched or written (exit code 2). Nothing else is added: Python's own handling of `SSL_CERT_FILE` and `SSL_CERT_DIR` is unchanged.
 
 ## Run the tests locally
 Needs Python 3.10 or newer and Node.js 18 or newer. From this folder (`node --test` finds the `*.test.mjs` files by itself, so run it with no arguments; passing a folder name such as `site/tests` does not work on Node 22):
