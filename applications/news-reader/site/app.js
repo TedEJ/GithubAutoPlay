@@ -83,24 +83,20 @@
       if (raw.fetchedBy !== "build" && raw.fetchedBy !== "browser") continue;
       const hosts = raw.allowedHosts;
       if (!Array.isArray(hosts) || hosts.length === 0 || !hosts.every((h) => isText(h, 253))) continue;
-      // Version 2 (R14.7): the feed entry of the topic Politik; `credit`, `linkHosts`
-      // and `matchOn` are accepted and ignored here. Without such an entry the
-      // source has no method and no address.
-      const feedList = Array.isArray(raw.feeds) ? raw.feeds.filter((f) => isObject(f)) : [];
-      const category = feedList.find((f) => f.topic === "politics");
-      const method = isObject(category) && typeof category.method === "string" ? category.method : "";
+      // Version 2 (R14.7): the feed entries of the source; `linkHosts` is accepted and
+      // ignored here.
+      const feedList = Array.isArray(raw.feeds) ? raw.feeds.filter((f) => isObject(f) && typeof f.method === "string") : [];
       seen.add(raw.id);
       const source = {
         id: raw.id,
         name: raw.name,
         fetchedBy: raw.fetchedBy,
         allowedHosts: hosts.slice(),
-        method,
         // The topics the source offers, each with its method (R18.5, R13.7) and, for
         // a title-only keyword match, `matchOn` (R14.2). The address stays in the file.
         feeds: TOPICS.filter((t) => feedList.some((f) => f.topic === t)).map((t) => {
           const feed = feedList.find((f) => f.topic === t);
-          const entry = { topic: t, method: String(feed.method) };
+          const entry = { topic: t, method: feed.method };
           if (feed.matchOn === "title") entry.matchOn = "title";
           return entry;
         }),
@@ -804,6 +800,14 @@
             missing.push(topic);
           }
         }));
+        // The reader may have unticked the source while the keyword files were fetched:
+        // then no request goes to the source (R15.3).
+        if (!state.selected.includes(source.id)) {
+          live.items = [];
+          live.missing = [];
+          live.status = "idle";
+          return;
+        }
         if (typeof env.AbortController === "function") {
           controller = new env.AbortController();
           timer = env.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);

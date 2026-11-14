@@ -670,7 +670,8 @@
     return { title: text(entry.title), link: entry.link, timeText, description };
   }
 
-  // Raw entries of one source -> the items to show (same steps as select_items):
+  // Raw entries of one source -> the items to show for the topic Politik only (same
+  // steps as select_items; the page uses selectTopicItems for all topics):
   // clean, drop empty titles, keyword filter, URL check, de-duplicate by
   // normalised URL (first wins), drop times in the future (R2.6) and items
   // older than 7 days, sort newest first (equal times by title, then feed
@@ -678,7 +679,7 @@
   // sources.json, `keywords` the result of validateKeywords, `now` as above.
   function selectItems(entries, source, keywords, now) {
     const nowMs = toMillis(now);
-    // The feed entry of the topic Politik (R14.7); the page evaluates no other topic until F8.
+    // The feed entry of the topic Politik (R14.7); selectTopicItems evaluates every topic.
     const feed = Array.isArray(source.feeds) ? source.feeds.find((f) => f && f.topic === "politics") : undefined;
     if (!feed) throw new Error("source " + JSON.stringify(source.id) + " has no feed entry for the topic politics");
     const method = feed.method;
@@ -740,15 +741,17 @@
       }
     }
     const cutoffMs = nowMs - MAX_AGE_MS;
-    const seen = new Set();
+    // Like the build (build_source): an entry without a topic or older than 7 days is
+    // dropped before its link counts; a repeated link joins its topics to the first
+    // copy that was kept (that copy gives headline, link and time).
+    const byLink = new Map();
     const found = [];
     for (const entry of entries) {
       const raw = entryFields(entry);
       const title = cleanHeadline(raw.title);
       if (title === "") continue;
       const normalised = checkUrl(raw.link, source.allowedHosts);
-      if (normalised === null || seen.has(normalised)) continue;
-      seen.add(normalised);
+      if (normalised === null) continue;
       const topics = topicsOf(raw.title, raw.description, feeds, keywordsByTopic);
       if (topics.length === 0) continue;
       const seconds = parseTime(raw.timeText);
@@ -757,7 +760,12 @@
         if (seconds * 1000 < cutoffMs) continue;
         if (seconds * 1000 <= nowMs + FUTURE_LIMIT_MS) published = formatUtc(seconds);
       }
-      found.push({
+      if (byLink.has(normalised)) {
+        const earlier = byLink.get(normalised);
+        earlier.topics = TOPIC_ORDER.filter((t) => earlier.topics.includes(t) || topics.includes(t));
+        continue;
+      }
+      const record = {
         item: {
           id: itemId(normalised),
           sourceId: source.id,
@@ -768,7 +776,9 @@
           publishedDisplay: displayTime(published),
         },
         topics,
-      });
+      };
+      byLink.set(normalised, record);
+      found.push(record);
     }
     const kept = new Map(); // item id -> topics in which it was kept
     for (const topic of TOPIC_ORDER) {

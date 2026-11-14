@@ -48,7 +48,7 @@ How the facts in section 4 were established: the worker's own environment cannot
 
 ### 2.1 Read the news (main flow)
 1. The reader opens the page: locally at `http://localhost:8000/` after running the build (R12.1) (publishing at a Pages address was dropped, D26).
-2. The page loads `sources.json`, `politics-keywords.json` and `news.json` from its own folder.
+2. The page loads `sources.json`, `news.json` and every keyword file that `sources.json` names (the lists of a source it fetches itself are loaded only when that source is chosen) from its own folder.
 3. In parallel the page fetches the Sveriges Radio feed directly from Sveriges Radio (R7.1).
 4. The page reads the reader's chosen sources from the browser's local storage. The first time, all sources are chosen.
 5. The page shows one list, newest first, of SVT items (from `news.json`) and Sveriges Radio items (from memory) from the chosen sources: headline as a link, source name, time.
@@ -90,7 +90,7 @@ Version 7: the check in step 2 is made for each topic the source should offer, a
 - Riksdagen cannot be fetched: handled like SVT (R6.2).
 
 ### 2.7 Choose a topic (from F7)
-1. The reader opens "Ämnen" (above "Källor"). It lists Alla nyheter, Politik, Natur and AI, one choice at a time. The first time, Politik is chosen until F8 (Q8).
+1. The reader opens "Ämnen" (above "Källor"). It lists Alla nyheter, Politik, Natur and AI, one choice at a time. The first time, Politik is chosen (the default `DEFAULT_TOPIC`; the owner decides in Q8 whether it becomes Alla nyheter).
 2. The reader picks Natur. The list at once shows the items of the chosen sources whose `topics` include `nature`, newest first. No request goes to any site (R15.3).
 3. The topic id is saved in local storage (R18.3).
 4. A source that does not offer the topic (Riksdagen has no Natur) contributes nothing, and "Källor" says "Erbjuder inte ämnet Natur" on its row (R18.5). Since F8 the item of Sveriges Radio follows the topic like any other (R18.9 is removed).
@@ -428,7 +428,7 @@ applications/news-reader/
 
 ### Data flow
 1. **Build (Python):** `sources.json` → for each `fetchedBy: build` source: robots.txt check → fetch → parse RSS → clean → keyword filter (`politics-keywords.json`) → URL check → de-duplicate → age limit → cap → `news.json`, plus a copy of `site/`, `sources.json` and `politics-keywords.json`, all into `build/`.
-2. **Page (browser):** loads `sources.json`, `politics-keywords.json` and `news.json` from its own folder → for each `fetchedBy: browser` source: fetch the feed live → `atom.js` → `logic.js` (clean, keyword filter, URL check, de-duplicate, age limit, cap) → memory → `logic.js` merges with the SVT items and sorts → `app.js` renders.
+2. **Page (browser):** loads `sources.json`, `news.json` and the keyword files that `sources.json` names (for a browser source only while it is chosen) from its own folder → for each `fetchedBy: browser` source: fetch the feed live once → `atom.js` → `logic.js` `selectTopicItems` (clean, topics by keywords, URL check, de-duplicate with joined topics, age limit, cap per topic) → memory → `logic.js` merges with the SVT items and sorts → `app.js` renders.
 
 ### Pure logic and the thin layers
 - Tested without browser or network: all Python modules except `fetch.py`, and `site/logic.js`.

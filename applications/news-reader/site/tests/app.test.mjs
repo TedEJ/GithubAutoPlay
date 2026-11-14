@@ -46,8 +46,8 @@ function newsFile(overrides = {}) {
 test("validateSources keeps enabled sources and only the fields the page uses", () => {
   assert.deepEqual(SOURCES.map((s) => s.id), ["svt", "sveriges-radio"]); // Riksdagen is off in the real file (D41)
   assert.deepEqual(SOURCES_ON.map((s) => s.id), ["svt", "sveriges-radio", "riksdagen"]);
-  assert.deepEqual(Object.keys(SVT).sort(), ["allowedHosts", "feeds", "fetchedBy", "id", "method", "name"]);
-  assert.equal(SVT.method, "keywordFilter");
+  assert.deepEqual(Object.keys(SVT).sort(), ["allowedHosts", "feeds", "fetchedBy", "id", "name"]);
+  assert.equal("method" in SVT, false, "no method of its own any more");
   const off = JSON.parse(JSON.stringify(riksdagenOn));
   off.sources[1].enabled = false;
   assert.deepEqual(app.validateSources(off).map((s) => s.id), ["svt", "riksdagen"]);
@@ -63,9 +63,8 @@ test("validateSources: the real Riksdagen entry is switched off (D41) and left o
   const riksdagen = SOURCES_ON.find((s) => s.id === "riksdagen");
   // Only the fields the page uses: the topics with their methods and the credit text, but no
   // linkHosts, timeZone or address; a build source has no address.
-  assert.deepEqual(Object.keys(riksdagen).sort(), ["allowedHosts", "credit", "feeds", "fetchedBy", "id", "method", "name"]);
+  assert.deepEqual(Object.keys(riksdagen).sort(), ["allowedHosts", "credit", "feeds", "fetchedBy", "id", "name"]);
   assert.equal(riksdagen.fetchedBy, "build");
-  assert.equal(riksdagen.method, "feed"); // the politics feed entry
   assert.equal(riksdagen.credit, "Källa: Sveriges riksdag");
   assert.deepEqual(riksdagen.feeds, [
     { topic: "all-news", method: "feed" }, { topic: "politics", method: "feed" },
@@ -114,8 +113,8 @@ test("validateSources reads version 2: the politics feed entry gives the method 
     { topic: "nature", method: "keywordFilter" }, { topic: "ai", method: "keywordFilter" }];
   const withTitle = (list) => list.map((f) => (f.topic === "ai" ? { ...f, matchOn: "title" } : f));
   assert.deepEqual(got, [
-    { id: "b", name: "Build", fetchedBy: "build", allowedHosts: ["example.invalid"], method: "keywordFilter", feeds: withTitle(feeds) },
-    { id: "l", name: "Live", fetchedBy: "browser", allowedHosts: ["example.invalid"], method: "keywordFilter", url: LIVE,
+    { id: "b", name: "Build", fetchedBy: "build", allowedHosts: ["example.invalid"], feeds: withTitle(feeds) },
+    { id: "l", name: "Live", fetchedBy: "browser", allowedHosts: ["example.invalid"], url: LIVE,
       feeds },
   ]);
 });
@@ -124,14 +123,15 @@ test("validateSources: the order of the feed entries does not matter, other topi
   const data = v2File();
   data.sources[0].feeds.reverse();
   data.sources[0].feeds.find((f) => f.topic === "nature").method = "categoryFilter";
-  assert.equal(app.validateSources(data)[0].method, "keywordFilter");
+  assert.equal("method" in app.validateSources(data)[0], false);
+  assert.deepEqual(app.validateSources(data)[0].feeds.map((f) => f.topic), ["all-news", "politics", "nature", "ai"]);
 });
 
 test("validateSources accepts credit, linkHosts and matchOn without showing them", () => {
   const data = v2File({ credit: "Källa: Exempel", linkHosts: ["www.example.invalid"] });
   const got = app.validateSources(data);
   assert.equal(got.length, 2);
-  assert.deepEqual(Object.keys(got[0]).sort(), ["allowedHosts", "credit", "feeds", "fetchedBy", "id", "method", "name"]);
+  assert.deepEqual(Object.keys(got[0]).sort(), ["allowedHosts", "credit", "feeds", "fetchedBy", "id", "name"]);
   assert.equal(got[0].credit, "Källa: Exempel");
   assert.equal("linkHosts" in got[0], false);
 });
@@ -143,30 +143,29 @@ test("validateSources refuses version 1 (R14.6, R14.7)", () => {
   for (const version of ["2", 2.5, null, undefined, 0]) assert.equal(app.validateSources({ ...v2File(), version }), null);
 });
 
-test("validateSources: a source without a politics entry has no method and no address, as a source with a bad one had before", () => {
+test("validateSources: a source without a politics entry still has its other feeds; entries without a method text are ignored", () => {
   const data = v2File();
   data.sources[0].feeds = data.sources[0].feeds.filter((f) => f.topic !== "politics");
   data.sources[1].feeds = data.sources[1].feeds.filter((f) => f.topic !== "politics");
   const [b, l] = app.validateSources(data);
-  assert.equal(b.method, "");
-  assert.equal(l.method, "");
+  assert.equal(b.feeds.some((f) => f.topic === "politics"), false);
   // F8: the address is the one address of all the feed entries, so it stays without a politics entry.
   assert.equal(l.url, LIVE);
   for (const feeds of [undefined, null, "x", [], [null, 5, { topic: "politics" }]]) {
     const copy = v2File();
     copy.sources[0].feeds = feeds;
-    assert.equal(app.validateSources(copy)[0].method, "");
+    assert.deepEqual(app.validateSources(copy)[0].feeds, []);
   }
 });
 
 test("validateSources: the real file gives SVT and Sveriges Radio as before F3, with their topics, and nothing else", () => {
   const all = [{ topic: "all-news", method: "feed" }];
   assert.deepEqual(SOURCES, [
-    { id: "svt", name: "SVT", fetchedBy: "build", allowedHosts: ["svt.se"], method: "keywordFilter",
+    { id: "svt", name: "SVT", fetchedBy: "build", allowedHosts: ["svt.se"],
       feeds: [...all, { topic: "politics", method: "keywordFilter" }, { topic: "nature", method: "keywordFilter" },
         { topic: "ai", method: "keywordFilter" }] },
     { id: "sveriges-radio", name: "Sveriges Radio", fetchedBy: "browser", allowedHosts: ["sverigesradio.se"],
-      method: "keywordFilter", url: "https://api.sr.se/api/rss/program/83",
+      url: "https://api.sr.se/api/rss/program/83",
       feeds: [...all, { topic: "politics", method: "keywordFilter" }, { topic: "nature", method: "keywordFilter" },
         { topic: "ai", method: "keywordFilter" }] },
   ]);

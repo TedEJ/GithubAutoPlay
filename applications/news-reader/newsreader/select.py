@@ -152,7 +152,7 @@ def item_id(normalised_url):
 # ---------------------------------------------------------------------------
 # Selection
 
-POLITICS = "politics"  # the topic that `select_items` and the page (until F8) evaluate (R14.7)
+POLITICS = "politics"  # the topic that `select_items` evaluates (R14.7); the build evaluates all topics (R13.3)
 
 
 def feed_entry(source, topic):

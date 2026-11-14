@@ -123,6 +123,7 @@ function setup(options = {}) {
         return new Response(feed.body, { status: feed.status, headers: feed.headers });
       }
       if (state.gate) await state.gate;
+      if (state.keywordGate && url.endsWith("-keywords.json")) await state.keywordGate;
       const body = state.files[url];
       if (body === undefined) return { ok: false, status: 404, text: async () => "" };
       return { ok: true, status: 200, text: async () => (typeof body === "string" ? body : JSON.stringify(body)) };
@@ -1110,8 +1111,24 @@ test("F8: storage, cookies and console stay free of SR content when topics are s
       assert.ok(["all-news", "politics", "nature", "ai"].includes(v), k + "=" + v);
     }
     const everything = JSON.stringify(t.storage.writes) + JSON.stringify(t.storage.data);
-    for (const bad of [SR_MARK, "sverigesradio", "Sveriges Radio", "sveriges-radio\"", "api.sr.se", "BRÖDTEXT", "vargen", "ChatGPT"]) {
+    for (const bad of [SR_MARK, "sverigesradio", "Sveriges Radio", "api.sr.se", "BRÖDTEXT", "vargen", "ChatGPT"]) {
       assert.ok(!everything.includes(bad), "storage holds " + bad);
+    }
+    // The source id is allowed in exactly one place: the list of chosen ids. Parse every stored
+    // value and check it: no SR item, no SR field, no SR source in the saved copy.
+    const choice = JSON.parse(t.storage.data["newsReader.selectedSources"]);
+    assert.ok(Array.isArray(choice) && choice.every((id) => ["svt", "sveriges-radio"].includes(id)));
+    assert.ok(["all-news", "politics", "nature", "ai"].includes(t.storage.data["newsReader.selectedTopic"]));
+    const saved = JSON.parse(t.storage.data["newsReader.lastNews"]);
+    assert.ok(saved.items.every((i) => i.sourceId === "svt"));
+    assert.ok(saved.sources.every((x) => x.id === "svt"));
+    assert.ok(!JSON.stringify(saved).includes("sveriges-radio"));
+    const walk = (v, f) => { f(v); if (v && typeof v === "object") for (const x of Object.values(v)) walk(x, f); };
+    for (const [k, raw] of t.storage.writes) {
+      if (k === "newsReader.selectedSources" || k === "newsReader.selectedTopic") continue;
+      walk(JSON.parse(raw), (v) => {
+        if (typeof v === "string") assert.ok(!/sveriges|sr\.se|SRMARK/i.test(v), k + " holds " + v);
+      });
     }
     assert.deepEqual(t.touched, []);
     assert.deepEqual(t.cookies, []);
@@ -1189,4 +1206,68 @@ test("validateSources: a browser source with feeds on two different addresses ha
   assert.equal(app.validateSources(data).find((s) => s.id === "sveriges-radio").url, "");
   assert.deepEqual(app.readTopicList(realSources).map((x) => x.keywords),
     [undefined, "politics-keywords.json", "nature-keywords.json", "ai-keywords.json"]);
+});
+
+test("selectTopicItems: a repeated link joins the topics and the first copy that is not too old wins (as the build)", () => {
+  const kw = (topic, word) => logic.validateKeywords({ version: 2, topic, include: { words: [word], phrases: [], caseSensitive: [], caseSensitiveWords: [] },
+    exclude: { words: [], phrases: [] } }, topic);
+  const lists = { politics: kw("politics", "riksdagen"), nature: kw("nature", "vargen") };
+  const source = { id: "s", name: "S", allowedHosts: ["example.invalid"], feeds: [
+    { topic: "all-news", method: "feed" }, { topic: "politics", method: "keywordFilter" },
+    { topic: "nature", method: "keywordFilter" }] };
+  const now = "2026-11-13T13:30:00Z";
+  const link = "https://example.invalid/a/1";
+  // Same link twice; only the second copy's summary has a nature word.
+  let items = logic.selectTopicItems([
+    { title: "Rubrik", link, published: "2026-11-13T13:00:00Z", summary: "Intet." },
+    { title: "Rubrik igen", link, published: "2026-11-13T12:00:00Z", summary: "Om vargen." },
+  ], source, lists, now);
+  assert.equal(items.length, 1);
+  assert.deepEqual(items[0].topics, ["all-news", "nature"]);
+  assert.equal(items[0].title, "Rubrik", "the first copy gives headline and time");
+  // A first copy that is too old (and has a topic) does not block the second one.
+  items = logic.selectTopicItems([
+    { title: "Gammal", link, published: "2026-10-01T10:00:00Z", summary: "Riksdagen." },
+    { title: "Ny", link, published: "2026-11-13T12:00:00Z", summary: "Om vargen." },
+  ], source, lists, now);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].title, "Ny");
+  assert.deepEqual(items[0].topics, ["all-news", "nature"]);
+  // An empty first title or a topic-less copy does not mark the link as seen either.
+  items = logic.selectTopicItems([
+    { title: "   ", link, published: "2026-11-13T12:00:00Z" },
+    { title: "Sen", link, published: "2026-11-13T12:00:00Z" },
+  ], source, lists, now);
+  assert.deepEqual(items.map((i) => i.title), ["Sen"]);
+});
+
+test("F8: unticking while the keyword files are being fetched: no request goes to api.sr.se", async () => {
+  let release;
+  const keywordGate = new Promise((r) => { release = r; });
+  const t = setup({ keywordGate });
+  const started = t.instance.start();
+  for (let i = 0; i < 20; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 0, "still waiting for the keyword files");
+  const box = t.byId.sources.children[1].children[0];
+  box.checked = false; box.fire("change");
+  release();
+  await started;
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 0, "the source was unticked: no request");
+  assert.equal(t.instance.state.live.get("sveriges-radio").items.length, 0);
+  assert.match(srRow(t.byId), /Inte vald – ingen hämtning/);
+  assert.equal(headlines(t.byId).length, 2);
+});
+
+test("F8: the keyword files are fetched by a relative name with credentials same-origin and no-store", async () => {
+  const t = setup();
+  await t.instance.start();
+  const keywordCalls = t.calls.filter(([u]) => u.endsWith("-keywords.json"));
+  assert.deepEqual(keywordCalls.map(([u]) => u).sort(), ["ai-keywords.json", "nature-keywords.json", "politics-keywords.json"]);
+  for (const [url, init] of keywordCalls) {
+    assert.match(url, /^[a-z0-9-]+-keywords\.json$/, "a relative name: no scheme, no slash");
+    assert.equal(init.credentials, "same-origin");
+    assert.equal(init.cache, "no-store");
+    assert.deepEqual(Object.keys(init).sort(), ["cache", "credentials", "signal"]);
+  }
 });
