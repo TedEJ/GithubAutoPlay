@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import app from "../app.js";
+import logic from "../logic.js";
 import { fakePage } from "./fake-page.mjs";
 import { FakeDOMParser } from "./xml-fake.mjs";
 
@@ -948,4 +949,244 @@ test("a long random session with ticking: never a request while unticked, never 
   }
   assert.ok(times.length > 8);
   for (let i = 1; i < times.length; i++) assert.ok(times[i] - times[i - 1] >= 5 * MIN);
+});
+
+// ---------------------------------------------------------------- F8: several topics from one request
+
+function topicFeed() {
+  return '<feed xmlns="' + NS + '">'
+    + srEntry("Riksdagen debatterar " + SR_MARK + " ett", 1, "2026-11-13T13:20:00Z", "Kort text.")
+    + srEntry("Vargen sedd i skogen " + SR_MARK + " två", 2, "2026-11-13T13:19:00Z", "Kort text.")
+    + srEntry("ChatGPT får ny version " + SR_MARK + " tre", 3, "2026-11-13T13:18:00Z", "Kort text.")
+    + srEntry("Fotbollsmatch " + SR_MARK + " fyra", 4, "2026-11-13T13:17:00Z", "Handlar om boll.")
+    + srEntry("Regeringen och vargen " + SR_MARK + " fem", 5, "2026-11-13T13:16:00Z", "Kort text.")
+    + "</feed>";
+}
+
+const TOPIC_INDEX = { "all-news": 0, politics: 1, nature: 2, ai: 3 };
+function pickTopic(byId, id) {
+  const radio = byId.topics.children[TOPIC_INDEX[id]].children[0];
+  radio.checked = true;
+  radio.fire("change");
+}
+const srTitles = (byId) => headlines(byId).filter((h) => h.includes(SR_MARK)).map((h) => h.replace(" " + SR_MARK, ""));
+
+test("F8: one request serves all topics; the topic choice filters the SR items and makes no request", async () => {
+  await withSpy(async () => {
+    const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["sveriges-radio"]' }) });
+    t.state.feed.body = topicFeed();
+    await t.instance.start();
+    assert.equal(t.feedCalls().length, 1);
+    const callsBefore = t.calls.length;
+    // The default topic is still Politik (Q8 is open).
+    assert.deepEqual(srTitles(t.byId), ["Riksdagen debatterar ett", "Regeringen och vargen fem"]);
+    pickTopic(t.byId, "all-news");
+    assert.deepEqual(srTitles(t.byId), ["Riksdagen debatterar ett", "Vargen sedd i skogen två",
+      "ChatGPT får ny version tre", "Fotbollsmatch fyra", "Regeringen och vargen fem"]);
+    pickTopic(t.byId, "nature");
+    assert.deepEqual(srTitles(t.byId), ["Vargen sedd i skogen två", "Regeringen och vargen fem"]);
+    pickTopic(t.byId, "ai");
+    assert.deepEqual(srTitles(t.byId), ["ChatGPT får ny version tre"]);
+    pickTopic(t.byId, "politics");
+    assert.equal(t.calls.length, callsBefore, "no request of any kind for a topic change");
+    assert.equal(t.feedCalls().length, 1);
+    // One status for the one request, with the count of the chosen topic.
+    assert.match(srRow(t.byId), /Hämtad 14:30 \(en hämtning för alla ämnen\), 2 rubriker/);
+    pickTopic(t.byId, "nature");
+    assert.match(srRow(t.byId), /Hämtad 14:30 \(en hämtning för alla ämnen\), 2 rubriker/);
+    pickTopic(t.byId, "ai");
+    assert.match(srRow(t.byId), /1 rubrik$/);
+    assert.match(srRow(t.byId), /Ämnen: Alla nyheter, Politik, Natur, AI/);
+    // Every item: the eight fields, the source name, all-news among the topics.
+    const items = t.instance.state.live.get("sveriges-radio").items;
+    assert.equal(items.length, 5);
+    for (const item of items) {
+      assert.deepEqual(Object.keys(item).sort(),
+        ["id", "published", "publishedDisplay", "sourceId", "sourceName", "title", "topics", "url"]);
+      assert.equal(item.sourceName, "Sveriges Radio");
+      assert.equal(item.topics[0], "all-news");
+    }
+    assert.deepEqual(items.find((i) => i.title.includes("fem")).topics, ["all-news", "politics", "nature"]);
+  });
+});
+
+test("F8: the match reads title and summary but neither the summary nor the content is kept", async () => {
+  const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["sveriges-radio"]' }) });
+  t.state.feed.body = '<feed xmlns="' + NS + '">'
+    + srEntry("Utan nyckelord " + SR_MARK, 1, "2026-11-13T13:20:00Z", "Här står det om en varg i skogen: vargen.")
+    + "</feed>";
+  await t.instance.start();
+  pickTopic(t.byId, "nature");
+  assert.deepEqual(srTitles(t.byId), ["Utan nyckelord"]);
+  const dump = JSON.stringify(t.instance.state.live.get("sveriges-radio"));
+  assert.ok(!dump.includes("varg") && !dump.includes("BRÖDTEXT"), "no summary or content in memory");
+});
+
+test("F8: sources.json names the keyword files; each is fetched once per page, and only when the source is chosen", async () => {
+  const none = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["svt"]' }) });
+  await none.instance.start();
+  none.clock.now += 20 * MIN;
+  none.intervals[0].fn();
+  for (let i = 0; i < 10; i++) await none.wait();
+  assert.equal(none.feedCalls().length, 0);
+  assert.deepEqual(none.calls.map(([u]) => u).filter((u) => u.endsWith("-keywords.json")), [],
+    "no keyword file is fetched while the only source that needs them is unticked");
+  // Ticking it fetches the three lists and makes the request.
+  const box = none.byId.sources.children[1].children[0];
+  box.checked = true; box.fire("change");
+  for (let i = 0; i < 10; i++) await none.wait();
+  assert.equal(none.feedCalls().length, 1);
+  assert.deepEqual(none.calls.map(([u]) => u).filter((u) => u.endsWith("-keywords.json")).sort(),
+    ["ai-keywords.json", "nature-keywords.json", "politics-keywords.json"]);
+  // A later request reuses the lists.
+  box.checked = false; box.fire("change");
+  none.clock.now += 6 * MIN;
+  box.checked = true; box.fire("change");
+  for (let i = 0; i < 10; i++) await none.wait();
+  assert.equal(none.feedCalls().length, 2);
+  assert.equal(none.calls.filter(([u]) => u.endsWith("-keywords.json")).length, 3);
+});
+
+test("F8: a keyword file name in sources.json that breaks the name rule is not fetched; its topic is left out", async () => {
+  const sources = JSON.parse(JSON.stringify(realSources));
+  sources.topics.find((x) => x.id === "ai").keywords = "../ai-keywords.json";
+  const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["sveriges-radio"]' }) });
+  t.state.files["sources.json"] = sources;
+  t.state.feed.body = topicFeed();
+  await t.instance.start();
+  assert.ok(!t.calls.some(([u]) => u.includes("..")));
+  assert.match(srRow(t.byId), /Nyckelord saknas för AI/);
+  pickTopic(t.byId, "ai");
+  assert.deepEqual(srTitles(t.byId), []);
+  pickTopic(t.byId, "all-news");
+  assert.equal(srTitles(t.byId).length, 5);
+});
+
+test("F8: no keyword list at all: the items count under Alla nyheter only, the row says so, still one request, silent console", async () => {
+  await withSpy(async () => {
+    const t = setup({ storage: fakeStorage({ "newsReader.selectedSources": '["sveriges-radio"]' }) });
+    delete t.state.files["politics-keywords.json"];
+    delete t.state.files["nature-keywords.json"];
+    delete t.state.files["ai-keywords.json"];
+    t.state.feed.body = topicFeed();
+    await t.instance.start();
+    assert.equal(t.feedCalls().length, 1);
+    assert.match(srRow(t.byId), /Nyckelord saknas för Politik, Natur och AI: de rubrikerna visas bara under Alla nyheter/);
+    for (const topic of ["politics", "nature", "ai"]) {
+      pickTopic(t.byId, topic);
+      assert.deepEqual(srTitles(t.byId), [], topic);
+    }
+    pickTopic(t.byId, "all-news");
+    assert.equal(srTitles(t.byId).length, 5);
+    // Next round the lists are tried again (they are same-origin files, not SR requests).
+    t.state.files["politics-keywords.json"] = keywordFile;
+    t.byId.sources.children[1].children[0].checked = true;
+    t.clock.now += 6 * MIN;
+    t.byId.refresh.fire("click");
+    for (let i = 0; i < 10; i++) await t.wait();
+    assert.equal(t.feedCalls().length, 2);
+    assert.doesNotMatch(srRow(t.byId), /Nyckelord saknas för Politik/);
+    pickTopic(t.byId, "politics");
+    assert.deepEqual(srTitles(t.byId), ["Riksdagen debatterar ett", "Regeringen och vargen fem"]);
+  });
+});
+
+test("F8: storage, cookies and console stay free of SR content when topics are switched and the source is ticked and unticked", async () => {
+  await withSpy(async () => {
+    const t = setup();
+    t.state.feed.body = topicFeed();
+    await t.instance.start();
+    for (const topic of ["all-news", "nature", "ai", "politics"]) pickTopic(t.byId, topic);
+    const box = t.byId.sources.children[1].children[0];
+    box.checked = false; box.fire("change");
+    t.clock.now += 6 * MIN;
+    box.checked = true; box.fire("change");
+    for (let i = 0; i < 10; i++) await t.wait();
+    for (const topic of ["all-news", "nature"]) pickTopic(t.byId, topic);
+    const keys = new Set(t.storage.writes.map(([k]) => k));
+    assert.deepEqual([...keys].sort(), ["newsReader.lastNews", "newsReader.selectedSources", "newsReader.selectedTopic"]);
+    // The topic key holds a topic id and nothing else.
+    for (const [k, v] of t.storage.writes.filter(([k]) => k === "newsReader.selectedTopic")) {
+      assert.ok(["all-news", "politics", "nature", "ai"].includes(v), k + "=" + v);
+    }
+    const everything = JSON.stringify(t.storage.writes) + JSON.stringify(t.storage.data);
+    for (const bad of [SR_MARK, "sverigesradio", "Sveriges Radio", "sveriges-radio\"", "api.sr.se", "BRÖDTEXT", "vargen", "ChatGPT"]) {
+      assert.ok(!everything.includes(bad), "storage holds " + bad);
+    }
+    assert.deepEqual(t.touched, []);
+    assert.deepEqual(t.cookies, []);
+  });
+});
+
+test("F8: an SR failure with several topics shows one failure status and keeps the other sources", async () => {
+  const t = setup();
+  t.state.feed.status = 503;
+  await t.instance.start();
+  for (const topic of ["all-news", "nature", "ai", "politics"]) {
+    pickTopic(t.byId, topic);
+    assert.equal(t.byId.sources.children[1].find((n) => n.className === "source-status")[0].textContent,
+      "Sveriges Radio kunde inte hämtas just nu", topic);
+    assert.ok(headlines(t.byId).every((h) => h.startsWith("SVT")));
+  }
+  assert.equal(t.feedCalls().length, 1);
+});
+
+test("F8: the call limits still hold with several topics: hidden tab, 5 minutes, topic changes", async () => {
+  const t = setup();
+  t.doc.hidden = true;
+  await t.instance.start();
+  assert.equal(t.feedCalls().length, 0);
+  for (const topic of ["all-news", "nature", "ai"]) pickTopic(t.byId, topic);
+  t.byId.refresh.fire("click");
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 0, "nothing while hidden");
+  t.doc.hidden = false;
+  t.doc.fire("visibilitychange");
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 1);
+  t.clock.now += 4 * MIN;
+  t.byId.refresh.fire("click");
+  for (let i = 0; i < 10; i++) await t.wait();
+  assert.equal(t.feedCalls().length, 1, "under 5 minutes: no second request");
+});
+
+test("selectTopicItems: topics per item, cap of 20 per topic, topics of dropped items removed, matchOn title (R13.6)", () => {
+  const kw = (topic, word) => logic.validateKeywords({ version: 2, topic, include: { words: [word], phrases: [], caseSensitive: [], caseSensitiveWords: [] },
+    exclude: { words: [], phrases: [] } }, topic);
+  const lists = { politics: kw("politics", "riksdagen"), ai: kw("ai", "robot") };
+  const source = { id: "s", name: "S", allowedHosts: ["example.invalid"], feeds: [
+    { topic: "all-news", method: "feed" }, { topic: "politics", method: "keywordFilter" },
+    { topic: "ai", method: "keywordFilter", matchOn: "title" }] };
+  const entry = (n, title, description, minutes) => ({ title, link: "https://example.invalid/a/" + n,
+    published: new Date(Date.parse("2026-11-13T13:00:00Z") - minutes * 60000).toISOString(), description });
+  const now = "2026-11-13T13:30:00Z";
+  // 25 politics items, newest first by minutes; item 0 also has "robot" in the title.
+  const entries = [];
+  for (let n = 0; n < 25; n++) entries.push(entry(n, (n === 0 ? "robot " : "") + "riksdagen " + n, "", n));
+  entries.push(entry(100, "Utan ämne", "robot i texten", 30)); // robot only in the description: no AI (matchOn title)
+  const items = logic.selectTopicItems(entries, source, lists, now);
+  const byTopic = (t) => items.filter((i) => i.topics.includes(t));
+  assert.equal(byTopic("politics").length, 20);
+  assert.equal(byTopic("all-news").length, 20, "Alla nyheter is capped at 20 too");
+  assert.deepEqual(byTopic("ai").map((i) => i.title), ["robot riksdagen 0"]);
+  assert.ok(!items.some((i) => i.title === "riksdagen 20"), "an item kept in no topic is dropped");
+  assert.ok(!items.some((i) => i.title === "Utan ämne" && i.topics.includes("ai")));
+  assert.deepEqual(items.find((i) => i.title === "robot riksdagen 0").topics, ["all-news", "politics", "ai"]);
+  for (const i of items) assert.deepEqual(Object.keys(i).sort(),
+    ["id", "published", "publishedDisplay", "sourceId", "sourceName", "title", "topics", "url"]);
+  // Errors: no feed, unsupported method, a keywordFilter without its list.
+  assert.throws(() => logic.selectTopicItems([], { ...source, feeds: [] }, lists, now), Error);
+  assert.throws(() => logic.selectTopicItems([], { ...source, feeds: [{ topic: "ai", method: "categoryFilter" }] }, lists, now), Error);
+  assert.throws(() => logic.selectTopicItems([entry(1, "x", "", 1)], source, { politics: lists.politics }, now), Error);
+  assert.deepEqual(logic.selectTopicItems([], source, lists, now), []);
+});
+
+test("validateSources: a browser source with feeds on two different addresses has no address (one request per round, D42)", () => {
+  const data = JSON.parse(JSON.stringify(realSources));
+  const sr = data.sources.find((s) => s.id === "sveriges-radio");
+  assert.equal(app.validateSources(data).find((s) => s.id === "sveriges-radio").url, FEED_URL);
+  sr.feeds[2].url = "https://api.sr.se/api/rss/program/84";
+  assert.equal(app.validateSources(data).find((s) => s.id === "sveriges-radio").url, "");
+  assert.deepEqual(app.readTopicList(realSources).map((x) => x.keywords),
+    [undefined, "politics-keywords.json", "nature-keywords.json", "ai-keywords.json"]);
 });
