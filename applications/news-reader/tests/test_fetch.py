@@ -121,6 +121,24 @@ def test_declared_length_over_the_limit_is_refused_before_reading():
     assert info.value.kind == "too-large" and response.reads == 0
 
 
+def test_huge_ascii_digit_length_is_too_large_without_reading():
+    response = FakeResponse(b"x", headers={"Content-Length": "9" * 5000})
+    with pytest.raises(FetchError) as info:
+        fetch_url(URL, HOSTS, opener=FakeOpener(response))
+    assert info.value.kind == "too-large" and response.reads == 0
+
+
+@pytest.mark.parametrize("length", ["\u00b2", "\u0663", "1\u0663", "-5", "", "1e3"])
+def test_declared_length_that_is_not_plain_ascii_digits_is_ignored(length):
+    response = FakeResponse(b"<rss/>", headers={"Content-Length": length})
+    assert fetch_url(URL, HOSTS, opener=FakeOpener(response)) == b"<rss/>"
+
+
+def test_declared_length_with_many_leading_zeros_is_judged_by_its_value():
+    response = FakeResponse(b"<rss/>", headers={"Content-Length": "0" * 5000 + "5"})
+    assert fetch_url(URL, HOSTS, opener=FakeOpener(response)) == b"<rss/>"
+
+
 def test_redirect_handler_allows_allowed_hosts_only():
     handler = fetch._AllowedHostsRedirects(HOSTS)
     request = urllib.request.Request(URL)

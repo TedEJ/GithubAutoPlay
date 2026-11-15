@@ -111,6 +111,15 @@ def make_fetch(context=None):
     return fetch
 
 
+def _declared_length(text, max_bytes):
+    """Content-Length as an int; 0 (no judgement) unless it is plain ASCII digits.
+    str.isdigit() and int() accept other Unicode digits, and int() refuses over 4300 digits."""
+    if not text or not (text.isascii() and text.isdigit()):
+        return 0
+    digits = text.lstrip("0")
+    return int(digits) if 0 < len(digits) <= 12 else (max_bytes + 1 if digits else 0)
+
+
 def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONSE_BYTES, opener=None,
               total_seconds=TOTAL_SECONDS, clock=time.monotonic):
     """GET `url` and return the body as bytes (see the module text).
@@ -152,7 +161,7 @@ def fetch_url(url, allowed_hosts, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONS
         if not host_allowed(final_url, allowed_hosts):
             raise FetchError("redirect", "ended on a host that is not allowed")
         length = response.headers.get("Content-Length") if getattr(response, "headers", None) else None
-        if length is not None and length.isdigit() and int(length) > max_bytes:
+        if _declared_length(length, max_bytes) > max_bytes:
             raise FetchError("too-large", "response larger than 2 MB")
         chunks, total = [], 0
         # read1 returns as soon as any data has arrived (read would wait for a whole
