@@ -37,7 +37,38 @@
     return trimChars(text, WS_CHARS);
   }
 
-  const TAG = /<\/?[A-Za-z][^<>]*>|<!--[\s\S]*?-->/g;
+  // A tag, or the start of a comment (`<!--`, handled in stripMarkup).
+  const TAG_OR_COMMENT_START = /<\/?[A-Za-z][^<>]*>|<!--/g;
+
+  // Removes tags and `<!-- ... -->` comments in one left-to-right pass. A comment
+  // ends at the first `-->` after its `<!--`. Once no `-->` is left no later
+  // comment can end either, so such starts stay as text and are not searched
+  // for again. That keeps the time linear in the text length.
+  function stripMarkup(text) {
+    let out = "";
+    let pos = 0; // start of the text not yet copied to `out`
+    let commentsCanEnd = true;
+    TAG_OR_COMMENT_START.lastIndex = 0;
+    for (;;) {
+      const match = TAG_OR_COMMENT_START.exec(text);
+      if (match === null) break;
+      if (match[0] === "<!--") {
+        const end = commentsCanEnd ? text.indexOf("-->", match.index + 4) : -1;
+        if (end === -1) {
+          commentsCanEnd = false;
+          TAG_OR_COMMENT_START.lastIndex = match.index + 1; // keep `<!--` as text
+          continue;
+        }
+        out += text.slice(pos, match.index);
+        pos = end + 3;
+        TAG_OR_COMMENT_START.lastIndex = pos;
+      } else {
+        out += text.slice(pos, match.index);
+        pos = match.index + match[0].length;
+      }
+    }
+    return out + text.slice(pos);
+  }
 
   const NAMED_ENTITIES = new Map(Object.entries({
     amp: "&", lt: "<", gt: ">", quot: '"', apos: "'",
@@ -64,7 +95,7 @@
   }
 
   function cleanHeadline(text) {
-    text = String(text).replace(TAG, "");
+    text = stripMarkup(String(text));
     text = text.replace(ENTITY, decodeEntity);
     text = text.replace(WS_RUN, " ");
     return stripWs(text);

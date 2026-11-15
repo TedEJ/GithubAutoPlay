@@ -126,6 +126,51 @@
       "expected": ""
     },
     {
+      "id": "comment-between-text",
+      "input": "a<!--b-->c",
+      "expected": "ac"
+    },
+    {
+      "id": "comment-start-inside-comment",
+      "input": "<!--<!--<!-- a --> b",
+      "expected": "b"
+    },
+    {
+      "id": "comment-start-is-not-its-own-end",
+      "input": "<!-->x-->y",
+      "expected": "y"
+    },
+    {
+      "id": "comment-empty",
+      "input": "<!---->q",
+      "expected": "q"
+    },
+    {
+      "id": "comment-dash-only-is-not-closed",
+      "input": "<!--->q",
+      "expected": "<!--->q"
+    },
+    {
+      "id": "comment-swallows-tags",
+      "input": "<!--<b>-->z",
+      "expected": "z"
+    },
+    {
+      "id": "comment-unterminated-keeps-start-and-removes-later-tag",
+      "input": "<!-- <b>x</b>",
+      "expected": "<!-- x"
+    },
+    {
+      "id": "comment-terminated-then-unterminated",
+      "input": "<!-- a --> <!-- b",
+      "expected": "<!-- b"
+    },
+    {
+      "id": "comment-hides-a-tag-pair",
+      "input": "x<!-- a <b>y</b> -->z",
+      "expected": "xz"
+    },
+    {
       "id": "very-long-headline",
       "input": "Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten och mer",
       "expected": "Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten Regeringen och oppositionen diskuterar budgeten och mer"

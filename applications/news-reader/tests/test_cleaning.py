@@ -1,5 +1,6 @@
 """Headline cleaning (R1.3) against the shared cases."""
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -65,3 +66,40 @@ def test_invalid_numeric_entities_stay_literal():
         assert clean_headline(text) == text
     assert clean_headline("&#1114111;") == "\U0010FFFF"
     assert clean_headline("&#x10FFFF;") == "\U0010FFFF"
+
+
+def _timed(text):
+    start = time.perf_counter()
+    result = clean_headline(text)
+    return result, time.perf_counter() - start
+
+
+def test_many_unterminated_comment_starts_are_cleaned_in_linear_time():
+    text = "<!--" * 20000
+    result, seconds = _timed(text)
+    assert result == text
+    assert seconds < 1.0
+
+
+def test_unterminated_comment_starts_do_not_hide_later_tags_or_a_late_end():
+    text = "<!--" * 20000
+    result, seconds = _timed(text + "<b>x</b>")
+    assert result == text + "x"
+    assert seconds < 1.0
+    result, seconds = _timed(text + " a --> b")
+    assert result == "b"
+    assert seconds < 1.0
+
+
+def test_comment_starts_after_the_last_comment_end_are_kept_in_linear_time():
+    text = "a<!-- c -->" + "<!--" * 20000 + "z"
+    result, seconds = _timed(text)
+    assert result == "a" + "<!--" * 20000 + "z"
+    assert seconds < 1.0
+
+
+def test_other_unterminated_markup_is_cleaned_in_linear_time():
+    for text in ("<a" * 50000, "</" + "a" * 100000, "<a " * 50000 + "b", "<!" * 50000):
+        result, seconds = _timed(text)
+        assert result == text
+        assert seconds < 1.0
