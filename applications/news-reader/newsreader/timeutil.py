@@ -19,7 +19,9 @@ the same results (see the README):
   wall-clock time, with the two rules above for the two switch hours. This is for a
   source whose offset is known to be wrong (Riksdagen writes `+0200` also in winter).
 * Anything else, an impossible date or time, or a year outside 1970 to 9998
-  (checked on the parsed text, before any conversion) gives None.
+  (checked on the parsed text, before any conversion) gives None. `published_utc`
+  also gives None when the UTC moment is outside those years (a zone offset can
+  move 1970-01-01T00:30+01:00 to 1969).
 * Text is never formatted with strftime (it does not zero-pad years below
   1000 on every platform); every field is padded explicitly.
 """
@@ -147,6 +149,10 @@ def published_utc(text, now, local_clock=False):
             return None
     except OverflowError:
         pass  # `now` is at the very end of the range: nothing is in the future
+    # A zone offset can move a time in 1970..9998 to 1969 or 9999 in UTC, which
+    # `parse_time` refuses; keep "published is None or parse_time accepts it".
+    if not MIN_YEAR <= moment.year <= MAX_YEAR:
+        return None
     return format_utc(moment)
 
 

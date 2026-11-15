@@ -369,7 +369,8 @@ test("time: formats and limits", () => {
   assert.equal(p("2026-11-13T12:00:00+01:60"), null);
   assert.equal(p("1969-12-31T23:59:59Z"), null);
   assert.equal(p("1970-01-01T00:00:00Z"), "1970-01-01T00:00:00Z");
-  assert.equal(p("1970-01-01T00:30:00+01:00"), "1969-12-31T23:30:00Z");
+  assert.equal(p("1970-01-01T00:30:00+01:00"), null); // 1969 in UTC (#107)
+  assert.equal(p("1970-01-01T01:00:00+01:00"), "1970-01-01T00:00:00Z");
   assert.equal(logic.displayTime("1969-12-31T23:30:00Z"), "1970-01-01 00:30");
   assert.equal(logic.publishedUtc("9998-12-31T23:59:00-23:59", "9998-12-31T23:59:59Z"), null);
   assert.equal(logic.publishedUtc("9998-12-31T12:00:00Z", "9999-01-01T00:00:00Z"), "9998-12-31T12:00:00Z");
@@ -709,20 +710,16 @@ test("long input: selectItems with long link, time and title", () => {
 
 // ---- a time before 1970 and Atom white space ---------------------------------
 
-test("selection: a time that falls before 1970 is dropped as too old (explicit rule)", () => {
-  // 1970-01-01T00:30:00+01:00 is 1969-12-31T23:30:00Z. The year check is made on
-  // the text (1970 is allowed), so the time is usable and is the year 1969; the
-  // item is then older than 7 days and is dropped.
+test("selection: a time that falls outside 1970 to 9998 in UTC is kept without a time (#107)", () => {
+  // 1970-01-01T00:30:00+01:00 is 1969-12-31T23:30:00Z: like Python, no time, item kept.
   const entries = [rss("Riksdagen gammal", "old", "1970-01-01T00:30:00+01:00"),
     rss("Riksdagen ny", "new", "2026-11-13T10:00:00Z")];
   const items = logic.selectItems(entries, svt, keywords, SEL_NOW);
-  assert.deepEqual(items.map((i) => i.title), ["Riksdagen ny"]);
-  // publishedUtc itself still returns the 1969 text (the shared rule: only the year of the text is checked)
-  assert.equal(logic.publishedUtc("1970-01-01T00:30:00+01:00", NOW), "1969-12-31T23:30:00Z");
-  // with a "now" so early that 1969 is within 7 days the item is kept
-  const early = logic.selectItems([rss("Riksdagen tidig", "e", "1970-01-01T00:30:00+01:00")], svt, keywords, "1970-01-02T00:00:00Z");
-  assert.equal(early[0].published, "1969-12-31T23:30:00Z");
-  assert.equal(early[0].publishedDisplay, "1970-01-01 00:30");
+  assert.deepEqual(items.map((i) => i.title), ["Riksdagen ny", "Riksdagen gammal"]);
+  assert.equal(items[1].published, null);
+  assert.equal(items[1].publishedDisplay, "Tid saknas");
+  assert.equal(logic.publishedUtc("1970-01-01T00:30:00+01:00", NOW), null);
+  assert.equal(logic.publishedUtc("9998-12-31T23:30:00-01:00", "9999-01-01T12:00:00Z"), null);
 });
 
 test("selection: an Atom published that is only white space falls back to updated", () => {

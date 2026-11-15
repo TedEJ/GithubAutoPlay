@@ -93,12 +93,37 @@ def test_generated_at_and_display():
     assert generated_at_display(summer) == "2026-07-01 12:00"
 
 
+NOW_FAR = datetime(9999, 12, 31, tzinfo=timezone.utc)
+
+
 def test_year_edges_give_none_and_never_raise():
     for text in ["0001-01-01T00:30:00+01:00", "0001-01-01T00:30:00",
                  "9999-12-31T23:59:59-01:00", "0026-01-01T00:00:00Z",
                  "0999-12-31T23:59:59Z", "1969-12-31T23:59:59Z"]:
         assert published_utc(text, NOW) is None
         assert parse_time(text) is None
+
+
+def test_utc_moment_outside_the_years_is_missing():
+    # The text is inside 1970..9998 but its UTC moment is not (issue #107).
+    assert published_utc("Thu, 01 Jan 1970 00:30:00 +0100", NOW) is None
+    assert published_utc("1970-01-01T00:30:00+01:00", NOW) is None
+    assert published_utc("9998-12-31T23:30:00-0100", NOW_FAR) is None  # 9999-01-01T00:30:00Z
+    assert published_utc("Thu, 01 Jan 1970 01:00:00 +0100", NOW) == "1970-01-01T00:00:00Z"
+    assert published_utc("9998-12-31T22:59:59-0100", NOW_FAR) == "9998-12-31T23:59:59Z"
+
+
+def test_published_is_none_or_accepted_by_parse_time():
+    import random
+    rng = random.Random(107)
+    zones = ["", "Z", "+0100", "-0100", "+2359", "-2359", "+00:30", "-01"]
+    for _ in range(3000):
+        year = rng.choice([1969, 1970, 1971, 9997, 9998, 9999])
+        text = "%04d-%02d-%02dT%02d:%02d:%02d%s" % (
+            year, rng.choice([1, 12]), rng.choice([1, 31]), rng.choice([0, 1, 22, 23]),
+            rng.randint(0, 59), rng.randint(0, 59), rng.choice(zones))
+        published = published_utc(text, NOW_FAR)
+        assert published is None or parse_time(published) is not None, text
 
 
 def test_output_years_are_zero_padded_by_hand():
