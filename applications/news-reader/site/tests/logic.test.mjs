@@ -851,3 +851,14 @@ test("emptyNoticeText: no source, no offer, no items (R8.4, R18.6)", () => {
   assert.equal(logic.emptyNoticeText([riksdagen, svt], "nature", "Natur"), "Inga nyheter i ämnet Natur från valda källor.");
   assert.equal(logic.emptyNoticeText([svt], "politics", "Politik"), "Inga nyheter i ämnet Politik från valda källor.");
 });
+
+test("cleanHeadline handles many unterminated comment starts in linear time", () => {
+  const text = "<!--".repeat(20000);
+  let start = Date.now();
+  assert.equal(logic.cleanHeadline(text), text);
+  assert.ok(Date.now() - start < 500);
+  start = Date.now();
+  assert.equal(logic.cleanHeadline(text + "<b>x</b>"), text + "x");
+  assert.equal(logic.cleanHeadline(text + " a --> b"), "b");
+  assert.ok(Date.now() - start < 500);
+});

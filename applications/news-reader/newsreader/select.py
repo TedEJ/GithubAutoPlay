@@ -13,7 +13,8 @@ from newsreader.model import NewsItem
 from newsreader.timeutil import UTC, display_time, parse_time, published_utc
 
 # `<` followed by a letter (or `/`, `!--`) starts a tag, so "a < b" stays as it is.
-_TAG = re.compile(r"</?[A-Za-z][^<>]*>|<!--.*?-->", re.DOTALL)
+# A tag, or the start of a comment (`<!--`, handled in `_strip_markup`).
+_TAG_OR_COMMENT_START = re.compile(r"</?[A-Za-z][^<>]*>|<!--")
 
 # White space: U+0020, tab, LF, CR, FF, VT and U+00A0 (no-break space).
 # JavaScript must use exactly this set, not trim() or \s.
@@ -53,6 +54,36 @@ def _decode_entity(match):
     return chr(code)
 
 
+def _strip_markup(text):
+    """Remove tags and `<!-- ... -->` comments in one left-to-right pass.
+
+    A comment ends at the first `-->` after its `<!--`. Once no `-->` is left in
+    the text no later comment can end either, so such starts stay as text and
+    are not searched for again. That keeps the time linear in the text length.
+    """
+    out = []
+    pos = 0          # start of the text not yet copied to `out`
+    scan = 0         # where the next tag or comment start is searched for
+    comments_can_end = True
+    while True:
+        match = _TAG_OR_COMMENT_START.search(text, scan)
+        if match is None:
+            break
+        if match.group(0) == "<!--":
+            end = text.find("-->", match.end()) if comments_can_end else -1
+            if end == -1:
+                comments_can_end = False
+                scan = match.start() + 1   # keep `<!--` as text; a tag may start later
+                continue
+            out.append(text[pos:match.start()])
+            pos = scan = end + 3
+        else:
+            out.append(text[pos:match.start()])
+            pos = scan = match.end()
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def clean_headline(text):
     """Plain-text headline (R1.3).
 
@@ -60,7 +91,7 @@ def clean_headline(text):
     `&amp;amp;` gives `&amp;`), runs of white space become one space, leading
     and trailing white space removed. Nothing else is changed or cut.
     """
-    text = _TAG.sub("", text)
+    text = _strip_markup(text)
     text = _ENTITY.sub(_decode_entity, text)
     text = _WHITESPACE_RUN.sub(" ", text)
     return text.strip(WHITESPACE)
