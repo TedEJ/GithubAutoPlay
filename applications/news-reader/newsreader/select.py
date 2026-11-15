@@ -40,7 +40,12 @@ def _decode_entity(match):
     dec, hexa, name = match.groups()
     if name is not None:
         return NAMED_ENTITIES.get(name, match.group(0))
-    code = int(dec) if dec is not None else int(hexa, 16)
+    # Strip leading zeros, then leave a number that is surely above U+10FFFF
+    # (over 7 decimal or 6 hex digits) alone, so `int` never sees a huge string.
+    digits = (dec if dec is not None else hexa).lstrip("0")
+    if len(digits) > (7 if dec is not None else 6):
+        return match.group(0)
+    code = int(digits or "0", 10 if dec is not None else 16)
     # Valid code points only: not 0, not a surrogate, not above U+10FFFF.
     # &#128; is the plain control character U+0080 (not the euro sign).
     if code == 0 or 0xD800 <= code <= 0xDFFF or code > 0x10FFFF:
