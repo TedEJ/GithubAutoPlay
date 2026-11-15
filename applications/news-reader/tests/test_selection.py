@@ -299,6 +299,13 @@ def test_keyword_filter_uses_title_and_description(keywords):
     assert sorted(i.url for i in got) == ["https://svt.se/2", "https://svt.se/3"]
 
 
+def test_time_just_before_1970_in_utc_keeps_the_item_without_time():
+    got = select([entry(time="Thu, 01 Jan 1970 00:30:00 +0100")], source=no_filter())
+    assert len(got) == 1
+    assert got[0].published is None
+    assert got[0].publishedDisplay == "Tid saknas"
+
+
 def test_source_without_keyword_filter_keeps_everything():
     got = select([entry(title="Väder i helgen")], source=no_filter())
     assert len(got) == 1

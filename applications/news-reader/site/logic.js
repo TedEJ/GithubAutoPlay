@@ -598,20 +598,25 @@
     throw new TypeError("now must be a Date, epoch milliseconds or UTC text like 2026-11-13T13:05:12Z");
   }
 
+  // A zone offset can move a time of the years 1970 to 9998 to 1969 or 9999 in UTC;
+  // such a time is missing, like timeutil.py (so `published` is always parseable).
+  function inYearRange(seconds) {
+    return seconds >= 0 && seconds < daysFromCivil(MAX_YEAR + 1, 1, 1) * 86400;
+  }
+
   // Time text -> `published` (R2.1, R2.6): UTC text, or null. A time more than
   // 10 minutes after `now` is null; exactly 10 minutes ahead is kept.
   function publishedUtc(text, now) {
     const nowMs = toMillis(now);
     const seconds = parseTime(text);
-    if (seconds === null) return null;
+    if (seconds === null || !inYearRange(seconds)) return null;
     if (seconds * 1000 > nowMs + FUTURE_LIMIT_MS) return null;
     return formatUtc(seconds);
   }
 
   // `published` (UTC text or null) -> `publishedDisplay` (R2.4, R2.5): Stockholm
   // time as `YYYY-MM-DD HH:MM`. Throws Error for text that is not a UTC time.
-  // Times before 1970 are shown with +01:00 (CET), enough for the 1969 times
-  // that a +hh:mm offset on 1970-01-01 can give.
+  // Times before 1970 are shown with +01:00 (CET); `publishedUtc` never gives one.
   function displayTime(published) {
     if (published === null || published === undefined) return MISSING_DISPLAY;
     const m = typeof published === "string" ? UTC_TEXT.exec(published) : null;
@@ -700,12 +705,11 @@
       const normalised = checkUrl(raw.link, source.allowedHosts);
       if (normalised === null || seen.has(normalised)) continue;
       seen.add(normalised);
-      // Time: unusable or more than 10 minutes ahead -> no time (null). A time
-      // before the cutoff is dropped; this includes a time before 1970 (a
-      // `+hh:mm` offset on 1970-01-01 can give 1969), which is simply old.
+      // Time: unusable, outside 1970 to 9998 in UTC, or more than 10 minutes
+      // ahead -> no time (null). A time before the cutoff is dropped.
       const seconds = parseTime(raw.timeText);
       let published = null;
-      if (seconds !== null) {
+      if (seconds !== null && inYearRange(seconds)) {
         if (seconds * 1000 < cutoffMs) continue;
         if (seconds * 1000 <= nowMs + FUTURE_LIMIT_MS) published = formatUtc(seconds);
       }

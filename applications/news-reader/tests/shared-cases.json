@@ -1160,8 +1160,8 @@
         "now": "2026-11-13T13:05:12Z"
       },
       "expected": {
-        "published": "1969-12-31T23:30:00Z",
-        "publishedDisplay": "1970-01-01 00:30"
+        "published": null,
+        "publishedDisplay": "Tid saknas"
       }
     },
     {
@@ -1171,8 +1171,8 @@
         "now": "2026-11-13T13:05:12Z"
       },
       "expected": {
-        "published": "1969-12-31T23:30:00Z",
-        "publishedDisplay": "1970-01-01 00:30"
+        "published": null,
+        "publishedDisplay": "Tid saknas"
       }
     },
     {
@@ -1204,8 +1204,8 @@
         "now": "9999-01-01T12:00:00Z"
       },
       "expected": {
-        "published": "9999-01-01T00:59:59Z",
-        "publishedDisplay": "9999-01-01 01:59"
+        "published": null,
+        "publishedDisplay": "Tid saknas"
       }
     },
     {
