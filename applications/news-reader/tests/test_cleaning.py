@@ -45,3 +45,23 @@ def test_shared_cleaning_case(case):
 def test_cleaning_is_not_cut_or_changed_beyond_r1_3():
     text = "x" * 5000
     assert clean_headline(text) == text
+
+
+def test_very_long_numeric_entities_are_left_unchanged():
+    for text in ("&#" + "9" * 5000 + ";", "&#x" + "F" * 5000 + ";"):
+        assert clean_headline(text) == text
+
+
+def test_numeric_entities_with_leading_zeros_still_decode():
+    assert clean_headline("&#0000065;") == "A"
+    assert clean_headline("&#x0000041;") == "A"
+    assert clean_headline("&#" + "0" * 5000 + "65;") == "A"
+    assert clean_headline("&#x" + "0" * 5000 + "41;") == "A"
+
+
+def test_invalid_numeric_entities_stay_literal():
+    for text in ("&#0;", "&#" + "0" * 5000 + ";", "&#xD800;", "&#55296;",
+                 "&#1114112;", "&#x110000;"):
+        assert clean_headline(text) == text
+    assert clean_headline("&#1114111;") == "\U0010FFFF"
+    assert clean_headline("&#x10FFFF;") == "\U0010FFFF"
