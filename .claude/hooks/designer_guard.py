@@ -216,8 +216,14 @@ def words_problem(words, depth, strict=True):
 
 
 def split_commands(command):
-    """Split on shell operators outside quotes; `$(` and backticks also split inside double quotes."""
+    """Split on shell operators outside quotes.
+
+    `$(` and backticks also split inside double quotes. The text up to the end of
+    such a substitution is a command of its own, and after it the scan returns to
+    the double-quoted string it came from (`stack` remembers that).
+    """
     parts, buf, quote, i = [], [], None, 0
+    stack = []  # open substitutions that started inside double quotes: ["paren", depth] or ["tick"]
     while i < len(command):
         ch = command[i]
         if quote == "'":
@@ -230,11 +236,16 @@ def split_commands(command):
             elif ch == "`" or command.startswith("$(", i):
                 parts.append("".join(buf))
                 buf, quote = [], None
+                stack.append(["tick"] if ch == "`" else ["paren", 0])
                 i += 1 if ch == "`" else 2
                 continue
             else:
                 buf.append(ch)
                 quote = None if ch == '"' else quote
+        elif stack and ((stack[-1][0] == "tick" and ch == "`") or (stack[-1][0] == "paren" and ch == ")" and stack[-1][1] == 0)):
+            stack.pop()
+            parts.append("".join(buf))
+            buf, quote = [], '"'
         elif ch in "'\"":
             buf.append(ch)
             quote = ch
@@ -244,11 +255,18 @@ def split_commands(command):
         elif command.startswith("$(", i):
             parts.append("".join(buf) + " $SUBST")
             buf = []
+            if stack and stack[-1][0] == "paren":
+                stack[-1][1] += 1
             i += 2
             continue
         elif ch == "&" and (command[i - 1:i] in ("<", ">") or command[i + 1:i + 2] == ">"):
             buf.append(ch)  # part of a redirection such as 2>&1 or &>file
         elif ch in OPERATOR_CHARS:
+            if stack and stack[-1][0] == "paren":
+                if ch == "(":
+                    stack[-1][1] += 1
+                elif ch == ")":
+                    stack[-1][1] -= 1
             parts.append("".join(buf) + (" $SUBST" if ch == "`" else ""))
             buf = []
         else:

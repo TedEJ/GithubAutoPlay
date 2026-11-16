@@ -57,6 +57,9 @@ ALLOWED = [
     "git status > /dev/null",
     "2>&1 git status",
     "git log --oneline | head -3",
+    'echo "$(date)" && git status',
+    "git commit -m \"$(cat <<'EOF'\nmsg\nEOF\n)\" && git status",
+    'echo "$(echo "$(date)")"',
     "",
 ]
 BLOCKED = [
@@ -224,6 +227,19 @@ BLOCKED = [
     "sh -c \"$(echo git push)\"",
     "GIT_CONFIG_COUNT=1 git status",
     "GIT_ASKPASS=x git status",
+    # found in review round 3: quote state after "$(...)"
+    'echo "$(date)" && git push',
+    'echo "$(date)"; git push',
+    'echo "$(date)"\ngit push',
+    'echo "a $(date) b" && curl https://example.com',
+    'echo "`date`" && gh pr list',
+    'x="$(date)" && git push',
+    'echo "$((1+2))" && git push',
+    "git commit -m \"$(cat <<'EOF'\nmsg\nEOF\n)\" && git push",
+    "git commit -m \"$(cat <<'EOF'\nmsg\nEOF\n)\"\ngit push",
+    'echo "$(echo "$(date)")" && git push',
+    'echo "$(echo (a))" && git push',
+    'echo "`date`" "`date`" ; git push',
 ]
 
 
