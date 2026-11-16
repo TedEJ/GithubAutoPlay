@@ -87,3 +87,68 @@ def test_urls():
     assert robots_url("https://news.example.invalid/a/b?x=1") == "https://news.example.invalid/robots.txt"
     assert url_path("https://news.example.invalid/a/b?x=1") == "/a/b?x=1"
     assert url_path("https://news.example.invalid") == "/"
+
+
+# --- linear wildcard matching (issue #119) ---
+
+import re
+import time
+
+
+def _old_regex_match(rule, path):
+    """The regular expression the matcher replaced, kept as a reference."""
+    anchored = rule.endswith("$")
+    if anchored:
+        rule = rule[:-1]
+    pattern = ".*".join(re.escape(part) for part in rule.split("*"))
+    return re.compile(pattern + ("\Z" if anchored else ""), re.DOTALL).match(path) is not None
+
+
+@pytest.mark.parametrize("rule,path,expected", [
+    ("/a**b", "/ab", True),
+    ("/a***b", "/aXXb", True),
+    ("/a***b", "/aXXc", False),
+    ("*", "/anything", True),
+    ("*/x", "/y/x", True),
+    ("*/x", "/y/z", False),
+    ("/a*", "/a", True),
+    ("/a*", "/abc", True),
+    ("/a*$", "/abc", True),
+    ("/*.xml$", "/x.xml", True),
+    ("/*.xml$", "/x.xml?a", False),
+    ("/a*b*c$", "/abxbc", True),
+    ("/a*b*c$", "/abcx", False),
+    ("/ab*b$", "/ab", False),
+    ("/a*a$", "/a", False),
+    ("/a*b$", "/ab", True),
+    ("$", "", True),
+    ("$", "/", False),
+    ("/a$b", "/a$b", True),
+    ("/a$b*", "/a$bc", True),
+    ("/a*b", "/a\nb", True),
+    ("/a$", "/a", True),
+    ("/a$", "/ab", False),
+])
+def test_wildcard_cases_match_the_old_regex(rule, path, expected):
+    from newsreader.robots import _rule_matches
+    assert _rule_matches(rule, path) is expected
+    assert _old_regex_match(rule, path) is expected
+
+
+def test_new_matcher_agrees_with_old_regex_on_many_inputs():
+    import itertools
+    from newsreader.robots import _rule_matches
+    rules = ["".join(c) for n in range(0, 6) for c in itertools.product("a*$/", repeat=n)]
+    paths = ["".join(c) for n in range(0, 7) for c in itertools.product("a/$", repeat=n)] + ["a\na", "/a\n$"]
+    for rule in rules:
+        for path in paths:
+            assert _rule_matches(rule, path) == _old_regex_match(rule, path), (rule, path)
+
+
+def test_many_wildcards_on_long_path_finish_quickly():
+    rule = "/" + "a*" * 40 + "b"
+    path = "/" + "a" * 20000
+    start = time.perf_counter()
+    assert is_allowed("User-agent: *\nDisallow: %s\n" % rule, UA, path) is True
+    assert is_allowed("User-agent: *\nDisallow: %s$\n" % rule, UA, path) is True
+    assert time.perf_counter() - start < 1.0
