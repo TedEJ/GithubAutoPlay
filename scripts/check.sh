@@ -7,7 +7,13 @@
 #
 # Steps: required files, relative links in the Markdown files of the repository
 # root, the tests of the project folder, and the tests of the scripts.
-# Exits with 0 when every step passes and 1 when any step fails.
+# Exits with 0 when every step passes, 1 when any step fails and 2 for a usage
+# error or when no Python is found.
+#
+# Python: the first of python3, python, py that can import pytest is used. If
+# none can, the first that runs is used, with a message that pytest is missing.
+# CHECK_SH_SELECT_ONLY=1 is a test switch: the script stops after choosing
+# Python and printing the root.
 #
 # The link check below repeats the logic in ci.yml. If one of them changes,
 # change the other as well, so they keep giving the same answer.
