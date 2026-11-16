@@ -111,6 +111,7 @@ GitHub does not let the author of a pull request approve it, and all work is don
 - The full text of the issue, or the task if there is no issue yet.
 - The folder of the repository (or git worktree) it works in and the branch name to use.
 - An instruction to read `WORKFLOW.md` and `CLAUDE.md` first, and what it must not do (see the table).
+- The text of its role file in `.claude/agents/` (`designer-developer.md` or `reviewer.md`) when the worker is not started as that agent (see "How the agents are set up").
 - The deliverable: what the manager expects back and where files go.
 - The report format below.
 - Anything the owner has already decided, and what is out of scope.
@@ -126,7 +127,10 @@ Designer/Developer report: **Summary**; **Files changed**; **Checks run** (the c
 Reviewer report: **Verdict** (ready, or needs changes); **Must fix** (each with file and reason); **Should consider**; **Checked** (what was read and which commands were run); **Not checked**.
 
 ### How the agents are set up
-- **Now (option A):** the manager starts workers from the conversation, with the role instructions above in the briefing and a model chosen per worker (the strongest model for design work).
-- **Later (option B):** the roles become agent definitions in the repository, `.claude/agents/designer-developer.md` and `.claude/agents/reviewer.md`, each with its instructions, allowed tools (the Reviewer only gets tools that read and run) and model. They are added in a pull request. Whether a definition is picked up in the middle of a session has not been tested, so test it in a new session after the merge.
+- **Definitions:** the two worker roles are defined in `.claude/agents/designer-developer.md` and `.claude/agents/reviewer.md`. Each file holds the role's instructions, its allowed tools and its model, and is the single source for them. Change a role in a pull request, in that file first.
+- **Reviewer is read-only by tools and by a hook:** it gets only `Read`, `Grep`, `Glob` and `Bash`. A hook (`.claude/hooks/reviewer_readonly.sh`, which runs `reviewer_readonly.py`) lets `Bash` run only reading commands and the project's tests, and blocks everything else. The hook fails closed: when no working Python is found, the command is blocked. It has tests in `scripts/tests/test_reviewer_hook.py`. It is a process guard, not a security boundary; its known limits are in the docstring of `reviewer_readonly.py`.
+- **Where the definitions are loaded:** in Claude Code started inside a clone of this repository (for example `claude` in the terminal), where `/agents` lists both agents. Tested on 2026-11-16: the Reviewer could run `git status`, and its attempts to write a file, commit and create a folder were blocked by the hook. In tasks in the Claude desktop app the definitions are not loaded (the agent type `reviewer` was not found, also in a new task), so the tool limit does not apply there. There the manager starts workers from the conversation, reads the role file and puts its text in the briefing, so the rules are the same but the Reviewer's read-only limit rests on the instructions alone. A model is chosen per worker (the strongest model for design work).
+- **Windows:** `.gitattributes` keeps LF line endings for the agent files and scripts, because CRLF can make Claude Code skip an agent file without a message. The hook wrapper tries `python3`, `python` and `py`.
+- **Not tested yet:** the Designer/Developer agent has been read and validated but not run on a real issue.
 - Access to GitHub is shared by all agents for now (see the project document "Decision: GitHub access for agents"). Separate access per role is decided later, when several agents are in use. Workers never receive a token: the manager does the pushing.
 

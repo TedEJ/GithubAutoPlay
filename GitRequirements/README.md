@@ -23,3 +23,4 @@ These are not in the code, so they are listed here.
 ## Related files
 - `WORKFLOW.md`: the detailed development workflow.
 - `CLAUDE.md`: the short entry point that Claude reads automatically.
+- `.claude/agents/` and `.claude/hooks/`: the Designer/Developer and Reviewer agent definitions and the hook that keeps the Reviewer read-only (see section 10 of `WORKFLOW.md`). `.gitattributes` keeps LF line endings for them on Windows.

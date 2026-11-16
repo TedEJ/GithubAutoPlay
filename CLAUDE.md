@@ -12,3 +12,4 @@ Hard rules (summary, see WORKFLOW.md for details):
 - Add new verification steps to the existing `checks` job so the required check name stays `checks`.
 - Pull requests merge automatically through the Action `.github/workflows/auto-merge.yml` once `checks` is green. Do not merge by hand. Check that auto-merge was enabled after opening a pull request, and use the label `no-auto-merge` (set when the pull request is opened) only to opt out.
 - Never store tokens or credentials in the repository.
+- Workers (Designer/Developer and Reviewer) are defined in `.claude/agents/`. Workers never receive a token, and the Reviewer never changes files. Details are in section 10 of WORKFLOW.md.
