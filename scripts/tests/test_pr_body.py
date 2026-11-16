@@ -116,3 +116,9 @@ def test_cli_refuses_without_a_verdict_unless_docs_only(capsys):
     assert pr_body.main(["--issue", "1", "--summary", "x"]) == 2
     assert pr_body.main(["--issue", "1", "--summary", "x", "--docs-only"]) == 0
     assert pr_body.main(["--issue", "1", "--summary", "x", "--reviewer-verdict", "ok"]) == 0
+
+
+def test_tests_gate_states_the_local_result_not_the_ci_result():
+    body = pr_body.build_body(1, "x", gates_passed=True)
+    assert "- [x] Tests: the local checks pass (`scripts/check.sh`)" in body
+    assert "`checks` is green" not in body
