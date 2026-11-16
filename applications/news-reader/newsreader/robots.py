@@ -69,12 +69,28 @@ def _parse_groups(text):
     return groups
 
 
-def _rule_regex(path):
-    anchored = path.endswith("$")
+def _rule_matches(rule, path):
+    """True if `path` starts with a match of `rule` (`*` = any characters,
+    also newlines or none; a final `$` anchors the end). Linear time: the parts
+    between the `*` are found left to right, each at its first position."""
+    anchored = rule.endswith("$")
     if anchored:
-        path = path[:-1]
-    pattern = ".*".join(re.escape(part) for part in path.split("*"))
-    return re.compile(pattern + ("\\Z" if anchored else ""), re.DOTALL)
+        rule = rule[:-1]
+    parts = rule.split("*")
+    if len(parts) == 1:
+        return path == rule if anchored else path.startswith(rule)
+    first, last = parts[0], parts[-1]
+    if not path.startswith(first):
+        return False
+    pos = len(first)
+    for part in parts[1:-1]:
+        found = path.find(part, pos)
+        if found < 0:
+            return False
+        pos = found + len(part)
+    if anchored:
+        return len(path) - len(last) >= pos and path.endswith(last)
+    return path.find(last, pos) >= 0
 
 
 def is_allowed(robots_text, user_agent, path):
@@ -89,7 +105,7 @@ def is_allowed(robots_text, user_agent, path):
         if rule_path == "":
             continue  # empty Disallow (or Allow) changes nothing
         rule_path = normalise_path(rule_path)
-        if _rule_regex(rule_path).match(path):
+        if _rule_matches(rule_path, path):
             length = len(rule_path)
             if length > best_len or (length == best_len and is_allow):
                 best_len, best_allow = length, is_allow
