@@ -14,7 +14,7 @@
 
 set -u
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
 project="${1:-applications/Countdown}"
 # A project folder is relative to the repository root, unless it is absolute.
 case "$project" in
@@ -22,14 +22,27 @@ case "$project" in
   *) project_dir="$root/$project" ;;
 esac
 
-if command -v python3 >/dev/null 2>&1; then
-  py=python3
-elif command -v python >/dev/null 2>&1; then
-  py=python
+py=""
+first_running=""
+for candidate in python3 python py; do
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  "$candidate" -c "import sys" >/dev/null 2>&1 || continue
+  [ -n "$first_running" ] || first_running="$candidate"
+  if "$candidate" -c "import pytest" >/dev/null 2>&1; then
+    py="$candidate"
+    break
+  fi
+done
+if [ -n "$py" ]; then
+  echo "check.sh: using Python: $py"
+elif [ -n "$first_running" ]; then
+  py="$first_running"
+  echo "check.sh: using Python: $py. pytest is missing in it (no candidate could import pytest), so the test steps will fail. Install it with: $py -m pip install pytest" >&2
 else
-  echo "check.sh: Python was not found. Install Python 3.10 or newer." >&2
+  echo "check.sh: Python was not found (tried python3, python, py). Install Python 3.10 or newer." >&2
   exit 2
 fi
+[ -z "${CHECK_SH_SELECT_ONLY:-}" ] || exit 0
 
 if [ ! -d "$project_dir" ]; then
   echo "check.sh: project folder not found: $project" >&2
