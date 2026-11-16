@@ -488,3 +488,89 @@ def test_the_project_directory_defaults_to_the_repository_of_the_hook():
     env = {"PATH": "/usr/bin:/bin"}
     result = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True, env=env)
     assert result.returncode == 0
+
+
+# --- review round 1 of issue #121 ---------------------------------------------------
+
+
+def test_cd_is_tracked_only_where_the_shell_certainly_changes_folder(tree):
+    repo = tree[0]
+    for command in [
+        "cd applications | node --test ..",
+        "cd applications | git -C .. status",
+        "cd applications | bash ../scripts/check.sh",
+        "cd nonexistent ; node --test applications/../..",
+        "cd applications/news-reader ; python -m pytest ../..",
+        "cd applications || python -m pytest ..",
+        "true || cd applications && node --test ..",
+        "ls | cd applications && node --test ..",
+        "cd applications && ls ; python -m pytest ..",
+        "cd applications && ls || python -m pytest ..",
+        "cd applications; cd ../..",
+    ]:
+        assert verdict(command, repo) is not None, command
+    for command in [
+        "cd applications && ls | head -3",
+        "ls ; cd applications && python -m pytest -q",
+        "cd applications && cd news-reader && python -m pytest -q",
+        "cd applications && git status | head",
+    ]:
+        assert verdict(command, repo) is None, command
+
+
+def test_dot_dot_after_a_symlink_is_resolved_through_the_link(tree):
+    repo, outside, _ = tree
+    if not (repo / "link").is_symlink():
+        pytest.skip("symlinks are not available")
+    for command in [
+        "cd link/..",
+        f"cd {repo}/link/..",
+        "python -m pytest link/..",
+        "git -C link/.. status",
+        "node --test link/../applications",
+        "cd link && python -m pytest ..",
+    ]:
+        assert verdict(command, repo) is not None, command
+    # a link that stays inside the repository is fine, and `..` goes up from its target
+    (repo / "applications" / "inner").symlink_to(repo / "applications" / "news-reader", target_is_directory=True)
+    assert verdict("cd applications/inner && python -m pytest -q", repo) is None
+    assert verdict("cd applications/inner && python -m pytest ../../..", repo) is not None
+
+
+def test_the_repository_may_be_reached_through_a_symlink(tree, tmp_path):
+    repo = tree[0]
+    alias = tmp_path / "alias"
+    try:
+        alias.symlink_to(repo, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are not available")
+    assert verdict(f"cd {repo}/applications", alias) is None
+    assert verdict(f"git -C {alias} status", repo) is None
+    assert verdict(f"git -C {alias}/.. status", repo) is not None
+
+
+def test_windows_names_with_trailing_dots_or_spaces_are_refused():
+    ctx = lambda: hook.Context(root=WIN_ROOT, cwd=WIN_ROOT)  # noqa: E731
+    for command in [
+        "cd 'C:/Users/me/repo/.. '",
+        "cd 'C:/Users/me/repo/sub.'",
+        "cd 'C:/Users/me/repo/a. /b'",
+        "cd 'C:/Users/me/repo/. .'",
+    ]:
+        assert hook.check(command, ctx()) is not None, command
+    assert hook.check("cd C:/Users/me/repo/sub", ctx()) is None
+
+
+def test_pytest_node_ids_are_checked_by_their_file_part(tree):
+    repo = tree[0]
+    assert verdict(f"python -m pytest {repo}/applications/news-reader/tests/test_x.py::test_a -q", repo) is None
+    assert verdict("python -m pytest /etc/passwd::x", repo) is not None
+    assert verdict("python -m pytest ../x.py::test", repo) is not None
+
+
+def test_a_path_that_cannot_be_encoded_blocks_instead_of_crashing(tree):
+    repo = tree[0]
+    payload = json.dumps({"tool_name": "Bash", "cwd": str(repo), "tool_input": {"command": 'cd "\ud800"'}})
+    env = {"CLAUDE_PROJECT_DIR": str(repo), "PATH": "/usr/bin:/bin"}
+    result = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True, env=env)
+    assert result.returncode == 2

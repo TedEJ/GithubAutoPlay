@@ -15,10 +15,14 @@ repository root from `CLAUDE_PROJECT_DIR` (default: two folders above this file)
 `cd`, the path arguments of `python`, `node`, `bash`, `sh` and `scripts/check.sh`,
 and the path after `git -C` are allowed when they resolve to a place inside the
 repository, also when written as an absolute path (also a Windows path such as
-`C:\\Users\\me\\repo` or `/c/Users/me/repo`). A path is refused when `..` takes it
-out of the repository, when it is outside the root, when it holds a wildcard,
-`~` or `$`, and when a symlink inside the repository points out of it. A `cd`
-changes the folder that later relative paths in the same command are resolved from.
+`C:\\Users\\me\\repo` or `/c/Users/me/repo`; UNC and `\\\\?\\` forms are not recognised
+and so refused). A path is refused when `..` takes it out of the repository, when it
+is outside the root, when it holds a wildcard, `~` or `$`, when a symlink or junction
+inside the repository points out of it (also when `..` follows the link), and when a
+Windows name ends in a dot or a space. Paths are compared as real paths. A `cd` is
+allowed only as `cd <path> && ...`; it changes the folder that later relative paths in
+the same command are resolved from, and after it commands must be joined with `&&` or
+`|`, because a failed `cd` or a `cd` in a pipeline would not change the folder.
 `python -W <value>` and `python -X <value>` are allowed for a short list of values
 that only change how warnings or the interpreter report (error, ignore, default,
 always, module, once; utf8, dev, faulthandler); `-W` can make a warning an error, which
@@ -87,19 +91,31 @@ def _windows(path):
     return ntpath.normpath(path.replace("/", "\\")).lower()
 
 
+def _bad_windows_name(path):
+    """Windows drops trailing dots and spaces from a name, so `x. ` is `x`; refuse such names."""
+    return any(c not in (".", "..", "") and c != c.rstrip(" .") for c in re.split(r"[\\/]", path))
+
+
 def resolve(path, ctx):
-    """Return the absolute, normalised location of `path` (and a flag for Windows style), or None."""
-    path = path.split("::")[0]  # pytest node ids: file.py::test_name
+    """Return (location, is_windows) for `path`, or None. Windows locations are lower-case and
+    only normalised in text; POSIX locations are real paths (symlinks followed in order, so
+    `link/..` is the parent of the link's target, as in the shell)."""
     if not path or "\x00" in path:
         return None
     win = _windows(path)
-    if win is not None:
-        return win, True
     base_win = _windows(ctx.cwd)
-    if base_win is not None and not path.startswith("/"):
-        return ntpath.normpath(ntpath.join(base_win, path.replace("/", "\\"))).lower(), True
-    full = posixpath.normpath(posixpath.join(ctx.cwd, path.replace("\\", "/")) if not path.startswith("/") else path)
-    return full, False
+    if win is None and base_win is not None and not path.startswith("/"):
+        win = ntpath.normpath(ntpath.join(base_win, path.replace("/", "\\"))).lower()
+    if win is not None:
+        if _bad_windows_name(path):
+            return None
+        if os.name == "nt":  # follows junctions and symlinks
+            win = os.path.realpath(win).lower()
+        return win, True
+    if _windows(ctx.root) is not None:
+        return None
+    joined = path if path.startswith("/") else posixpath.join(ctx.cwd, path)
+    return os.path.realpath(joined), False
 
 
 def inside_repo(path, ctx):
@@ -110,27 +126,22 @@ def inside_repo(path, ctx):
     if found is None:
         return False
     full, win = found
-    root_win = _windows(ctx.root)
     if win:
-        root = root_win if root_win is not None else None
+        root = _windows(ctx.root)
         if root is None:
             return False
+        if os.name == "nt":
+            root = os.path.realpath(root).lower()
         return full == root or full.startswith(root.rstrip("\\") + "\\")
-    if root_win is not None:
-        return False
-    root = posixpath.normpath(ctx.root)
-    if not (full == root or full.startswith(root.rstrip("/") + "/")):
-        return False
-    real_root = os.path.realpath(root)
-    real = os.path.realpath(full)  # follows symlinks that point out of the repository
-    return real == real_root or real.startswith(real_root.rstrip("/") + "/")
+    root = os.path.realpath(ctx.root)
+    return full == root or full.startswith(root.rstrip("/") + "/")
 
 
 def is_script(path, name, ctx):
-    """True when `path` is the repository's own scripts/<name>."""
+    """True when `path` is the repository's own scripts/<name> (symlinks are not followed to elsewhere)."""
     found = resolve(path, ctx)
-    target = resolve(os.path.join(ctx.root, "scripts", name) if _windows(ctx.root) is None else ctx.root + "/scripts/" + name, Context(ctx.root, ctx.root))
-    return found is not None and target is not None and found[0] == target[0] and inside_repo(path, ctx)
+    target = resolve(ctx.root.rstrip("/\\") + "/scripts/" + name, Context(ctx.root, ctx.root))
+    return found is not None and target is not None and found == target and inside_repo(path, ctx)
 
 
 def git_problem(args, ctx):
@@ -201,7 +212,8 @@ def path_problem(cmd, args, ctx, local):
         if local:
             if a.startswith("@"):
                 return f"{cmd} takes paths inside the repository only"
-            if not a.startswith("-") and not inside_repo(a, ctx):
+            target = a.split("::")[0] if cmd in ("python", "python3") else a  # pytest node ids
+            if not a.startswith("-") and not inside_repo(target, ctx):
                 return f"{cmd} takes paths inside the repository only"
     return None
 
@@ -251,23 +263,35 @@ def check(command, ctx=None):
         tokens = list(lexer)
     except ValueError:
         return "cannot parse the command"
-    parts, current = [], []
+    parts, ops, current = [], [], []
     for t in tokens:
         if t in OPERATORS:
             parts.append(current)
+            ops.append(t)
             current = []
         elif re.fullmatch(r"[();&|<>]+", t):
             return f"the operator {t} is not allowed"
         else:
             current.append(t)
     parts.append(current)
-    for words in parts:
+    ops.append(None)
+    cd_seen = False
+    for i, words in enumerate(parts):
+        before = ops[i - 1] if i else None
+        after = ops[i]
+        # A `cd` is tracked only where the shell certainly changes folder for what follows:
+        # `cd x && ...`. In a pipeline it runs in a subshell, and after `||` it may not run.
+        if words and words[0] == "cd" and (before not in (None, "&&", ";") or after not in (None, "&&")):
+            return "cd must be written as: cd <path> && <command>"
+        if cd_seen and before in (";", "||"):
+            return "after cd, join commands with && (a failed cd would leave the folder unchanged)"
         problem = segment_problem(words, ctx)
         if problem:
             return problem
         if words[0] == "cd":
             found = resolve(words[1], ctx)
             ctx.cwd = found[0]  # later relative paths start from the new folder
+            cd_seen = True
     return None
 
 
@@ -284,7 +308,10 @@ def main():
     if data.get("tool_name", "Bash") != "Bash":
         return 0
     cwd = data.get("cwd")
-    problem = check(command, Context(cwd=cwd if isinstance(cwd, str) and cwd else None))
+    try:
+        problem = check(command, Context(cwd=cwd if isinstance(cwd, str) and cwd else None))
+    except (ValueError, OSError):  # for example a lone surrogate in a path
+        problem = "the command could not be checked"
     if problem:
         print(f"Blocked: the Reviewer is read-only ({problem}).", file=sys.stderr)
         return 2
