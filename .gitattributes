@@ -1,0 +1,4 @@
+# Keep hook scripts and shell scripts with LF line endings, also on Windows.
+*.sh text eol=lf
+.claude/hooks/* text eol=lf
+.claude/agents/* text eol=lf

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -156,3 +157,98 @@ def test_exit_codes():
 )
 def test_unreadable_calls_are_blocked(payload):
     assert run_hook(payload).returncode == 2
+
+
+WRAPPER = HOOK.with_suffix(".sh")
+SH = shutil.which("sh")
+needs_sh = pytest.mark.skipif(
+    SH is None or sys.platform == "win32", reason="needs a POSIX sh and symlinks"
+)
+
+
+def run_wrapper(tmp_path, command, interpreters):
+    """Run the wrapper with a PATH that holds only `cat` and the given interpreters."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "cat").symlink_to(shutil.which("cat"))
+    for name, target in interpreters.items():
+        if target is None:
+            (bin_dir / name).write_text("#!/bin/sh\nexit 9\n")
+            (bin_dir / name).chmod(0o755)
+        else:
+            (bin_dir / name).symlink_to(target)
+    return subprocess.run(
+        [SH, str(WRAPPER)],
+        input=tool_call(command),
+        capture_output=True,
+        text=True,
+        env={"PATH": str(bin_dir)},
+    )
+
+
+@needs_sh
+def test_wrapper_passes_through_allow_and_block(tmp_path):
+    py = {"python3": sys.executable}
+    assert run_wrapper(tmp_path / "a", "git status", py).returncode == 0
+    assert run_wrapper(tmp_path / "b", "git push", py).returncode == 2
+
+
+@needs_sh
+def test_wrapper_blocks_when_no_python_exists(tmp_path):
+    result = run_wrapper(tmp_path, "git status", {})
+    assert result.returncode == 2
+    assert "could not run" in result.stderr
+
+
+@needs_sh
+def test_wrapper_blocks_when_python_is_broken(tmp_path):
+    result = run_wrapper(tmp_path, "git status", {"python3": None, "python": None})
+    assert result.returncode == 2
+
+
+@needs_sh
+def test_wrapper_falls_back_to_the_next_python(tmp_path):
+    result = run_wrapper(tmp_path, "git status", {"python3": None, "python": sys.executable})
+    assert result.returncode == 0
+
+
+@needs_sh
+def test_wrapper_does_not_fall_through_after_a_block(tmp_path):
+    # The first interpreter says "block" (2); a later one must not be asked.
+    first = tmp_path / "first.sh"
+    first.write_text("#!/bin/sh\nexit 2\n")
+    first.chmod(0o755)
+    result = run_wrapper(tmp_path, "git status", {"python3": str(first), "python": sys.executable})
+    assert result.returncode == 2
+
+
+@needs_sh
+def test_wrapper_blocks_empty_input(tmp_path):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "cat").symlink_to(shutil.which("cat"))
+    (bin_dir / "python3").symlink_to(sys.executable)
+    result = subprocess.run(
+        [SH, str(WRAPPER)], input="", capture_output=True, text=True, env={"PATH": str(bin_dir)}
+    )
+    assert result.returncode == 2
+
+
+@needs_sh
+def test_wrapper_works_from_any_directory_and_with_a_bare_name(tmp_path):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "cat").symlink_to(shutil.which("cat"))
+    (bin_dir / "python3").symlink_to(sys.executable)
+    for args, cwd in (([SH, str(WRAPPER)], tmp_path), ([SH, WRAPPER.name], WRAPPER.parent)):
+        result = subprocess.run(
+            args, input=tool_call("git status"), capture_output=True, text=True,
+            env={"PATH": str(bin_dir)}, cwd=cwd,
+        )
+        assert result.returncode == 0, args
+
+
+def test_reviewer_agent_uses_the_wrapper():
+    text = (HOOK.parents[1] / "agents" / "reviewer.md").read_text(encoding="utf-8")
+    assert "reviewer_readonly.sh" in text
+    assert "python3 " not in text.split("command:")[1].splitlines()[0]

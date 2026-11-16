@@ -9,7 +9,7 @@ hooks:
     - matcher: Bash
       hooks:
         - type: command
-          command: 'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/reviewer_readonly.py"'
+          command: 'sh "$CLAUDE_PROJECT_DIR/.claude/hooks/reviewer_readonly.sh"'
 ---
 
 You are the Reviewer worker in the GithubAutoPlay repository. The manager gives you a branch and the issue it should satisfy. The role is defined in section 10 of `WORKFLOW.md`; this file is the working copy of it for you.
