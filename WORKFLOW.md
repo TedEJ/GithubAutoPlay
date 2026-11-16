@@ -135,6 +135,24 @@ Designer/Developer report: **Summary**; **Files changed**; **Checks run** (the c
 
 Reviewer report: **Verdict** (ready, or needs changes); **Must fix** (each with file and reason); **Should consider**; **Checked** (what was read and which commands were run); **Not checked**.
 
+### Two ways of working
+The same roles can be run in two ways. Both follow every rule in this file; they differ in **where** the manager and the workers run and therefore in **what enforces the limits**. Pick the way per issue, not per project.
+
+| | Way 1: in the app (cloud task) | Way 2: workers in a local terminal |
+|---|---|---|
+| Where | The manager (Claude) works in a task in the Claude app, in its own copy of the repository, and starts general-purpose sub-agents as Designer/Developer and Reviewer with the role file pasted into the briefing. | `claude` is started inside a clone of the repository on the owner's computer. `/agents` lists `designer-developer` and `reviewer`, and the manager hands them work. |
+| What limits the workers | The briefing only. The hooks in `.claude/hooks/` are **not** loaded for sub-agents in app tasks, so "must not push" is an instruction, not a block. | The agent definitions in `.claude/agents/` and their hooks: the Reviewer cannot change anything, and the Designer/Developer cannot push, call `gh` or the network, or read credential files. |
+| GitHub steps (push, pull request, closing the issue) | The manager can do them itself when the owner pastes a token for the session (section 9). | The workers cannot. The owner pushes and opens the pull request with the description from `scripts/pr_body.py`, and the manager in the app writes that description, checks the pull request and closes the issue. |
+| Owner effort | Low: one conversation, no copy and paste between windows. | Higher: the owner pastes briefings and reports between the terminal and the app. |
+
+**Choose way 1 when** the change is small and clear, is documentation, process, hook or configuration work that the manager can verify itself, or when the owner wants the least hand work. The manager must then keep to the worker limits by instruction and say in the pull request that the hooks did not apply.
+
+**Choose way 2 when** a worker writes real code (new features, scripts, tests) and must be unable to touch GitHub or the network, when the Reviewer must be provably read-only, or when the work is large enough that the guarantees are worth the copy and paste.
+
+**The usual mix:** the workers run in the terminal (way 2), and the manager in the app does what only works there: the briefings, the pull request description, creating the pull request, checking `checks` and closing the issue. Changes to the hooks themselves are best done with way 1, because a hook under test should not be what limits the worker changing it.
+
+**Starting out in a fresh clone:** run `git pull` so the agent files are current, start `claude` in the repository root, check that `/agents` lists both agents, and make sure the files keep LF line endings (`.gitattributes` does this; see "Windows" below). If `/agents` does not list them, use way 1 and say so in the pull request.
+
 ### How the agents are set up
 - **Definitions:** the two worker roles are defined in `.claude/agents/designer-developer.md` and `.claude/agents/reviewer.md`. Each file holds the role's instructions, its allowed tools and its model, and is the single source for them. Change a role in a pull request, in that file first.
 - **Reviewer is read-only by tools and by a hook:** it gets only `Read`, `Grep`, `Glob` and `Bash`. A hook (`.claude/hooks/reviewer_readonly.sh`, which runs `reviewer_readonly.py`) lets `Bash` run only reading commands and the project's tests, and blocks everything else. It allows `cd`, the paths given to the test runners and `scripts/check.sh`, and `git -C <path>` when the path is inside the repository (relative, absolute or a Windows path; a path that leaves the repository through `..`, a wildcard or a symlink is blocked), and `python -W` and `python -X` with a short list of safe values. The hook fails closed: when no working Python is found, the command is blocked. It has tests in `scripts/tests/test_reviewer_hook.py`. It is a process guard, not a security boundary; its known limits are in the docstring of `reviewer_readonly.py`.
