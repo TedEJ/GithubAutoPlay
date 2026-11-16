@@ -6,7 +6,7 @@ exit code 2 blocks it and sends the message on stderr to the agent.
 
 This is a denylist, because the agent needs normal git, tests and file editing.
 It blocks:
-- `git push` in any form (also with global options such as `-C` or `--git-dir`
+- `git push` in all common forms (also with global options such as `-C` or `--git-dir`
   before it), `git send-pack`, `git http-push`, `git credential*`, every `git -c`
   and `git --config-env`, `git remote` other than listing, and `git config` other
   than reading;
@@ -19,6 +19,12 @@ It blocks:
   and `printenv`/`env` dumps. The same names are refused in the paths of `Read`,
   `Grep` and `Glob`.
 
+`git fetch`, `git pull` and package installs (`pip install`, `npm install`) are
+allowed on purpose: they read, and the agent may need them. `git config` is
+allowed only for reading one name (`git config user.name`) or with `--get` or
+`--list`, and never for names that contain `credential`; `git remote` only bare,
+with `-v` or `get-url`.
+
 The command is split on `&&`, `||`, `;`, `|`, `&`, newlines, parentheses,
 braces, backticks and `$(`, so a blocked command inside a chain or a command
 substitution is found. Wrappers (`env`, `sudo`, `time`, `nohup`, `timeout`,
@@ -29,12 +35,16 @@ blocked.
 Known limits: this is a process guard, not a security boundary. A denylist
 cannot stop every way to reach the network or GitHub.
 - A Python or Node script (or the project's tests) can open a connection, and
-  the tests run code from the branch.
+  the tests run code from the branch. So can a shell script that the agent
+  writes and then runs; `bash` or `sh` without a script or `-c` text is blocked,
+  but the content of a script file is not read.
 - A git alias set outside the repository (in the user's own configuration) can
   hide `push`; `git config` writes and `git -c` are blocked, but not an alias
   that already exists.
 - Obfuscation that builds a command word at run time (variables, `base64`) is
-  refused only where `$` shows up in a command word position.
+  refused only where `$` shows up in a command word or before a git subcommand.
+- Network tools that are not on the list (for example `socat` variants or a
+  program the agent builds) are not blocked.
 - Credentials that are saved in the operating system are used by git without
   the agent reading them, so `git push` must stay blocked.
 """
@@ -47,7 +57,8 @@ import sys
 NETWORK_COMMANDS = {
     "gh", "curl", "wget", "invoke-webrequest", "iwr", "invoke-restmethod", "irm",
     "ssh", "scp", "sftp", "ftp", "rsync", "nc", "ncat", "netcat", "telnet",
-    "certutil", "bitsadmin", "start-bitstransfer",
+    "certutil", "bitsadmin", "start-bitstransfer", "busybox", "socat", "openssl",
+    "nslookup", "dig", "ping", "lynx", "aria2c", "tftp", "xdg-open",
 }
 UNCHECKABLE_SHELLS = {"powershell", "pwsh", "cmd"}
 POSIX_SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
@@ -58,11 +69,13 @@ WRAPPERS = {
 }
 WRAPPER_VALUE_OPTIONS = {"-u", "-n", "-s", "-t", "-d", "-i", "-e", "-I", "-P", "-a", "-o", "-E"}
 GIT_ALWAYS_BLOCKED = {"push", "send-pack", "http-push", "remote-http", "remote-https"}
-GIT_GLOBAL_WITH_VALUE = {"-C", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--exec-path", "--attr-source"}
+GIT_GLOBAL_WITH_VALUE = {"-C", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--attr-source"}
+GIT_CONFIG_WRITE_OPTIONS = {"--add", "--replace-all", "--unset", "--unset-all", "--edit", "-e", "--rename-section", "--remove-section"}
 GIT_CONFIG_READ = {"--get", "--get-all", "--get-regexp", "--list", "-l", "--show-origin", "--show-scope", "--name-only", "-z", "--null", "--local", "--global", "--system", "--worktree"}
+GIT_RUNS_COMMANDS = {("submodule", "foreach"), ("bisect", "run")}
 SECRET_PATTERN = re.compile(
     r"(\.git-credentials|(^|[\\/\s=:'\"])_?\.?netrc\b|\.ssh\b|\bid_(rsa|dsa|ecdsa|ed25519)\b|"
-    r"(^|[\\/\s=:'\"])\.env(\.\w+)?(\s|$|['\"/\\])|\.config[\\/]gh\b|[\\/]gh[\\/]hosts\.yml|hosts\.yml|"
+    r"(^|[\\/\s=:'\"])\.env(?!\.(example|sample|template)\b)(\.\w+)?(\s|$|['\"/\\])|\.config[\\/]gh\b|[\\/]gh[\\/]hosts\.yml|/dev/(tcp|udp)/|"
     r"\.aws\b|\.npmrc\b|\.pypirc\b|\.docker[\\/]config|credentials\.json|\.gnupg\b|\.kube\b|"
     r"\.claude[\\/]projects|\.claude\.json|"
     r"\b(github_pat_|ghp_|gho_|ghu_|ghs_|ghr_)|"
@@ -81,32 +94,50 @@ def command_name(word):
     return name[:-4] if name.endswith(".exe") else name
 
 
-def git_problem(args):
-    i = 0
+def git_problem(args, i=0):
+    """Check git's arguments. An option such as `--namespace` may or may not take the
+    next word as its value, so both readings are checked."""
     while i < len(args) and args[i].startswith("-") and args[i] != "--":
         a = args[i]
+        if "$" in a or "`" in a:
+            return "a variable in git's options cannot be checked"
         if a == "-c" or a.startswith("-c") and len(a) > 2 and a[2] != "-" and not a.startswith("-C"):
             return "git -c can set aliases and credentials"
         if a.startswith("--config-env"):
             return "git --config-env can set aliases and credentials"
-        i += 2 if a in GIT_GLOBAL_WITH_VALUE else 1
+        if a in GIT_GLOBAL_WITH_VALUE:
+            return git_problem(args, i + 1) or git_problem(args, i + 2)
+        i += 1
     if i >= len(args):
         return None
     sub, rest = args[i].lower(), args[i + 1:]
+    if "$" in sub or "`" in sub:
+        return "a variable in place of the git subcommand cannot be checked"
     if sub in GIT_ALWAYS_BLOCKED:
         return f"git {sub} is not allowed"
     if sub.startswith("credential"):
         return "git credential commands are not allowed"
+    for key, word in GIT_RUNS_COMMANDS:
+        if sub == key and word in rest:
+            inner = " ".join(rest[rest.index(word) + 1:])
+            return text_problem(inner, 1) or f"git {key} {word} runs other commands and is not allowed"
+    if sub == "rebase":
+        for idx, a in enumerate(rest):
+            value = rest[idx + 1] if a in ("-x", "--exec") and idx + 1 < len(rest) else a.partition("=")[2] if a.startswith("--exec=") else None
+            if value is not None:
+                return text_problem(value, 1) or "git rebase --exec runs other commands and is not allowed"
     if sub == "remote":
-        if any(a not in ("-v", "--verbose") for a in rest):
-            return "git remote may only list remotes"
+        if any(a not in ("-v", "--verbose", "get-url") and not (rest[:1] == ["get-url"]) for a in rest):
+            return "git remote may only list remotes or show get-url"
     if sub == "config":
         options = [a for a in rest if a.startswith("-")]
         names = [a for a in rest if not a.startswith("-")]
-        if not options or any(o not in GIT_CONFIG_READ for o in options):
-            return "git config may only read (--get, --list)"
-        if any(re.search(r"credential|remote|url|alias|helper", n, re.I) for n in names):
-            return "git config on credentials, remotes, urls or aliases is not allowed"
+        if any(re.search(r"credential", n, re.I) for n in names):
+            return "git config on credentials is not allowed"
+        if any(o in GIT_CONFIG_WRITE_OPTIONS or o not in GIT_CONFIG_READ for o in options):
+            return "git config may only read (one name, --get or --list)"
+        if not any(o in GIT_CONFIG_READ and o not in ("--local", "--global", "--system", "--worktree") for o in options) and len(names) > 1:
+            return "git config may only read (one name, --get or --list)"
     return None
 
 
@@ -114,23 +145,19 @@ def words_problem(words, depth):
     if depth > MAX_DEPTH:
         return "the command is nested too deeply to check"
     words = list(words)
-    while words:
-        w = words[0]
-        if ASSIGNMENT.match(w):
-            words.pop(0)
-        elif command_name(w) in WRAPPERS:
-            wrapper = command_name(w)
-            words.pop(0)
-            while words and (words[0].startswith("-") or ASSIGNMENT.match(words[0])):
-                opt = words.pop(0)
-                if opt in WRAPPER_VALUE_OPTIONS and words:
-                    words.pop(0)
-            if wrapper == "timeout" and words and re.fullmatch(r"[\d.]+[smhd]?", words[0]):
-                words.pop(0)
-            if wrapper == "env" and not words:
-                return "printing the environment can show tokens"
-        else:
-            break
+    while words and ASSIGNMENT.match(words[0]):
+        words.pop(0)
+    if words and command_name(words[0]) in WRAPPERS:
+        wrapper = command_name(words[0])
+        rest = words[1:]
+        if wrapper == "env" and all(w.startswith("-") or ASSIGNMENT.match(w) for w in rest):
+            return "printing the environment can show tokens"
+        # Wrapper options may take a value, so the real command can start at any of the first words.
+        for j in range(min(len(rest), 10) + 1):
+            problem = words_problem(rest[j:], depth + 1)
+            if problem:
+                return problem
+        return None
     if not words:
         return None
     first = words[0]
@@ -148,6 +175,8 @@ def words_problem(words, depth):
     if cmd == "eval":
         return text_problem(" ".join(args), depth + 1)
     if cmd in POSIX_SHELLS:
+        if not args or args == ["-s"]:
+            return f"{cmd} without a script or -c text reads its commands from elsewhere"
         for idx, a in enumerate(args):
             if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", a) and idx + 1 < len(args):
                 return text_problem(args[idx + 1], depth + 1)
@@ -193,12 +222,12 @@ def split_commands(command):
             buf.append(command[i:i + 2])
             i += 1
         elif command.startswith("$(", i):
-            parts.append("".join(buf))
+            parts.append("".join(buf) + " $SUBST")
             buf = []
             i += 2
             continue
         elif ch in OPERATOR_CHARS:
-            parts.append("".join(buf))
+            parts.append("".join(buf) + (" $SUBST" if ch == "`" else ""))
             buf = []
         else:
             buf.append(ch)
@@ -209,6 +238,7 @@ def split_commands(command):
 
 def text_problem(command, depth=0):
     """Return None when the command text is allowed, otherwise the reason."""
+    command = command.replace("\\\n", "").replace("\\\r\n", "")
     command = HEREDOC.sub(" ", command)
     for part in split_commands(command):
         part = part.strip()
