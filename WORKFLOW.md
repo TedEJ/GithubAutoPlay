@@ -107,6 +107,14 @@ The manager may start more than one worker in a role when the work needs it. A n
 
 GitHub does not let the author of a pull request approve it, and all work is done with the owner's account, so the Reviewer reports to the manager instead of approving on GitHub. The verdict check in `checks` is therefore a process rule: it reads what the description says, not who wrote it. A technical guard comes later (level 2): the Reviewer gets its own identity (a separate account or a GitHub App) and the ruleset on `main` requires an approving review from it.
 
+### Status lines
+When the manager starts or finishes a worker, it posts one short line in the conversation, in the owner's language, so the owner can follow the work and ask to see a worker's report. The line names the issue number, or the task if there is no issue. Workers do not post status lines; the manager posts them.
+
+- Designer/Developer started: "Påbörjar arbete på #N"
+- Designer/Developer done: "Färdig med arbete på #N"
+- Reviewer started: "Review påbörjad på #N"
+- Reviewer done: "Review färdig på #N: OK" or "Review färdig på #N: Must fix" (with the round number when it is a second or third round)
+
 ### Briefing: what every worker gets
 - The full text of the issue, or the task if there is no issue yet.
 - The folder of the repository (or git worktree) it works in and the branch name to use.
