@@ -8,7 +8,7 @@
 - [ ] Scope: the diff contains only what the issue asks for
 - [ ] Acceptance criteria: every criterion in the issue is met
 - [ ] Documentation: README and WORKFLOW.md are updated if behaviour or process changed
-- [ ] Tests: the required check `checks` is green (and new tests were added for new code)
+- [ ] Tests: the local checks pass (`scripts/check.sh`) and new tests were added for new code
 
 ## Reviewer
 <!-- The Reviewer worker's verdict on the line below: "Verdict: OK" or "Verdict: Must fix". Documentation-only pull requests use "Verdict: Not needed (documentation only)". The required check fails for any other verdict. -->

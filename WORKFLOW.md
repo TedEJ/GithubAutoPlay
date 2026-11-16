@@ -31,11 +31,11 @@ All gates must pass. If one fails, fix it on the same branch and run the gates a
 1. **Scope check:** the diff contains only what the issue asks for.
 2. **Acceptance criteria:** every acceptance criterion in the issue is met. Re-read the issue and tick them off one by one.
 3. **Documentation:** README and this file are updated if behaviour or process changed.
-4. **Tests:** run the project's tests before creating the pull request. For Python projects under `applications/`, run `python -m pytest` from the project folder (for example `applications/Countdown`), after `python -m pip install -r requirements.txt`. Add new tests for new code. The CI check `checks` runs the same tests and must be green on the pull request (see section 5). `scripts/check.sh` runs these tests and the other checks locally in one step (see section 8).
+4. **Tests:** run the project's tests before creating the pull request. For Python projects under `applications/`, run `python -m pytest` from the project folder (for example `applications/Countdown`), after `python -m pip install -r requirements.txt`. Add new tests for new code. The pull request gate states the local result; the CI check `checks` runs the same tests and must also be green before the merge (see section 5). `scripts/check.sh` runs these tests and the other checks locally in one step (see section 8).
 5. **Extra checks:** *(Placeholder: add further verification steps here, for example linting, a build, or a manual check.)*
 
 ## 5. Pull request and merge
-1. Push the branch and create a pull request that references the issue and carries the same labels as the issue. The pull request template lists the verification gates and asks whether the workload level was right, so fill it in.
+1. Push the branch and create a pull request that references the issue and carries the same labels as the issue. The pull request template lists the verification gates and asks whether the workload level was right, so fill it in. Create it with the description written by `scripts/pr_body.py`, not the empty template, because the Reviewer verdict in the description is needed for `checks` to pass.
 2. Direct pushes to `main` are blocked. Every change goes through a pull request.
 3. The required status check `checks` (GitHub Actions, `.github/workflows/ci.yml`) must pass before the pull request can be merged. This is enforced by the repository ruleset on `main`, so a failing or missing check blocks the merge.
 4. If `checks` fails, read the failure in the pull request's Checks tab, fix it on the same branch, push again and wait for the check to run again. Never merge around a failing check, and never change the required check or ruleset to get a pull request through.
