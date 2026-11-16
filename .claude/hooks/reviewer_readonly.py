@@ -37,6 +37,10 @@ Known limits: this is a process guard, not a security boundary.
 - Symlinks inside the repository can point outside it. Git configuration (diff
   drivers, `--show-signature`) can run configured programs. The `/proc` block
   matches the literal text only. `tail -f` can hang.
+- Shell state is not modelled: `CDPATH` can change where a relative `cd` goes, and
+  the session may keep a folder from an earlier `cd`, which makes a bare
+  `scripts/check.sh` resolve inside that folder and be blocked (use
+  `cd <root> && scripts/check.sh`).
 - Running the tests can write caches such as `.pytest_cache`, and `git status`
   can refresh `.git/index`.
 """
