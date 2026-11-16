@@ -14,7 +14,9 @@
 
 set -u
 
-root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
+script_dir="${BASH_SOURCE[0]}"
+case "$script_dir" in */*) script_dir="${script_dir%/*}" ;; *) script_dir=. ;; esac
+root="$(cd "$script_dir/.." && pwd)"
 project="${1:-applications/Countdown}"
 # A project folder is relative to the repository root, unless it is absolute.
 case "$project" in
@@ -42,7 +44,10 @@ else
   echo "check.sh: Python was not found (tried python3, python, py). Install Python 3.10 or newer." >&2
   exit 2
 fi
-[ -z "${CHECK_SH_SELECT_ONLY:-}" ] || exit 0
+if [ -n "${CHECK_SH_SELECT_ONLY:-}" ]; then
+  echo "check.sh: root: $root"
+  exit 0
+fi
 
 if [ ! -d "$project_dir" ]; then
   echo "check.sh: project folder not found: $project" >&2

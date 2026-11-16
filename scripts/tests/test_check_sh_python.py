@@ -32,7 +32,7 @@ def _fake(bindir, name, kind):
     path.chmod(0o755)
 
 
-def _run(tmp_path, **fakes):
+def _run(tmp_path, script=None, cwd=None, **fakes):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     for name, kind in fakes.items():
@@ -41,8 +41,8 @@ def _run(tmp_path, **fakes):
     # packages; only PATH is replaced.
     env = dict(os.environ, PATH=bindir.as_posix(), CHECK_SH_SELECT_ONLY="1")
     return subprocess.run(
-        [BASH, CHECK_SH.as_posix()],
-        env=env, capture_output=True, text=True, timeout=60,
+        [BASH, script or CHECK_SH.as_posix()],
+        env=env, cwd=cwd, capture_output=True, text=True, timeout=60,
     )
 
 
@@ -79,3 +79,12 @@ def test_no_usable_python_exits_2(tmp_path):
 def test_no_python_at_all_exits_2(tmp_path):
     r = _run(tmp_path)
     assert r.returncode == 2
+
+
+def test_runs_by_bare_name_from_scripts_folder(tmp_path):
+    r = _run(tmp_path, script="check.sh", cwd=CHECK_SH.parent, python3="good")
+    assert r.returncode == 0, r.stderr
+    root_line = [l for l in r.stdout.splitlines() if "root: " in l][0]
+    printed = Path(root_line.split("root: ", 1)[1].strip())
+    # Git Bash prints /c/... on Windows; compare by the final folder names.
+    assert printed.name == CHECK_SH.parents[1].name
