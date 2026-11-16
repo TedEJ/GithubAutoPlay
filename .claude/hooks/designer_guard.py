@@ -17,7 +17,7 @@ It blocks:
 - text that names a credential file or secret (`.git-credentials`, `.netrc`,
   `.ssh`, `.env`, `.config/gh`, `.aws`, ...), token variables and token prefixes,
   and `printenv`/`env` dumps. The same names are refused in the paths of `Read`,
-  `Grep` and `Glob`.
+  `Grep` and `Glob`, and `Write` and `Edit` may not write inside `.git`.
 
 `git fetch`, `git pull` and package installs (`pip install`, `npm install`) are
 allowed on purpose: they read, and the agent may need them. `git config` is
@@ -43,8 +43,10 @@ cannot stop every way to reach the network or GitHub.
   that already exists.
 - Obfuscation that builds a command word at run time (variables, `base64`) is
   refused only where `$` shows up in a command word or before a git subcommand.
-- Network tools that are not on the list (for example `socat` variants or a
-  program the agent builds) are not blocked.
+- Network tools that are not on the list (for example a program the agent
+  builds or installs) are not blocked.
+- Text that is stripped before checking, such as the body of a quoted heredoc,
+  is never read; the rest of its first line (for example `| sh`) is.
 - Credentials that are saved in the operating system are used by git without
   the agent reading them, so `git push` must stay blocked.
 """
@@ -65,8 +67,10 @@ POSIX_SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 WRAPPERS = {
     "env", "sudo", "doas", "command", "builtin", "exec", "time", "nohup", "nice",
     "ionice", "stdbuf", "setsid", "xargs", "watch", "timeout", "then", "do",
-    "else", "elif", "if", "while", "until", "!", "parallel", "script",
+    "else", "elif", "if", "while", "until", "!", "parallel", "script", "su",
+    "runuser", "flock", "strace", "ltrace", "chroot", "unshare", "taskset", "chrt",
 }
+REDIRECT = re.compile(r"^\d*(>>?|<)")
 WRAPPER_VALUE_OPTIONS = {"-u", "-n", "-s", "-t", "-d", "-i", "-e", "-I", "-P", "-a", "-o", "-E"}
 GIT_ALWAYS_BLOCKED = {"push", "send-pack", "http-push", "remote-http", "remote-https"}
 GIT_GLOBAL_WITH_VALUE = {"-C", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--attr-source"}
@@ -77,14 +81,14 @@ SECRET_PATTERN = re.compile(
     r"(\.git-credentials|(^|[\\/\s=:'\"])_?\.?netrc\b|\.ssh\b|\bid_(rsa|dsa|ecdsa|ed25519)\b|"
     r"(^|[\\/\s=:'\"])\.env(?!\.(example|sample|template)\b)(\.\w+)?(\s|$|['\"/\\])|\.config[\\/]gh\b|[\\/]gh[\\/]hosts\.yml|/dev/(tcp|udp)/|"
     r"\.aws\b|\.npmrc\b|\.pypirc\b|\.docker[\\/]config|credentials\.json|\.gnupg\b|\.kube\b|"
-    r"\.claude[\\/]projects|\.claude\.json|"
+    r"\.claude[\\/]projects|\.claude\.json|\bGIT_(CONFIG\w*|ASKPASS|SSH\w*|EXEC_PATH)\b|"
     r"\b(github_pat_|ghp_|gho_|ghu_|ghs_|ghr_)|"
     r"\b(GITHUB_TOKEN|GH_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN|ANTHROPIC_API_KEY)\b|"
     r"\bgit[ -]credential\b)",
     re.IGNORECASE,
 )
 OPERATOR_CHARS = set(";|&\n\r(){}`")
-HEREDOC = re.compile(r"<<-?\s*(['\"])(\w+)\1[^\n]*\n.*?\n[ \t]*\2[ \t]*(?=\n|$)", re.DOTALL)
+HEREDOC = re.compile(r"<<-?\s*(['\"])(\w+)\1([^\n]*)\n.*?\n[ \t]*\2[ \t]*(?=\n|$)", re.DOTALL)
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 MAX_DEPTH = 6
 
@@ -110,7 +114,7 @@ def git_problem(args, i=0):
         i += 1
     if i >= len(args):
         return None
-    sub, rest = args[i].lower(), args[i + 1:]
+    sub, rest = re.split(r"[<>]", args[i])[0].lower(), args[i + 1:]
     if "$" in sub or "`" in sub:
         return "a variable in place of the git subcommand cannot be checked"
     if sub in GIT_ALWAYS_BLOCKED:
@@ -141,12 +145,20 @@ def git_problem(args, i=0):
     return None
 
 
-def words_problem(words, depth):
+def words_problem(words, depth, strict=True):
+    """`strict` is False when the first word is only a guess at where a command starts."""
     if depth > MAX_DEPTH:
         return "the command is nested too deeply to check"
     words = list(words)
-    while words and ASSIGNMENT.match(words[0]):
-        words.pop(0)
+    had_assignment = False
+    while words and (ASSIGNMENT.match(words[0]) or REDIRECT.match(words[0])):
+        w = words.pop(0)
+        if ASSIGNMENT.match(w):
+            had_assignment = True
+        elif re.fullmatch(r"\d*(>>?|<)&?", w) and words:
+            words.pop(0)  # the target of a redirection written as `> file`
+    if words and words[0] == "$SUBST" and had_assignment:
+        return None  # `x=$(...)` only assigns
     if words and command_name(words[0]) in WRAPPERS:
         wrapper = command_name(words[0])
         rest = words[1:]
@@ -154,15 +166,20 @@ def words_problem(words, depth):
             return "printing the environment can show tokens"
         # Wrapper options may take a value, so the real command can start at any of the first words.
         for j in range(min(len(rest), 10) + 1):
-            problem = words_problem(rest[j:], depth + 1)
+            problem = words_problem(rest[j:], depth + 1, strict=(j == 0))
             if problem:
                 return problem
+            if j < len(rest) and re.search(r"\s", rest[j]) and depth < MAX_DEPTH:
+                # `su -c 'git push'`, `env -S 'git push'`: an option value that holds a command.
+                problem = text_problem(rest[j], depth + 1)
+                if problem:
+                    return problem
         return None
     if not words:
         return None
-    first = words[0]
+    first = re.split(r"[<>]", words[0])[0] or words[0]
     if "$" in first or "*" in first or "?" in first:
-        return "a command word with a variable or wildcard cannot be checked"
+        return "a command word with a variable or wildcard cannot be checked" if strict else None
     cmd, args = command_name(first), words[1:]
     if cmd in NETWORK_COMMANDS:
         return f"{cmd} is not allowed"
@@ -175,11 +192,14 @@ def words_problem(words, depth):
     if cmd == "eval":
         return text_problem(" ".join(args), depth + 1)
     if cmd in POSIX_SHELLS:
-        if not args or args == ["-s"]:
-            return f"{cmd} without a script or -c text reads its commands from elsewhere"
         for idx, a in enumerate(args):
-            if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", a) and idx + 1 < len(args):
-                return text_problem(args[idx + 1], depth + 1)
+            if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", a):
+                text = args[idx + 1] if idx + 1 < len(args) else ""
+                if len(text.strip("'\"")) == 0:
+                    return f"{cmd} -c text cannot be checked"
+                return text_problem(text, depth + 1)
+        if all(a.startswith("-") for a in args):
+            return f"{cmd} without a script or -c text reads its commands from elsewhere"
         return None
     if cmd == "find":
         for idx, a in enumerate(args):
@@ -226,6 +246,8 @@ def split_commands(command):
             buf = []
             i += 2
             continue
+        elif ch == "&" and (command[i - 1:i] in ("<", ">") or command[i + 1:i + 2] == ">"):
+            buf.append(ch)  # part of a redirection such as 2>&1 or &>file
         elif ch in OPERATOR_CHARS:
             parts.append("".join(buf) + (" $SUBST" if ch == "`" else ""))
             buf = []
@@ -239,7 +261,7 @@ def split_commands(command):
 def text_problem(command, depth=0):
     """Return None when the command text is allowed, otherwise the reason."""
     command = command.replace("\\\n", "").replace("\\\r\n", "")
-    command = HEREDOC.sub(" ", command)
+    command = HEREDOC.sub(lambda m: " " + m.group(3), command)  # keep the rest of the line, e.g. `| sh`
     for part in split_commands(command):
         part = part.strip()
         if not part:
@@ -260,7 +282,11 @@ def check_command(command):
     return text_problem(command)
 
 
-def check_paths(tool_input):
+def check_paths(tool_input, tool=""):
+    if tool in ("Write", "Edit", "NotebookEdit"):
+        target = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+        if isinstance(target, str) and re.search(r"(^|[\\/])\.git([\\/]|$)", target):
+            return "writing inside .git could add a remote, a credential helper or a hook"
     for key in ("file_path", "path", "pattern", "glob", "notebook_path"):
         value = tool_input.get(key)
         if isinstance(value, str) and SECRET_PATTERN.search(value):
@@ -281,7 +307,7 @@ def main():
     except (ValueError, AttributeError):
         print("Designer/Developer guard: could not read the tool call.", file=sys.stderr)
         return 2
-    problem = check_command(command) if tool == "Bash" else check_paths(tool_input)
+    problem = check_command(command) if tool == "Bash" else check_paths(tool_input, tool)
     if problem:
         print(
             f"Blocked: the Designer/Developer must not push, use GitHub or the network ({problem}). "

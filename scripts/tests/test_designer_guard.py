@@ -48,6 +48,15 @@ ALLOWED = [
     "echo 'a;b' > notes.txt",
     "ls 2>&1",
     "mkdir -p x && touch x/y.py",
+    "for f in a b; do echo $f; done",
+    "while read l; do echo $l; done < list.txt",
+    "SHA=$(git rev-parse HEAD)",
+    "SHA=$(git rev-parse HEAD) && git log $SHA",
+    "timeout 5 python3 $F",
+    "time python3 -m pytest -q",
+    "git status > /dev/null",
+    "2>&1 git status",
+    "git log --oneline | head -3",
     "",
 ]
 BLOCKED = [
@@ -195,6 +204,26 @@ BLOCKED = [
     "git config --get credential.helper",
     "git config user.name x",
     "git remote show origin",
+    # found in review round 2
+    "cat <<'EOF' | sh\ngit push\nEOF",
+    "cat <<'EOF' | bash\ngit push\nEOF",
+    "cat <<'EOF' | sh -s\ngit push\nEOF",
+    "bash - <<'EOF'\ngit push\nEOF",
+    "bash -i",
+    "> /dev/null git push",
+    "2>&1 git push",
+    "</dev/null git push",
+    "git push>/dev/null",
+    "git>/dev/null push",
+    "su -c 'git push'",
+    "flock f git push",
+    "flock f -c 'git push'",
+    "strace git push",
+    "script -c 'git push' /dev/null",
+    "env -S 'git push'",
+    "sh -c \"$(echo git push)\"",
+    "GIT_CONFIG_COUNT=1 git status",
+    "GIT_ASKPASS=x git status",
 ]
 
 
@@ -253,6 +282,13 @@ def test_unreadable_calls_are_blocked(payload):
         ("Grep", "path", "/home/me/.aws", 2),
         ("Grep", "pattern", "github_pat_[A-Za-z0-9_]+", 2),
         ("Glob", "pattern", "**/.netrc", 2),
+        ("Write", "file_path", "scripts/new_file.py", 0),
+        ("Edit", "file_path", "WORKFLOW.md", 0),
+        ("Write", "file_path", ".github/pull_request_template.md", 0),
+        ("Edit", "file_path", ".git/config", 2),
+        ("Write", "file_path", "/work/repo/.git/hooks/pre-commit", 2),
+        ("Write", "file_path", "C:\\work\\repo\\.git\\config", 2),
+        ("Write", "file_path", "/home/me/.ssh/config", 2),
     ],
 )
 def test_file_tools_may_not_read_credentials(tool, key, value, expected):
@@ -351,5 +387,5 @@ def test_designer_agent_uses_the_wrapper_for_bash_and_file_tools():
     assert "designer_guard.sh" in text
     assert "python3 " not in text.split("command:")[1].splitlines()[0]
     matcher = text.split("matcher:")[1].splitlines()[0]
-    for tool in ("Bash", "Read", "Grep", "Glob"):
+    for tool in ("Bash", "Read", "Grep", "Glob", "Write", "Edit"):
         assert tool in matcher

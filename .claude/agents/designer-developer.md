@@ -6,7 +6,7 @@ model: sonnet
 maxTurns: 80
 hooks:
   PreToolUse:
-    - matcher: 'Bash|Read|Grep|Glob'
+    - matcher: 'Bash|Read|Grep|Glob|Write|Edit'
       hooks:
         - type: command
           command: 'sh "$CLAUDE_PROJECT_DIR/.claude/hooks/designer_guard.sh"'
