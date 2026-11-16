@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -271,8 +272,13 @@ def tree(tmp_path):
     return repo, outside, tmp_path / "repo-evil"
 
 
+def posix(command):
+    """Paths in test commands use forward slashes: like bash, the hook drops unquoted backslashes."""
+    return command.replace("\\", "/")
+
+
 def verdict(command, root, cwd=None):
-    return hook.check(command, hook.Context(root=str(root), cwd=str(cwd or root)))
+    return hook.check(posix(command), hook.Context(root=str(root), cwd=str(cwd or root)))
 
 
 def test_absolute_paths_inside_the_repository_are_allowed(tree):
@@ -464,8 +470,8 @@ def test_a_windows_style_path_is_not_inside_a_posix_repository(tree):
 
 
 def run_hook_in(root, cwd, command):
-    payload = json.dumps({"tool_name": "Bash", "cwd": str(cwd), "tool_input": {"command": command}})
-    env = {"CLAUDE_PROJECT_DIR": str(root), "PATH": "/usr/bin:/bin"}
+    payload = json.dumps({"tool_name": "Bash", "cwd": str(cwd), "tool_input": {"command": posix(command)}})
+    env = {**os.environ, "CLAUDE_PROJECT_DIR": str(root)}
     return subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True, env=env)
 
 
@@ -485,7 +491,7 @@ def test_the_hook_reads_cwd_and_the_project_directory(tree):
 def test_the_project_directory_defaults_to_the_repository_of_the_hook():
     root = HOOK.parents[2]
     payload = json.dumps({"tool_name": "Bash", "cwd": str(root), "tool_input": {"command": "cd scripts && python -m pytest tests -q"}})
-    env = {"PATH": "/usr/bin:/bin"}
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
     result = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True, env=env)
     assert result.returncode == 0
 
@@ -568,9 +574,10 @@ def test_pytest_node_ids_are_checked_by_their_file_part(tree):
     assert verdict("python -m pytest ../x.py::test", repo) is not None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="a lone surrogate is a valid file name on Windows")
 def test_a_path_that_cannot_be_encoded_blocks_instead_of_crashing(tree):
     repo = tree[0]
     payload = json.dumps({"tool_name": "Bash", "cwd": str(repo), "tool_input": {"command": 'cd "\ud800"'}})
-    env = {"CLAUDE_PROJECT_DIR": str(repo), "PATH": "/usr/bin:/bin"}
+    env = {**os.environ, "CLAUDE_PROJECT_DIR": str(repo)}
     result = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True, env=env)
     assert result.returncode == 2
