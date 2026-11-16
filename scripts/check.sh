@@ -7,14 +7,22 @@
 #
 # Steps: required files, relative links in the Markdown files of the repository
 # root, the tests of the project folder, and the tests of the scripts.
-# Exits with 0 when every step passes and 1 when any step fails.
+# Exits with 0 when every step passes, 1 when any step fails and 2 for a usage
+# error or when no Python is found.
+#
+# Python: the first of python3, python, py that can import pytest is used. If
+# none can, the first that runs is used, with a message that pytest is missing.
+# CHECK_SH_SELECT_ONLY=1 is a test switch: the script stops after choosing
+# Python and printing the root.
 #
 # The link check below repeats the logic in ci.yml. If one of them changes,
 # change the other as well, so they keep giving the same answer.
 
 set -u
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+script_dir="${BASH_SOURCE[0]}"
+case "$script_dir" in */*) script_dir="${script_dir%/*}" ;; *) script_dir=. ;; esac
+root="$(cd "$script_dir/.." && pwd)"
 project="${1:-applications/Countdown}"
 # A project folder is relative to the repository root, unless it is absolute.
 case "$project" in
@@ -22,13 +30,29 @@ case "$project" in
   *) project_dir="$root/$project" ;;
 esac
 
-if command -v python3 >/dev/null 2>&1; then
-  py=python3
-elif command -v python >/dev/null 2>&1; then
-  py=python
+py=""
+first_running=""
+for candidate in python3 python py; do
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  "$candidate" -c "import sys" >/dev/null 2>&1 || continue
+  [ -n "$first_running" ] || first_running="$candidate"
+  if "$candidate" -c "import pytest" >/dev/null 2>&1; then
+    py="$candidate"
+    break
+  fi
+done
+if [ -n "$py" ]; then
+  echo "check.sh: using Python: $py"
+elif [ -n "$first_running" ]; then
+  py="$first_running"
+  echo "check.sh: using Python: $py. pytest is missing in it (no candidate could import pytest), so the test steps will fail. Install it with: $py -m pip install pytest" >&2
 else
-  echo "check.sh: Python was not found. Install Python 3.10 or newer." >&2
+  echo "check.sh: Python was not found (tried python3, python, py). Install Python 3.10 or newer." >&2
   exit 2
+fi
+if [ -n "${CHECK_SH_SELECT_ONLY:-}" ]; then
+  echo "check.sh: root: $root"
+  exit 0
 fi
 
 if [ ! -d "$project_dir" ]; then
