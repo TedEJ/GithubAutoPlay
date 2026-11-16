@@ -252,3 +252,325 @@ def test_reviewer_agent_uses_the_wrapper():
     text = (HOOK.parents[1] / "agents" / "reviewer.md").read_text(encoding="utf-8")
     assert "reviewer_readonly.sh" in text
     assert "python3 " not in text.split("command:")[1].splitlines()[0]
+
+
+# --- paths inside the repository (issue #121) ---------------------------------------
+
+
+@pytest.fixture()
+def tree(tmp_path):
+    repo = tmp_path / "repo"
+    (repo / "applications" / "news-reader" / "tests").mkdir(parents=True)
+    (repo / "scripts").mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    try:
+        (repo / "link").symlink_to(outside, target_is_directory=True)
+    except OSError:  # no symlink privilege (Windows)
+        pass
+    return repo, outside, tmp_path / "repo-evil"
+
+
+def verdict(command, root, cwd=None):
+    return hook.check(command, hook.Context(root=str(root), cwd=str(cwd or root)))
+
+
+def test_absolute_paths_inside_the_repository_are_allowed(tree):
+    repo = tree[0]
+    sub = repo / "applications" / "news-reader"
+    for command in [
+        f"cd {repo}",
+        f"cd {sub} && python -m pytest -q",
+        f"python -m pytest {sub}/tests -q",
+        f"python3 -m pytest {sub}/tests/test_x.py::test_name -q",
+        f"node --test {sub}",
+        f"bash {repo}/scripts/check.sh",
+        f"sh {repo}/scripts/check.sh applications/news-reader",
+        f"{repo}/scripts/check.sh applications/news-reader",
+        f"python {repo}/scripts/check_reviewer.py --body-file b.md --changed-files c.txt",
+        "cd applications/news-reader",
+        "cd applications/../applications",
+    ]:
+        assert verdict(command, repo) is None, command
+
+
+def test_git_dash_c_inside_the_repository_is_allowed(tree):
+    repo = tree[0]
+    for command in [
+        f"git -C {repo} status",
+        f"git -C {repo}/applications log --oneline -3",
+        "git -C applications diff main...HEAD --stat",
+        f"git -C {repo} show HEAD:WORKFLOW.md",
+    ]:
+        assert verdict(command, repo) is None, command
+
+
+def test_relative_paths_follow_the_working_directory(tree):
+    repo = tree[0]
+    sub = repo / "applications" / "news-reader"
+    for command in [
+        "python -m pytest -q",
+        "../../scripts/check.sh",
+        "cd ../.. && scripts/check.sh",
+        "cd ../.. && git status",
+        "bash ../../scripts/check.sh",
+        "python -m pytest ../../applications/news-reader/tests",
+    ]:
+        assert verdict(command, repo, sub) is None, command
+    # From a sub folder the plain relative name is not the repository's script.
+    assert verdict("scripts/check.sh", repo, sub) is not None
+    assert verdict("bash scripts/check.sh", repo, sub) is not None
+    assert verdict("cd ../../.. && git status", repo, sub) is not None  # leaves the repository
+    assert verdict("cd ../../.. && python -m pytest", repo, sub) is not None
+
+
+def test_safe_python_options_are_allowed(tree):
+    repo = tree[0]
+    for command in [
+        "python -W error -m pytest -q",
+        "python -Werror -m pytest -q",
+        "python -W ignore -m pytest",
+        "python -W error::DeprecationWarning -m pytest",
+        "python3 -X utf8 -m pytest",
+        "python -X dev -W error -m pytest -q",
+    ]:
+        assert verdict(command, repo) is None, command
+
+
+def test_paths_outside_the_repository_are_blocked(tree):
+    repo, outside, evil = tree
+    for command in [
+        f"cd {outside}",
+        f"cd {evil}",
+        f"cd {repo}-evil",
+        f"cd {repo}/..",
+        f"cd {repo}/applications/../..",
+        "cd ..",
+        "cd applications/../..",
+        "cd /tmp",
+        f"python -m pytest {outside}",
+        f"python -m pytest {evil}/test_x.py",
+        "python -m pytest ../outside",
+        f"node --test {outside}",
+        f"bash {outside}/check.sh",
+        f"{outside}/scripts/check.sh",
+        f"{evil}/scripts/check.sh",
+        f"python {outside}/scripts/check_reviewer.py",
+        f"git -C {outside} status",
+        f"git -C {evil} status",
+        "git -C .. log",
+        "git -C /tmp log",
+        "git -C ~ log",
+        f"cd {repo}/applications && git -C ../.. status && git -C ../../.. log",
+        "git -C",
+        f"git -C {repo}",
+        f"git -C {repo} commit -m x",
+        f"git -C {repo} -c core.pager=x log",
+        f"git -C {repo} -C /tmp log",
+        f"git -C {repo} --git-dir=/x log",
+        f"git -C {repo} --work-tree=/x log",
+        f"git -C {repo} --exec-path=/x log",
+        f"git -C {repo}/* log",
+        f"cd {repo}/*",
+        f"cd {repo}/applications ; cd ../.. ; cd ..",
+    ]:
+        assert verdict(command, repo) is not None, command
+
+
+def test_a_symlink_pointing_out_of_the_repository_is_blocked(tree):
+    repo, outside, _ = tree
+    if not (repo / "link").is_symlink():
+        pytest.skip("symlinks are not available")
+    for command in [
+        "cd link",
+        f"cd {repo}/link",
+        "python -m pytest link/test_x.py",
+        f"python -m pytest {repo}/link",
+        "node --test link",
+        "git -C link status",
+        f"git -C {repo}/link status",
+        "bash link/check.sh",
+    ]:
+        assert verdict(command, repo) is not None, command
+
+
+def test_unsafe_python_options_are_still_blocked(tree):
+    repo = tree[0]
+    for command in [
+        "python -W -m pytest",
+        "python -W bogus -m pytest",
+        "python -W ignore:message -m pytest",
+        "python -W error",
+        "python -X importtime -m pytest",
+        "python -X pycache_prefix=/tmp/x -m pytest",
+        "python -X",
+        "python -W error script.py",
+        "python -W error -c 'pass'",
+        "python -m pytest -W error",
+        "python -B -m pytest",
+        "python -u -m pytest",
+    ]:
+        assert verdict(command, repo) is not None, command
+
+
+WIN_ROOT = "C:\\Users\\me\\repo"
+
+
+def test_windows_paths_are_compared_with_the_repository(tree):
+    repo = tree[0]
+    for root in (WIN_ROOT, "C:/Users/me/repo", "/c/Users/me/repo"):
+        ctx = lambda: hook.Context(root=root, cwd=root)  # noqa: E731 - a fresh context per command
+        for command in [
+            "cd C:/Users/me/repo",
+            "cd C:/Users/me/repo/applications/news-reader",
+            "cd /c/Users/me/repo/applications",
+            "cd 'C:\\Users\\me\\repo\\applications'",
+            "cd c:/users/ME/Repo/applications",
+            "cd applications && python -m pytest",
+            "python -m pytest C:/Users/me/repo/applications/tests -q",
+            "git -C C:/Users/me/repo status",
+            "git -C /c/Users/me/repo/applications log",
+            "bash C:/Users/me/repo/scripts/check.sh",
+            "C:/Users/me/repo/scripts/check.sh",
+        ]:
+            assert hook.check(command, ctx()) is None, (root, command)
+        for command in [
+            "cd C:/Users/other/repo",
+            "cd C:/Users/me/repo-evil",
+            "cd C:/Users/me/repo/..",
+            "cd C:/Users/me/repo/../other",
+            "cd D:/Users/me/repo",
+            "cd /c/Users/me/repo-evil",
+            "cd /c/Users/me",
+            "cd /d/Users/me/repo",
+            "cd C:/Users/me/repo/*",
+            "cd C:/Users/me/repo/applications/../../..",
+            "python -m pytest C:/Users/other",
+            "python -m pytest C:/Windows/System32",
+            "git -C C:/Users/other/repo status",
+            "git -C C:/Users/me log",
+            "bash C:/Users/other/scripts/check.sh",
+            "node --test D:/x",
+            "cd /tmp",
+            "git -C /tmp log",
+        ]:
+            assert hook.check(command, ctx()) is not None, (root, command)
+
+
+def test_a_windows_style_path_is_not_inside_a_posix_repository(tree):
+    repo = tree[0]
+    assert verdict("cd C:/Users/me/repo", repo) is not None
+    assert hook.check("cd /home/x/repo", hook.Context(root=WIN_ROOT, cwd=WIN_ROOT)) is not None
+
+
+def run_hook_in(root, cwd, command):
+    payload = json.dumps({"tool_name": "Bash", "cwd": str(cwd), "tool_input": {"command": command}})
+    env = {"CLAUDE_PROJECT_DIR": str(root), "PATH": "/usr/bin:/bin"}
+    return subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True, env=env)
+
+
+def test_the_hook_reads_cwd_and_the_project_directory(tree):
+    repo = tree[0]
+    sub = repo / "applications" / "news-reader"
+    assert run_hook_in(repo, sub, "cd ../.. && git status").returncode == 0
+    assert run_hook_in(repo, sub, "cd ../../.. && python -m pytest").returncode == 2
+    assert run_hook_in(repo, repo, f"git -C {repo} status").returncode == 0
+    assert run_hook_in(repo, repo, "git -C /tmp status").returncode == 2
+    assert run_hook_in(repo, repo, f"cd {tree[1]}").returncode == 2
+    # a working directory outside the repository makes relative paths resolve outside it
+    assert run_hook_in(repo, tree[1], "python -m pytest tests").returncode == 2
+    assert run_hook_in(repo, tree[1], "cd ../repo && python -m pytest").returncode == 0
+
+
+def test_the_project_directory_defaults_to_the_repository_of_the_hook():
+    root = HOOK.parents[2]
+    payload = json.dumps({"tool_name": "Bash", "cwd": str(root), "tool_input": {"command": "cd scripts && python -m pytest tests -q"}})
+    env = {"PATH": "/usr/bin:/bin"}
+    result = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True, env=env)
+    assert result.returncode == 0
+
+
+# --- review round 1 of issue #121 ---------------------------------------------------
+
+
+def test_cd_is_tracked_only_where_the_shell_certainly_changes_folder(tree):
+    repo = tree[0]
+    for command in [
+        "cd applications | node --test ..",
+        "cd applications | git -C .. status",
+        "cd applications | bash ../scripts/check.sh",
+        "cd nonexistent ; node --test applications/../..",
+        "cd applications/news-reader ; python -m pytest ../..",
+        "cd applications || python -m pytest ..",
+        "true || cd applications && node --test ..",
+        "ls | cd applications && node --test ..",
+        "cd applications && ls ; python -m pytest ..",
+        "cd applications && ls || python -m pytest ..",
+        "cd applications; cd ../..",
+    ]:
+        assert verdict(command, repo) is not None, command
+    for command in [
+        "cd applications && ls | head -3",
+        "ls ; cd applications && python -m pytest -q",
+        "cd applications && cd news-reader && python -m pytest -q",
+        "cd applications && git status | head",
+    ]:
+        assert verdict(command, repo) is None, command
+
+
+def test_dot_dot_after_a_symlink_is_resolved_through_the_link(tree):
+    repo, outside, _ = tree
+    if not (repo / "link").is_symlink():
+        pytest.skip("symlinks are not available")
+    for command in [
+        "cd link/..",
+        f"cd {repo}/link/..",
+        "python -m pytest link/..",
+        "git -C link/.. status",
+        "node --test link/../applications",
+        "cd link && python -m pytest ..",
+    ]:
+        assert verdict(command, repo) is not None, command
+    # a link that stays inside the repository is fine, and `..` goes up from its target
+    (repo / "applications" / "inner").symlink_to(repo / "applications" / "news-reader", target_is_directory=True)
+    assert verdict("cd applications/inner && python -m pytest -q", repo) is None
+    assert verdict("cd applications/inner && python -m pytest ../../..", repo) is not None
+
+
+def test_the_repository_may_be_reached_through_a_symlink(tree, tmp_path):
+    repo = tree[0]
+    alias = tmp_path / "alias"
+    try:
+        alias.symlink_to(repo, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are not available")
+    assert verdict(f"cd {repo}/applications", alias) is None
+    assert verdict(f"git -C {alias} status", repo) is None
+    assert verdict(f"git -C {alias}/.. status", repo) is not None
+
+
+def test_windows_names_with_trailing_dots_or_spaces_are_refused():
+    ctx = lambda: hook.Context(root=WIN_ROOT, cwd=WIN_ROOT)  # noqa: E731
+    for command in [
+        "cd 'C:/Users/me/repo/.. '",
+        "cd 'C:/Users/me/repo/sub.'",
+        "cd 'C:/Users/me/repo/a. /b'",
+        "cd 'C:/Users/me/repo/. .'",
+    ]:
+        assert hook.check(command, ctx()) is not None, command
+    assert hook.check("cd C:/Users/me/repo/sub", ctx()) is None
+
+
+def test_pytest_node_ids_are_checked_by_their_file_part(tree):
+    repo = tree[0]
+    assert verdict(f"python -m pytest {repo}/applications/news-reader/tests/test_x.py::test_a -q", repo) is None
+    assert verdict("python -m pytest /etc/passwd::x", repo) is not None
+    assert verdict("python -m pytest ../x.py::test", repo) is not None
+
+
+def test_a_path_that_cannot_be_encoded_blocks_instead_of_crashing(tree):
+    repo = tree[0]
+    payload = json.dumps({"tool_name": "Bash", "cwd": str(repo), "tool_input": {"command": 'cd "\ud800"'}})
+    env = {"CLAUDE_PROJECT_DIR": str(repo), "PATH": "/usr/bin:/bin"}
+    result = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True, env=env)
+    assert result.returncode == 2

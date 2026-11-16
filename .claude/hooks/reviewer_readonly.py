@@ -10,17 +10,44 @@ known-safe arguments. It refuses newlines, `$`, backticks, `~`, a lone `&`,
 `<`, and `>` (except to /dev/null and `2>&1`), assignments before a command,
 `{`, `}` and, outside grep patterns, wildcards, and any command word that contains a path (except the two scripts below).
 
+Paths. The hook reads the working directory (`cwd`) from its JSON input and the
+repository root from `CLAUDE_PROJECT_DIR` (default: two folders above this file).
+`cd`, the path arguments of `python`, `node`, `bash`, `sh` and `scripts/check.sh`,
+and the path after `git -C` are allowed when they resolve to a place inside the
+repository, also when written as an absolute path (also a Windows path such as
+`C:\\Users\\me\\repo` or `/c/Users/me/repo`; UNC and `\\\\?\\` forms are not recognised
+and so refused). A path is refused when `..` takes it out of the repository, when it
+is outside the root, when it holds a wildcard, `~` or `$`, when a symlink or junction
+inside the repository points out of it (also when `..` follows the link), and when a
+Windows name ends in a dot or a space. Paths are compared as real paths. A `cd` is
+allowed only as `cd <path> && ...`; it changes the folder that later relative paths in
+the same command are resolved from, and after it commands must be joined with `&&` or
+`|`, because a failed `cd` or a `cd` in a pipeline would not change the folder.
+`python -W <value>` and `python -X <value>` are allowed for a short list of values
+that only change how warnings or the interpreter report (error, ignore, default,
+always, module, once; utf8, dev, faulthandler); `-W` can make a warning an error, which
+only makes the run stricter, and neither option can load code or write files.
+
 Known limits: this is a process guard, not a security boundary.
 - `scripts/check.sh` and `scripts/check_reviewer.py` run code that is on the
   branch under review, and the tests run that branch's code as well.
-- Files outside the repository can be read (for example with `cat /etc/hosts`).
+- Files outside the repository can be read by the read commands (for example
+  with `cat /etc/hosts`); only `cd`, git, the test runners and the two scripts are
+  held to the repository.
 - Symlinks inside the repository can point outside it. Git configuration (diff
   drivers, `--show-signature`) can run configured programs. The `/proc` block
   matches the literal text only. `tail -f` can hang.
+- Shell state is not modelled: `CDPATH` can change where a relative `cd` goes, and
+  the session may keep a folder from an earlier `cd`, which makes a bare
+  `scripts/check.sh` resolve inside that folder and be blocked (use
+  `cd <root> && scripts/check.sh`).
 - Running the tests can write caches such as `.pytest_cache`, and `git status`
   can refresh `.git/index`.
 """
 import json
+import ntpath
+import os
+import posixpath
 import re
 import shlex
 import sys
@@ -41,12 +68,91 @@ GIT_FORBIDDEN_OPTIONS = (
 )
 GIT_BRANCH_OPTIONS = {"--list", "-l", "-a", "-r", "--show-current", "-v", "-vv", "--all", "--remotes"}
 LOCAL_ONLY = {"cd", "python", "python3", "node", "bash", "sh", "scripts/check.sh"}
+WINDOWS_PATH = re.compile(r"^([A-Za-z]):[\\/]|^/([A-Za-z])/")
+
 GLOB = re.compile(r"[*?\[]")
+SAFE_WARNING = re.compile(r"^(error|ignore|default|always|module|once)(::[A-Za-z]+Warning)?$")
+SAFE_XOPTION = {"utf8", "utf8=1", "dev", "faulthandler"}
 PYTEST_FLAG = re.compile(r"^(-q|-qq|-v|-vv|-x|-s|--tb=\w+|-r\w+|--maxfail=\d+|--no-header|--co|--collect-only)$")
 SAFE_STRIPPED = re.compile(r"(?<=\s)(2?>\s*/dev/null|2>&1)(?=\s|$|&&|\|\||[;|])")
 
 
-def git_problem(args):
+class Context:
+    """Where the repository is and which folder relative paths start from."""
+
+    def __init__(self, root=None, cwd=None):
+        self.root = root or os.environ.get("CLAUDE_PROJECT_DIR") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.cwd = cwd or self.root
+
+
+def _windows(path):
+    """Return a normalised lower-case Windows path for `C:\\x`, `C:/x` and `/c/x`, else None."""
+    m = WINDOWS_PATH.match(path)
+    if not m:
+        return None
+    if m.group(2):
+        path = m.group(2) + ":" + path[2:]
+    return ntpath.normpath(path.replace("/", "\\")).lower()
+
+
+def _bad_windows_name(path):
+    """Windows drops trailing dots and spaces from a name, so `x. ` is `x`; refuse such names."""
+    return any(c not in (".", "..", "") and c != c.rstrip(" .") for c in re.split(r"[\\/]", path))
+
+
+def resolve(path, ctx):
+    """Return (location, is_windows) for `path`, or None. Windows locations are lower-case and
+    only normalised in text; POSIX locations are real paths (symlinks followed in order, so
+    `link/..` is the parent of the link's target, as in the shell)."""
+    if not path or "\x00" in path:
+        return None
+    win = _windows(path)
+    base_win = _windows(ctx.cwd)
+    if win is None and base_win is not None and not path.startswith("/"):
+        win = ntpath.normpath(ntpath.join(base_win, path.replace("/", "\\"))).lower()
+    if win is not None:
+        if _bad_windows_name(path):
+            return None
+        if os.name == "nt":  # follows junctions and symlinks
+            win = os.path.realpath(win).lower()
+        return win, True
+    if _windows(ctx.root) is not None:
+        return None
+    joined = path if path.startswith("/") else posixpath.join(ctx.cwd, path)
+    return os.path.realpath(joined), False
+
+
+def inside_repo(path, ctx):
+    """True when `path` resolves to the repository root or a place under it."""
+    if path.startswith("~") or "$" in path:
+        return False
+    found = resolve(path, ctx)
+    if found is None:
+        return False
+    full, win = found
+    if win:
+        root = _windows(ctx.root)
+        if root is None:
+            return False
+        if os.name == "nt":
+            root = os.path.realpath(root).lower()
+        return full == root or full.startswith(root.rstrip("\\") + "\\")
+    root = os.path.realpath(ctx.root)
+    return full == root or full.startswith(root.rstrip("/") + "/")
+
+
+def is_script(path, name, ctx):
+    """True when `path` is the repository's own scripts/<name> (symlinks are not followed to elsewhere)."""
+    found = resolve(path, ctx)
+    target = resolve(ctx.root.rstrip("/\\") + "/scripts/" + name, Context(ctx.root, ctx.root))
+    return found is not None and target is not None and found == target and inside_repo(path, ctx)
+
+
+def git_problem(args, ctx):
+    if args[:1] == ["-C"]:
+        if len(args) < 3 or not inside_repo(args[1], ctx):
+            return "git -C is allowed only with a path inside the repository"
+        args = args[2:]
     if not args or args[0].startswith("-"):
         return "git options before the subcommand are not allowed"
     sub, rest = args[0], args[1:]
@@ -66,7 +172,14 @@ def git_problem(args):
     return None
 
 
-def python_problem(args):
+def python_problem(args, ctx):
+    while args and (args[0] in ("-W", "-X") or (args[0][:2] in ("-W", "-X") and len(args[0]) > 2)):
+        flag = args[0][:2]
+        value, args = (args[0][2:], args[1:]) if len(args[0]) > 2 else ((args[1] if len(args) > 1 else ""), args[2:])
+        if flag == "-W" and not SAFE_WARNING.match(value):
+            return f"python -W {value} is not on the list of safe values"
+        if flag == "-X" and value not in SAFE_XOPTION:
+            return f"python -X {value} is not on the list of safe values"
     if args[:2] == ["-m", "pytest"]:
         rest, i = args[2:], 0
         while i < len(rest):
@@ -78,46 +191,57 @@ def python_problem(args):
                 return f"pytest option {a} is not allowed"
             i += 1
         return None
-    if args[:1] == ["scripts/check_reviewer.py"]:
-        rest = args[1:]
-        for i, a in enumerate(rest):
+    if len(args) >= 1 and is_script(args[0], "check_reviewer.py", ctx):
+        for a in args[1:]:
             if a.startswith("-") and a not in {"--body-file", "--changed-files"}:
                 return f"check_reviewer option {a} is not allowed"
         return None
-    return "python is allowed only as: python -m pytest ..."
+    return "python is allowed only as: python [-W value] -m pytest ... or scripts/check_reviewer.py"
 
 
-def path_problem(cmd, args):
-    if cmd == "cd" and (len(args) != 1 or args[0].startswith("-")):
-        return "cd takes exactly one path inside the repository"
+def path_problem(cmd, args, ctx, local):
+    if cmd == "cd":
+        if len(args) != 1 or args[0].startswith("-"):
+            return "cd takes exactly one path inside the repository"
+        if GLOB.search(args[0]):
+            return "wildcards in paths are not allowed"
+        if not inside_repo(args[0], ctx):
+            return "cd takes a path inside the repository only"
+        return None
     for a in args:
         if GLOB.search(a) and not (cmd == "grep" and "/" not in a):
             return "wildcards in paths are not allowed"
         if "/proc" in a or a.startswith("/proc"):
             return "/proc paths are not allowed"
-        if cmd in LOCAL_ONLY and (a.startswith("/") or a.startswith("@") or ".." in a.split("/")):
-            return f"{cmd} takes paths inside the repository only"
+        if local:
+            if a.startswith("@"):
+                return f"{cmd} takes paths inside the repository only"
+            target = a.split("::")[0] if cmd in ("python", "python3") else a  # pytest node ids
+            if not a.startswith("-") and not inside_repo(target, ctx):
+                return f"{cmd} takes paths inside the repository only"
     return None
 
 
-def segment_problem(words):
+def segment_problem(words, ctx):
     if not words:
         return "empty command part"
     cmd, args = words[0], words[1:]
-    problem = path_problem(cmd, args)
+    check_sh = is_script(cmd, "check.sh", ctx)
+    local = cmd in LOCAL_ONLY or check_sh
+    problem = path_problem(cmd, args, ctx, local)
     if problem:
         return problem
     if cmd == "git":
-        return git_problem(args)
+        return git_problem(args, ctx)
     if cmd in {"python", "python3"}:
-        return python_problem(args)
+        return python_problem(args, ctx)
     if cmd == "node":
         if args[:1] != ["--test"] or any(a.startswith("-") for a in args[1:]):
             return "node is allowed only as: node --test [paths]"
         return None
-    if cmd in {"bash", "sh"} or cmd == "scripts/check.sh":
+    if cmd in {"bash", "sh"} or check_sh:
         rest = args[1:] if cmd in {"bash", "sh"} else args
-        if cmd in {"bash", "sh"} and args[:1] != ["scripts/check.sh"]:
+        if cmd in {"bash", "sh"} and not (args[:1] and is_script(args[0], "check.sh", ctx)):
             return "bash is allowed only for scripts/check.sh"
         return None if not any(a.startswith("-") for a in rest) else "scripts/check.sh takes no options"
     if cmd in READ_COMMANDS:
@@ -125,8 +249,9 @@ def segment_problem(words):
     return f"{cmd} is not on the Reviewer's read-only list"
 
 
-def check(command):
+def check(command, ctx=None):
     """Return None when the command is allowed, otherwise the reason."""
+    ctx = ctx or Context()
     if not command.strip():
         return None
     if "\n" in command or "\r" in command:
@@ -142,20 +267,35 @@ def check(command):
         tokens = list(lexer)
     except ValueError:
         return "cannot parse the command"
-    parts, current = [], []
+    parts, ops, current = [], [], []
     for t in tokens:
         if t in OPERATORS:
             parts.append(current)
+            ops.append(t)
             current = []
         elif re.fullmatch(r"[();&|<>]+", t):
             return f"the operator {t} is not allowed"
         else:
             current.append(t)
     parts.append(current)
-    for words in parts:
-        problem = segment_problem(words)
+    ops.append(None)
+    cd_seen = False
+    for i, words in enumerate(parts):
+        before = ops[i - 1] if i else None
+        after = ops[i]
+        # A `cd` is tracked only where the shell certainly changes folder for what follows:
+        # `cd x && ...`. In a pipeline it runs in a subshell, and after `||` it may not run.
+        if words and words[0] == "cd" and (before not in (None, "&&", ";") or after not in (None, "&&")):
+            return "cd must be written as: cd <path> && <command>"
+        if cd_seen and before in (";", "||"):
+            return "after cd, join commands with && (a failed cd would leave the folder unchanged)"
+        problem = segment_problem(words, ctx)
         if problem:
             return problem
+        if words[0] == "cd":
+            found = resolve(words[1], ctx)
+            ctx.cwd = found[0]  # later relative paths start from the new folder
+            cd_seen = True
     return None
 
 
@@ -171,7 +311,11 @@ def main():
         return 2
     if data.get("tool_name", "Bash") != "Bash":
         return 0
-    problem = check(command)
+    cwd = data.get("cwd")
+    try:
+        problem = check(command, Context(cwd=cwd if isinstance(cwd, str) and cwd else None))
+    except (ValueError, OSError):  # for example a lone surrogate in a path
+        problem = "the command could not be checked"
     if problem:
         print(f"Blocked: the Reviewer is read-only ({problem}).", file=sys.stderr)
         return 2
