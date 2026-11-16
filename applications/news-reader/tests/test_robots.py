@@ -1,4 +1,7 @@
 """robots.txt decisions (R6.6), text in and answer out."""
+import re
+import time
+
 import pytest
 
 from newsreader.robots import is_allowed, product_token, robots_url, url_path
@@ -91,17 +94,13 @@ def test_urls():
 
 # --- linear wildcard matching (issue #119) ---
 
-import re
-import time
-
-
 def _old_regex_match(rule, path):
     """The regular expression the matcher replaced, kept as a reference."""
     anchored = rule.endswith("$")
     if anchored:
         rule = rule[:-1]
     pattern = ".*".join(re.escape(part) for part in rule.split("*"))
-    return re.compile(pattern + ("\Z" if anchored else ""), re.DOTALL).match(path) is not None
+    return re.compile(pattern + (r"\Z" if anchored else ""), re.DOTALL).match(path) is not None
 
 
 @pytest.mark.parametrize("rule,path,expected", [
