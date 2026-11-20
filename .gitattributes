@@ -5,3 +5,5 @@
 # Python scripts and Markdown files are read by our own scripts: LF everywhere.
 *.py text eol=lf
 *.md text eol=lf
+# The project skill (SKILL.md, scripts, labelled cases and fixtures): LF everywhere.
+.claude/skills/** text eol=lf

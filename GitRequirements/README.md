@@ -23,4 +23,5 @@ These are not in the code, so they are listed here.
 ## Related files
 - `WORKFLOW.md`: the detailed development workflow.
 - `CLAUDE.md`: the short entry point that Claude reads automatically.
+- `.claude/skills/subagent-delegation/`: the project skill that picks model and effort for each worker and gives the brief template; its evaluation runs in `scripts/tests/test_subagent_delegation_skill.py` (see section 10 of `WORKFLOW.md`).
 - `.claude/agents/` and `.claude/hooks/`: the Designer/Developer and Reviewer agent definitions and the hooks that keep the Reviewer read-only and stop the Designer/Developer from pushing or using the network (see section 10 of `WORKFLOW.md`, which also explains the two ways of working). `.gitattributes` keeps LF line endings for them on Windows.

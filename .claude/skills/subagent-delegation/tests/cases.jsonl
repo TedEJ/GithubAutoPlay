@@ -1,0 +1,37 @@
+{"id": "grep-log", "task": "Grep app.log for ERROR lines and list the distinct messages", "files": ["sample_files/app.log"], "model": "haiku", "effort": ["low"]}
+{"id": "list-structure", "task": "List the files in the project and summarize the directory structure", "model": "haiku", "effort": ["low"]}
+{"id": "extract-csv", "task": "Extract the sharpe and max_drawdown columns from results.csv and count the rows", "files": ["sample_files/results.csv"], "model": "haiku", "effort": ["low"]}
+{"id": "summarize-readme", "task": "Summarize the short README in two sentences", "files": ["sample_files/docs/README.md"], "model": "haiku", "effort": ["low"]}
+{"id": "md-links", "task": "Read all the .md files under docs and list any broken relative links", "files": ["sample_files/docs/README.md", "sample_files/docs/strategy.md", "sample_files/docs/notes.md"], "model": "haiku", "effort": ["low"], "fan_out": false, "note": "audit-skill style check; verifiable by checking the paths exist"}
+{"id": "doc-vs-code", "task": "Check whether docs/strategy.md contradicts what buggy_strategy.py actually does", "files": ["sample_files/docs/strategy.md", "sample_files/buggy_strategy.py"], "model": "sonnet", "effort": ["medium"], "note": "the docs say 20/100 SMA, the code uses 10/50"}
+{"id": "explain-module", "task": "Read the module and explain how the position sizing works", "model": "sonnet", "effort": ["medium"]}
+{"id": "git-status", "task": "Run git status and git log -5 and report the output", "model": "haiku", "effort": ["low"]}
+{"id": "run-tests", "task": "Run the test suite and report which tests pass or fail", "model": "haiku", "effort": ["low"]}
+{"id": "run-backtest", "task": "Run the backtest script and return the metrics table", "model": "haiku", "effort": ["low"]}
+{"id": "triage-fail", "task": "A test fails with this traceback; find the cause", "model": "sonnet", "effort": ["medium"]}
+{"id": "migration", "task": "Run the database migration that drops the old orders table", "model": "opus", "effort": ["high"], "delegate": "main", "note": "irreversible: never to a cheap subagent"}
+{"id": "rename-lint", "task": "Rename the variable fast_ma to sma_fast across the project and fix lint errors", "model": "haiku", "effort": ["low"]}
+{"id": "small-util", "task": "Write a small utility that converts timestamps to UTC and a unit test for it", "model": "sonnet", "effort": ["low", "medium"]}
+{"id": "mcp-feature", "task": "Implement the URL fetch and text-match tool for the MCP server: fetch a URL, return the lines matching a search string", "model": "sonnet", "effort": ["medium"]}
+{"id": "review-diff", "task": "Review this diff for bugs", "model": "sonnet", "effort": ["medium", "high"]}
+{"id": "debug-multi", "task": "Debug why orders are duplicated; the bug spans the fetcher, the cache and the writer modules", "model": "opus", "effort": ["high"]}
+{"id": "schema-design", "task": "Design the database schema for storing auction house price history", "model": "opus", "effort": ["high"]}
+{"id": "login-handler", "task": "Write the login handler that validates passwords and issues session tokens", "model": "opus", "effort": ["high"]}
+{"id": "fetch-term", "task": "Fetch this page and check whether it mentions 'rate limit'", "model": "haiku", "effort": ["low"]}
+{"id": "compare-params", "task": "Compare two parameter sets from the results table and tell me which has the better risk-adjusted return", "files": ["sample_files/results.csv"], "model": "sonnet", "effort": ["medium"]}
+{"id": "overfit", "task": "Decide whether this backtest result is real or overfit; check for lookahead bias and data leakage", "files": ["sample_files/buggy_strategy.py", "sample_files/results.csv"], "model": "opus", "effort": ["high"], "note": "the fixture really does contain a lookahead bug"}
+{"id": "tradeoff", "task": "Pick between SQLite and Postgres for this project given the trade-offs", "model": "opus", "effort": ["high"]}
+{"id": "synthesize", "task": "Synthesize the findings from the three subagents into a decision on what to refactor first", "model": "opus", "effort": ["high"], "delegate": "main", "note": "decisions stay with the main agent"}
+{"id": "forty-files", "task": "Read 40 files and find the bug that causes the crash", "model": "sonnet", "effort": ["high"], "tricky": true, "note": "tricky: wide but checkable; fan out reads, keep one mid-tier agent on the diagnosis"}
+{"id": "mixed", "task": "Grep the logs for timeouts and then decide whether we should roll back the deploy", "files": ["sample_files/app.log"], "model": "opus", "effort": ["high"], "delegate": "main", "split": true, "tricky": true, "note": "split: haiku gathers, main decides"}
+{"id": "install-format", "task": "Install the dependencies and format the code with black", "model": "haiku", "effort": ["low"]}
+{"id": "wow-prices", "task": "Look up the vendor sell price for each cooked item in this table and list those below the auction cost", "model": "haiku", "effort": ["low"]}
+{"id": "parallel-reads", "task": "Read these eight config files and report the value of timeout in each", "model": "haiku", "effort": ["low"], "fan_out": true}
+{"id": "refactor-plan", "task": "Plan a refactor of the data layer to separate fetching from persistence", "model": "opus", "effort": ["high"]}
+{"id": "vague", "task": "Look into why the results look off", "model": "sonnet", "effort": ["medium"], "tricky": true, "note": "vague: default to mid-tier, or ask one clarifying question first"}
+{"id": "rm-force-push", "task": "Delete the old build directories and force push the cleaned branch", "model": "opus", "effort": ["high"], "delegate": "main"}
+{"id": "five-reads", "task": "Read these five config files and report the value of timeout in each", "model": "haiku", "effort": ["low"], "fan_out": false, "note": "below the fan-out threshold: read in the main thread or one subagent"}
+{"id": "p-hook-review", "task": "Review the guard hook for bypasses", "model": "opus", "effort": ["high"], "note": "project: security hooks need the top tier"}
+{"id": "p-yml-copies", "task": "Check whether GitRequirements/ci.yml is identical to .github/workflows/ci.yml", "model": "haiku", "effort": ["low"], "note": "project: mechanical, checkable"}
+{"id": "p-run-checks", "task": "Run scripts/check.sh and report which steps fail", "model": "haiku", "effort": ["low"], "note": "project: the local gate, checkable by exit code"}
+{"id": "p-docs-contradict", "task": "Check whether WORKFLOW.md contradicts what README.md says about the hooks", "model": "sonnet", "effort": ["medium"], "note": "project: judgement across two documents"}
