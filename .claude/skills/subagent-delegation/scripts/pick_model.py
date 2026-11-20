@@ -82,7 +82,7 @@ FLAGS = ("read_only", "reversible", "irreversible", "mechanical", "routine", "un
 
 
 def announcement(title, model, effort):
-    """The line every subagent opens each task with. It states what was assigned: a
+    """The line every subagent begins its final report with. It states what was assigned: a
     subagent cannot reliably know which model it really runs on."""
     return f"Hi, subagent taking task '{title}' with assigned model {model} at {effort} effort."
 
