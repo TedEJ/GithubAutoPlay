@@ -92,3 +92,12 @@ def test_eval_detects_an_overpowered_pick(tmp_path, capsys):
     path.write_text(json.dumps(case) + "\n", encoding="utf-8")
     assert run_eval.run(path, use_flags=True) == 0
     assert "MISS" in capsys.readouterr().out
+
+
+def test_announcement_goes_in_the_final_report():
+    """Only a subagent's last message reaches the main agent, so the brief template and
+    SKILL.md must put the announcement line in the final report, not in 'the reply'."""
+    for name in ("SKILL.md", "references/brief-template.md"):
+        text = (SKILL / name).read_text(encoding="utf-8")
+        assert "final report" in text, f"{name} must say the line goes in the final report"
+        assert "Start your reply" not in text, f"{name} still says 'Start your reply'"

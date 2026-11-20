@@ -29,11 +29,11 @@ The main agent keeps its own model. This skill only decides, for each subagent y
 
 ## Announcement line
 
-Every subagent starts every task by saying, word for word:
+Every subagent begins its **final report** with this line, word for word. Only the subagent's last message comes back to the main agent, so a line written in an earlier message is lost:
 
 > Hi, subagent taking task '<short task name>' with assigned model <model> at <effort> effort.
 
-Put the filled-in line in the brief (the script prints it as `announce`; it is `null` when the main agent should do the task itself). A subagent that handles several tasks in a row says it again at the start of each one. The line states what the brief **assigned**. A subagent cannot reliably know which model it really runs on, so the line shows that the brief was read and does not prove the model. If a report comes back without the line, note that in your summary and treat the brief as not read. For work that matters, check the tier you passed in the Agent call, not what the subagent claims. In a Developer or Reviewer report the line comes first, before the report format required by `WORKFLOW.md`.
+Put the filled-in line in the brief (the script prints it as `announce`; it is `null` when the main agent should do the task itself). A subagent that handles several tasks in a row puts the line first in the final report of each one. The line states what the brief **assigned**. A subagent cannot reliably know which model it really runs on, so the line shows that the brief was read and does not prove the model. If a report comes back without the line, treat that as a warning, not as proof that the brief was ignored: note it in your summary and check the rest of the report against the brief (scope, allowed actions, return format). For work that matters, check the tier you passed in the Agent call, not what the subagent claims. In a Developer or Reviewer report the line comes first, before the report format required by `WORKFLOW.md`.
 
 ## This project (GithubAutoPlay)
 
@@ -45,6 +45,8 @@ Put the filled-in line in the brief (the script prints it as `announce`; it is `
 - **Always read the diff yourself** after a Developer reports; a worker once reported a change that was never made.
 
 ## Rules
+
+- Read-only search jobs (find where something is defined, list files, grep a codebase) can use the built-in `Explore` agent with `model: haiku`, instead of a general-purpose subagent. It has no edit tools.
 
 - Gather and report goes down a tier; decide stays up.
 - Cheap subagents get read-only or easily reversible actions. Anything destructive stays with the main agent, and you confirm with the user first.

@@ -1,9 +1,9 @@
 # Delegation brief template
 
-Every subagent brief contains these fields. The opening line is mandatory and is repeated at the start of every task the subagent takes. Keep it short; the subagent has no memory of the conversation.
+Every subagent brief contains these fields. The opening line is mandatory and is the first line of the subagent's final report, for every task it takes. Only the final message comes back to the main agent, so the brief must say "final report". Keep it short; the subagent has no memory of the conversation.
 
 ```
-Opening line: Start your reply with exactly: Hi, subagent taking task '<short task name>' with assigned model <model> at <effort> effort.
+Opening line: Begin your final report with exactly: Hi, subagent taking task '<short task name>' with assigned model <model> at <effort> effort.
 Model / effort: <haiku|sonnet|opus> / <low|medium|high>
 Goal: <one sentence: what question this answers or what this produces>
 Scope: <exact files, directories, URLs; say what is out of scope>
@@ -15,10 +15,10 @@ If unsure: <report the uncertainty and stop; do not guess or widen scope>
 
 ## Worker briefs in GithubAutoPlay
 
-For a Designer/Developer or Reviewer the brief also contains what `WORKFLOW.md` section 10 ("Briefing: what every worker gets") requires: the full issue text, the repository folder and branch name, the instruction to read `WORKFLOW.md` and `CLAUDE.md` first, and the report format (Designer/Developer: Summary, Files changed, Checks run, Acceptance criteria, Assumptions and open questions, Follow-up ideas; Reviewer: Verdict, Must fix, Should consider, Checked, Not checked). Under Forbidden always write: push, create or merge pull requests, handle tokens, change `.github/workflows/` or repository settings. The announcement line is the first line of the report, before those headings.
+For a Designer/Developer or Reviewer the brief also contains what `WORKFLOW.md` section 10 ("Briefing: what every worker gets") requires: the full issue text, the repository folder and branch name, the instruction to read `WORKFLOW.md` and `CLAUDE.md` first, and the report format (Designer/Developer: Summary, Files changed, Checks run, Acceptance criteria, Assumptions and open questions, Follow-up ideas; Reviewer: Verdict, Must fix, Should consider, Checked, Not checked). Under Forbidden always write: push, create or merge pull requests, handle tokens, change `.github/workflows/` or repository settings. The announcement line is the first line of the final report, before those headings.
 
 ```
-Opening line: Start your reply with exactly: Hi, subagent taking task 'review PR 130 guard hook' with assigned model opus at high effort.
+Opening line: Begin your final report with exactly: Hi, subagent taking task 'review PR 130 guard hook' with assigned model opus at high effort.
 Model / effort: opus / high
 Goal: Review branch designer-guard for bypasses of the push block; report findings only.
 Scope: .claude/hooks/designer_guard.py, .claude/hooks/designer_guard.sh, scripts/tests/test_designer_guard.py, issue #126 text below.
@@ -32,7 +32,7 @@ If unsure: list the open question in the report and stop as far as it matters.
 
 Small, fanned out:
 ```
-Opening line: Start your reply with exactly: Hi, subagent taking task 'read timeout in service_a.yaml' with assigned model haiku at low effort.
+Opening line: Begin your final report with exactly: Hi, subagent taking task 'read timeout in service_a.yaml' with assigned model haiku at low effort.
 Model / effort: haiku / low
 Goal: Report the value of `timeout` in this config file.
 Scope: configs/service_a.yaml only.
@@ -44,7 +44,7 @@ If unsure: say "not found" and stop.
 
 Mid, diagnosis:
 ```
-Opening line: Start your reply with exactly: Hi, subagent taking task 'diagnose test_cache_eviction' with assigned model sonnet at medium effort.
+Opening line: Begin your final report with exactly: Hi, subagent taking task 'diagnose test_cache_eviction' with assigned model sonnet at medium effort.
 Model / effort: sonnet / medium
 Goal: Find why test_cache_eviction fails; propose the smallest fix but do not apply it.
 Scope: src/cache.py, tests/test_cache.py.
