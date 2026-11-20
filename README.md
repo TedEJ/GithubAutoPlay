@@ -18,7 +18,7 @@ This is the short version. The full, detailed workflow, including verification g
 2. Fetch the main branch.
 3. Check out a new branch named after the issue, for example `feature-Update-ReadME`.
 4. Perform the updates.
-5. Create a pull request that is set to merge automatically. Create new issues from comments in the pull request, and set Low, Medium or High as the workload level on each new issue.
+5. Create a pull request that is set to merge automatically. Create new issues from comments in the pull request, and set Low, Medium or High as the workload level on each new issue. After the merge, close the issue. A Claude Code session in a local terminal does all of this itself with `gh` once the owner has run `gh auth login` (the credential stays in the operating system's keyring, never in the repository); workers never use `gh`.
 
 ## Safeguards for automatic merge
 Pull requests are merged automatically, so changes must never go straight into `main`. The following safeguards apply (see issue #3):
