@@ -5,3 +5,4 @@
 # Python scripts and Markdown files are read by our own scripts: LF everywhere.
 *.py text eol=lf
 *.md text eol=lf
+.claude/skills/** text eol=lf

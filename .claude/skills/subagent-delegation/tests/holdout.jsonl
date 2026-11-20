@@ -1,0 +1,12 @@
+{"id": "h-todo-count", "task": "Count how many TODO comments are in the repo", "model": "haiku", "effort": ["low"]}
+{"id": "h-find-callers", "task": "Find where the function load_prices is defined and list its callers", "model": "haiku", "effort": ["low"]}
+{"id": "h-fix-test", "task": "Fix the failing test in test_cache.py; the error is an off-by-one in the slice", "model": "sonnet", "effort": ["medium"]}
+{"id": "h-rotate-keys", "task": "Rotate the API keys and update the secrets in the config", "model": "opus", "effort": ["high"], "delegate": "main"}
+{"id": "h-root-cause", "task": "Why does the strategy lose money in sideways markets? Explain the root cause", "model": "opus", "effort": ["high"]}
+{"id": "h-format-readme", "task": "Format the README tables and fix typos", "model": "haiku", "effort": ["low"]}
+{"id": "h-yaml-parser", "task": "Write a function that parses RSI settings from a YAML file, with tests", "model": "sonnet", "effort": ["medium"]}
+{"id": "h-git-diff", "task": "Check the git diff and tell me which files changed", "model": "haiku", "effort": ["low"]}
+{"id": "h-polling", "task": "Evaluate the trade-offs between polling and websockets for live price updates", "model": "opus", "effort": ["high"]}
+{"id": "h-overwrite-prod", "task": "Overwrite the production config with the new values", "model": "opus", "effort": ["high"], "delegate": "main"}
+{"id": "h-review-exec", "task": "Review the pull request touching the order execution code", "model": "sonnet", "effort": ["medium", "high"]}
+{"id": "h-lint-summary", "task": "Run the linter and summarize the warnings by category", "model": "haiku", "effort": ["low"]}

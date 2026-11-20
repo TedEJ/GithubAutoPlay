@@ -1,0 +1,200 @@
+2026-11-19T10:00:00Z INFO processed batch 0 ok
+2026-11-19T10:00:01Z INFO processed batch 1 ok
+2026-11-19T10:00:02Z INFO processed batch 2 ok
+2026-11-19T10:00:03Z INFO processed batch 3 ok
+2026-11-19T10:00:04Z INFO processed batch 4 ok
+2026-11-19T10:00:05Z INFO processed batch 5 ok
+2026-11-19T10:00:06Z INFO processed batch 6 ok
+2026-11-19T10:00:07Z INFO processed batch 7 ok
+2026-11-19T10:00:08Z INFO processed batch 8 ok
+2026-11-19T10:00:09Z INFO processed batch 9 ok
+2026-11-19T10:00:10Z WARN request timeout after 30s (retry 2)
+2026-11-19T10:00:11Z INFO processed batch 11 ok
+2026-11-19T10:00:12Z INFO processed batch 12 ok
+2026-11-19T10:00:13Z INFO processed batch 13 ok
+2026-11-19T10:00:14Z INFO processed batch 14 ok
+2026-11-19T10:00:15Z INFO processed batch 15 ok
+2026-11-19T10:00:16Z INFO processed batch 16 ok
+2026-11-19T10:00:17Z INFO processed batch 17 ok
+2026-11-19T10:00:18Z INFO processed batch 18 ok
+2026-11-19T10:00:19Z INFO processed batch 19 ok
+2026-11-19T10:00:20Z INFO processed batch 20 ok
+2026-11-19T10:00:21Z INFO processed batch 21 ok
+2026-11-19T10:00:22Z WARN request timeout after 30s (retry 1)
+2026-11-19T10:00:23Z INFO processed batch 23 ok
+2026-11-19T10:00:24Z INFO processed batch 24 ok
+2026-11-19T10:00:25Z ERROR cache write failed: disk quota exceeded
+2026-11-19T10:00:26Z INFO processed batch 26 ok
+2026-11-19T10:00:27Z INFO processed batch 27 ok
+2026-11-19T10:00:28Z INFO processed batch 28 ok
+2026-11-19T10:00:29Z INFO processed batch 29 ok
+2026-11-19T10:00:30Z INFO processed batch 30 ok
+2026-11-19T10:00:31Z ERROR fetch failed: 429 Too Many Requests
+2026-11-19T10:00:32Z INFO processed batch 32 ok
+2026-11-19T10:00:33Z INFO processed batch 33 ok
+2026-11-19T10:00:34Z INFO processed batch 34 ok
+2026-11-19T10:00:35Z INFO processed batch 35 ok
+2026-11-19T10:00:36Z INFO processed batch 36 ok
+2026-11-19T10:00:37Z INFO processed batch 37 ok
+2026-11-19T10:00:38Z INFO processed batch 38 ok
+2026-11-19T10:00:39Z INFO processed batch 39 ok
+2026-11-19T10:00:40Z INFO processed batch 40 ok
+2026-11-19T10:00:41Z WARN request timeout after 30s (retry 1)
+2026-11-19T10:00:42Z INFO processed batch 42 ok
+2026-11-19T10:00:43Z INFO processed batch 43 ok
+2026-11-19T10:00:44Z INFO processed batch 44 ok
+2026-11-19T10:00:45Z INFO processed batch 45 ok
+2026-11-19T10:00:46Z INFO processed batch 46 ok
+2026-11-19T10:00:47Z ERROR fetch failed: 429 Too Many Requests
+2026-11-19T10:00:48Z INFO processed batch 48 ok
+2026-11-19T10:00:49Z ERROR cache write failed: disk quota exceeded
+2026-11-19T10:00:50Z INFO processed batch 50 ok
+2026-11-19T10:00:51Z INFO processed batch 51 ok
+2026-11-19T10:00:52Z WARN request timeout after 30s (retry 3)
+2026-11-19T10:00:53Z INFO processed batch 53 ok
+2026-11-19T10:00:54Z INFO processed batch 54 ok
+2026-11-19T10:00:55Z INFO processed batch 55 ok
+2026-11-19T10:00:56Z INFO processed batch 56 ok
+2026-11-19T10:00:57Z ERROR cache write failed: disk quota exceeded
+2026-11-19T10:00:58Z INFO processed batch 58 ok
+2026-11-19T10:00:59Z WARN request timeout after 30s (retry 1)
+2026-11-19T10:01:00Z INFO processed batch 60 ok
+2026-11-19T10:01:01Z ERROR cache write failed: disk quota exceeded
+2026-11-19T10:01:02Z INFO processed batch 62 ok
+2026-11-19T10:01:03Z INFO processed batch 63 ok
+2026-11-19T10:01:04Z INFO processed batch 64 ok
+2026-11-19T10:01:05Z INFO processed batch 65 ok
+2026-11-19T10:01:06Z INFO processed batch 66 ok
+2026-11-19T10:01:07Z INFO processed batch 67 ok
+2026-11-19T10:01:08Z WARN request timeout after 30s (retry 3)
+2026-11-19T10:01:09Z INFO processed batch 69 ok
+2026-11-19T10:01:10Z INFO processed batch 70 ok
+2026-11-19T10:01:11Z INFO processed batch 71 ok
+2026-11-19T10:01:12Z ERROR parse error: unexpected token at line 14
+2026-11-19T10:01:13Z INFO processed batch 73 ok
+2026-11-19T10:01:14Z INFO processed batch 74 ok
+2026-11-19T10:01:15Z INFO processed batch 75 ok
+2026-11-19T10:01:16Z INFO processed batch 76 ok
+2026-11-19T10:01:17Z INFO processed batch 77 ok
+2026-11-19T10:01:18Z INFO processed batch 78 ok
+2026-11-19T10:01:19Z WARN request timeout after 30s (retry 1)
+2026-11-19T10:01:20Z INFO processed batch 80 ok
+2026-11-19T10:01:21Z INFO processed batch 81 ok
+2026-11-19T10:01:22Z INFO processed batch 82 ok
+2026-11-19T10:01:23Z INFO processed batch 83 ok
+2026-11-19T10:01:24Z INFO processed batch 84 ok
+2026-11-19T10:01:25Z WARN request timeout after 30s (retry 1)
+2026-11-19T10:01:26Z INFO processed batch 86 ok
+2026-11-19T10:01:27Z INFO processed batch 87 ok
+2026-11-19T10:01:28Z ERROR cache write failed: disk quota exceeded
+2026-11-19T10:01:29Z INFO processed batch 89 ok
+2026-11-19T10:01:30Z INFO processed batch 90 ok
+2026-11-19T10:01:31Z INFO processed batch 91 ok
+2026-11-19T10:01:32Z INFO processed batch 92 ok
+2026-11-19T10:01:33Z INFO processed batch 93 ok
+2026-11-19T10:01:34Z INFO processed batch 94 ok
+2026-11-19T10:01:35Z INFO processed batch 95 ok
+2026-11-19T10:01:36Z INFO processed batch 96 ok
+2026-11-19T10:01:37Z INFO processed batch 97 ok
+2026-11-19T10:01:38Z INFO processed batch 98 ok
+2026-11-19T10:01:39Z INFO processed batch 99 ok
+2026-11-19T10:01:40Z INFO processed batch 100 ok
+2026-11-19T10:01:41Z INFO processed batch 101 ok
+2026-11-19T10:01:42Z INFO processed batch 102 ok
+2026-11-19T10:01:43Z INFO processed batch 103 ok
+2026-11-19T10:01:44Z INFO processed batch 104 ok
+2026-11-19T10:01:45Z INFO processed batch 105 ok
+2026-11-19T10:01:46Z INFO processed batch 106 ok
+2026-11-19T10:01:47Z INFO processed batch 107 ok
+2026-11-19T10:01:48Z WARN request timeout after 30s (retry 1)
+2026-11-19T10:01:49Z INFO processed batch 109 ok
+2026-11-19T10:01:50Z INFO processed batch 110 ok
+2026-11-19T10:01:51Z INFO processed batch 111 ok
+2026-11-19T10:01:52Z INFO processed batch 112 ok
+2026-11-19T10:01:53Z INFO processed batch 113 ok
+2026-11-19T10:01:54Z INFO processed batch 114 ok
+2026-11-19T10:01:55Z INFO processed batch 115 ok
+2026-11-19T10:01:56Z INFO processed batch 116 ok
+2026-11-19T10:01:57Z INFO processed batch 117 ok
+2026-11-19T10:01:58Z INFO processed batch 118 ok
+2026-11-19T10:01:59Z WARN request timeout after 30s (retry 2)
+2026-11-19T10:02:00Z INFO processed batch 120 ok
+2026-11-19T10:02:01Z INFO processed batch 121 ok
+2026-11-19T10:02:02Z INFO processed batch 122 ok
+2026-11-19T10:02:03Z INFO processed batch 123 ok
+2026-11-19T10:02:04Z INFO processed batch 124 ok
+2026-11-19T10:02:05Z INFO processed batch 125 ok
+2026-11-19T10:02:06Z ERROR cache write failed: disk quota exceeded
+2026-11-19T10:02:07Z INFO processed batch 127 ok
+2026-11-19T10:02:08Z INFO processed batch 128 ok
+2026-11-19T10:02:09Z ERROR cache write failed: disk quota exceeded
+2026-11-19T10:02:10Z INFO processed batch 130 ok
+2026-11-19T10:02:11Z INFO processed batch 131 ok
+2026-11-19T10:02:12Z WARN request timeout after 30s (retry 2)
+2026-11-19T10:02:13Z WARN request timeout after 30s (retry 2)
+2026-11-19T10:02:14Z INFO processed batch 134 ok
+2026-11-19T10:02:15Z INFO processed batch 135 ok
+2026-11-19T10:02:16Z INFO processed batch 136 ok
+2026-11-19T10:02:17Z INFO processed batch 137 ok
+2026-11-19T10:02:18Z INFO processed batch 138 ok
+2026-11-19T10:02:19Z ERROR fetch failed: 429 Too Many Requests
+2026-11-19T10:02:20Z INFO processed batch 140 ok
+2026-11-19T10:02:21Z INFO processed batch 141 ok
+2026-11-19T10:02:22Z INFO processed batch 142 ok
+2026-11-19T10:02:23Z ERROR parse error: unexpected token at line 14
+2026-11-19T10:02:24Z INFO processed batch 144 ok
+2026-11-19T10:02:25Z INFO processed batch 145 ok
+2026-11-19T10:02:26Z INFO processed batch 146 ok
+2026-11-19T10:02:27Z INFO processed batch 147 ok
+2026-11-19T10:02:28Z INFO processed batch 148 ok
+2026-11-19T10:02:29Z WARN request timeout after 30s (retry 3)
+2026-11-19T10:02:30Z INFO processed batch 150 ok
+2026-11-19T10:02:31Z ERROR parse error: unexpected token at line 14
+2026-11-19T10:02:32Z INFO processed batch 152 ok
+2026-11-19T10:02:33Z WARN request timeout after 30s (retry 2)
+2026-11-19T10:02:34Z INFO processed batch 154 ok
+2026-11-19T10:02:35Z INFO processed batch 155 ok
+2026-11-19T10:02:36Z INFO processed batch 156 ok
+2026-11-19T10:02:37Z INFO processed batch 157 ok
+2026-11-19T10:02:38Z INFO processed batch 158 ok
+2026-11-19T10:02:39Z INFO processed batch 159 ok
+2026-11-19T10:02:40Z INFO processed batch 160 ok
+2026-11-19T10:02:41Z INFO processed batch 161 ok
+2026-11-19T10:02:42Z INFO processed batch 162 ok
+2026-11-19T10:02:43Z INFO processed batch 163 ok
+2026-11-19T10:02:44Z INFO processed batch 164 ok
+2026-11-19T10:02:45Z INFO processed batch 165 ok
+2026-11-19T10:02:46Z WARN request timeout after 30s (retry 3)
+2026-11-19T10:02:47Z WARN request timeout after 30s (retry 2)
+2026-11-19T10:02:48Z INFO processed batch 168 ok
+2026-11-19T10:02:49Z INFO processed batch 169 ok
+2026-11-19T10:02:50Z INFO processed batch 170 ok
+2026-11-19T10:02:51Z INFO processed batch 171 ok
+2026-11-19T10:02:52Z INFO processed batch 172 ok
+2026-11-19T10:02:53Z INFO processed batch 173 ok
+2026-11-19T10:02:54Z INFO processed batch 174 ok
+2026-11-19T10:02:55Z WARN request timeout after 30s (retry 3)
+2026-11-19T10:02:56Z ERROR parse error: unexpected token at line 14
+2026-11-19T10:02:57Z WARN request timeout after 30s (retry 1)
+2026-11-19T10:02:58Z INFO processed batch 178 ok
+2026-11-19T10:02:59Z INFO processed batch 179 ok
+2026-11-19T10:03:00Z INFO processed batch 180 ok
+2026-11-19T10:03:01Z INFO processed batch 181 ok
+2026-11-19T10:03:02Z INFO processed batch 182 ok
+2026-11-19T10:03:03Z INFO processed batch 183 ok
+2026-11-19T10:03:04Z ERROR cache write failed: disk quota exceeded
+2026-11-19T10:03:05Z INFO processed batch 185 ok
+2026-11-19T10:03:06Z INFO processed batch 186 ok
+2026-11-19T10:03:07Z INFO processed batch 187 ok
+2026-11-19T10:03:08Z INFO processed batch 188 ok
+2026-11-19T10:03:09Z INFO processed batch 189 ok
+2026-11-19T10:03:10Z INFO processed batch 190 ok
+2026-11-19T10:03:11Z INFO processed batch 191 ok
+2026-11-19T10:03:12Z INFO processed batch 192 ok
+2026-11-19T10:03:13Z INFO processed batch 193 ok
+2026-11-19T10:03:14Z INFO processed batch 194 ok
+2026-11-19T10:03:15Z INFO processed batch 195 ok
+2026-11-19T10:03:16Z INFO processed batch 196 ok
+2026-11-19T10:03:17Z INFO processed batch 197 ok
+2026-11-19T10:03:18Z INFO processed batch 198 ok
+2026-11-19T10:03:19Z INFO processed batch 199 ok

@@ -1,0 +1,14 @@
+{"id": "s-show-calls", "task": "Show me every place we call fetch_prices", "model": "haiku", "effort": ["low"], "flags": ["mechanical"]}
+{"id": "s-stack-trace", "task": "What does this stack trace mean? Tell me what to change", "model": "sonnet", "effort": ["medium"]}
+{"id": "s-tidy-imports", "task": "Tidy up the imports in all the source files", "model": "haiku", "effort": ["low"], "flags": ["mechanical"]}
+{"id": "s-safe-to-ship", "task": "Is it safe to ship this to customers?", "model": "opus", "effort": ["high"], "note": "high-stakes judgment with no trigger words", "flags": ["high_stakes"]}
+{"id": "s-wipe-cache", "task": "Wipe the cache directory so it rebuilds", "model": "haiku", "effort": ["low"], "note": "regenerable, so reversible: keyword matching will over-escalate", "flags": ["reversible", "mechanical"]}
+{"id": "s-delete-tmp", "task": "Delete the temp files in the build folder", "model": "haiku", "effort": ["low"], "note": "reversible in practice", "flags": ["reversible", "mechanical"]}
+{"id": "s-why-empty", "task": "Why is the list empty on this line?", "model": "sonnet", "effort": ["medium"], "flags": ["routine"]}
+{"id": "s-thundering", "task": "Could our retry logic cause a thundering herd under load?", "model": "opus", "effort": ["high"], "note": "concurrency reasoning", "flags": ["unverifiable"]}
+{"id": "s-docstrings", "task": "Add a docstring to each function in utils.py", "model": "haiku", "effort": ["low"], "flags": ["mechanical"]}
+{"id": "s-async", "task": "Refactor the fetcher to use async", "model": "sonnet", "effort": ["medium", "high"]}
+{"id": "s-pricing", "task": "Come up with a pricing strategy for our new SaaS tier", "model": "opus", "effort": ["high"], "flags": ["unverifiable"]}
+{"id": "s-csv-json", "task": "Convert this CSV to JSON", "model": "haiku", "effort": ["low"], "flags": ["mechanical"]}
+{"id": "s-auth-log", "task": "Check the auth token expiry times in the log", "model": "haiku", "effort": ["low"], "note": "read-only, so keyword matching will over-escalate", "flags": ["read_only", "mechanical"]}
+{"id": "s-sql-injection", "task": "Look through this form handler for anything an attacker could exploit", "model": "opus", "effort": ["high"], "note": "security with no trigger words", "flags": ["high_stakes"]}

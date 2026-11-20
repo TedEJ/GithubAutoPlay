@@ -135,6 +135,14 @@ Designer/Developer report: **Summary**; **Files changed**; **Checks run** (the c
 
 Reviewer report: **Verdict** (ready, or needs changes); **Must fix** (each with file and reason); **Should consider**; **Checked** (what was read and which commands were run); **Not checked**.
 
+### Choosing model and effort for a worker
+The project skill `subagent-delegation` (`.claude/skills/subagent-delegation/`) is used whenever the manager starts a worker or any other subagent. It decides the model and effort from four questions (is the action reversible, is the answer checkable, how wide is the task, what does a wrong answer cost), tells the manager when a subagent is not worth its cold start, and gives the brief template whose first line is the announcement `Hi, subagent taking task '<name>' with assigned model <model> at <effort> effort.` The line states what the brief assigned; it does not prove which model ran.
+
+- The project agents keep their pinned model (`sonnet` in `.claude/agents/`). The exception is a review of anything security-sensitive (hooks, guards, credential handling), which runs on the top tier and is noted in the pull request.
+- The brief still carries everything listed under "Briefing: what every worker gets", and the report keeps the formats above; the announcement line comes first.
+- Claude Code started in a clone of this repository loads project skills from `.claude/skills/`. Whether an app or Cowork task loads them is recorded in the pull request that added the skill (#137). If it does not, the owner can upload the skill file to the account instead, and the two copies must then be kept equal.
+- The skill brings its own labelled cases and a scorer. `scripts/tests/test_subagent_delegation_skill.py` runs them, so `scripts/check.sh` and the check `checks` fail if a case is under-powered. Change the skill through an issue like any other file.
+
 ### Two ways of working
 The same roles can be run in two ways. Both follow every rule in this file; they differ in **where** the manager and the workers run and therefore in **what enforces the limits**. Pick the way per issue, not per project.
 
