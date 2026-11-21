@@ -48,6 +48,9 @@ def read_template(gui=False):
     text = (TEMPLATE_DIR / TEMPLATES[gui]).read_text(encoding="utf-8")
     text = text.replace("\r\n", "\n")
     if text.startswith("---\n"):
+        if "\n---\n" not in text:
+            raise ValueError(f"template {TEMPLATES[gui]} has an opening --- "
+                             "but no closing --- in its front matter")
         text = text.split("\n---\n", 1)[1]
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
     sections = []
@@ -71,6 +74,8 @@ def build_body(goal, depends_on, criteria, tasks=(), notes=(), owner_checks=(),
     if not criteria:
         raise ValueError("at least one --criterion is required")
     tasks = [t.strip() for t in tasks if t.strip()]
+    if not gui and not tasks:
+        raise ValueError("at least one --task is required for the task template")
     notes = [n.strip() for n in notes if n.strip()]
     owner_checks = [o.strip() for o in owner_checks if o.strip()]
     if gui and not owner_checks:
@@ -109,7 +114,7 @@ def main(argv=None):
                         help="use .github/ISSUE_TEMPLATE/gui-task.md")
     parser.add_argument("--goal", default="", help="one or two sentences")
     parser.add_argument("--task", action="append", default=[],
-                        help="one task (repeat for more)")
+                        help="one task (repeat; at least one unless --gui)")
     parser.add_argument("--note", action="append", default=[],
                         help="one note (repeat for more)")
     parser.add_argument("--depends-on", default="",

@@ -73,6 +73,48 @@ def test_missing_goal_criteria_and_owner_check():
         make(owner_checks=["x"])
 
 
+def test_missing_task_only_matters_for_the_task_template():
+    with pytest.raises(ValueError, match="--task"):
+        make(tasks=[])
+    assert "Run the tests of the project" in make(True, tasks=[])
+
+
+def test_depends_on_with_hash_is_accepted():
+    assert "Depends on: #1\n" in make(depends_on="#1")
+
+
+def _template_dir(tmp_path, monkeypatch, text, newline=None):
+    (tmp_path / "task.md").write_text(text, encoding="utf-8", newline=newline)
+    monkeypatch.setattr(issue_body, "TEMPLATE_DIR", tmp_path)
+
+
+
+def test_unclosed_front_matter_is_a_clear_error(tmp_path, monkeypatch):
+    _template_dir(tmp_path, monkeypatch, "---\nname: X\n\n## Goal\n")
+    with pytest.raises(ValueError, match="closing"):
+        make()
+
+
+def test_crlf_template(tmp_path, monkeypatch):
+    src = (TEMPLATES / "task.md").read_text(encoding="utf-8")
+    _template_dir(tmp_path, monkeypatch, src, newline="\r\n")
+    assert b"\r\n" in (tmp_path / "task.md").read_bytes()
+    body = make()
+    assert "\r" not in body
+    assert headings(body) == headings(src)
+    assert "Depends on: None" in body
+
+
+def test_cli_gui_end_to_end(capsys):
+    assert issue_body.main(["--gui", "--goal", "G", "--depends-on", "#1,2",
+                            "--criterion", "C", "--owner-check", "O"]) == 0
+    out = capsys.readouterr().out
+    assert "Depends on: #1, #2" in out
+    assert "## Owner check\n- [ ] O" in out
+    assert issue_body.main(["--goal", "G", "--depends-on", "None",
+                            "--criterion", "C"]) == 2
+    assert "--task" in capsys.readouterr().err
+
 def test_refuses_token_like_text():
     with pytest.raises(ValueError):
         make(goal="ghp_" + "a" * 20)
@@ -80,11 +122,11 @@ def test_refuses_token_like_text():
 
 def test_cli_stdout_output_file_and_errors(tmp_path, capsys):
     assert issue_body.main(["--goal", "G", "--depends-on", "None",
-                            "--criterion", "C"]) == 0
+                            "--criterion", "C", "--task", "T"]) == 0
     assert "## Goal\nG" in capsys.readouterr().out
     out = tmp_path / "b.md"
-    assert issue_body.main(["--goal", "G", "--depends-on", "3", "--criterion", "C",
+    assert issue_body.main(["--goal", "G", "--depends-on", "3", "--criterion", "C", "--task", "T",
                             "--output", str(out)]) == 0
     assert "Depends on: #3" in out.read_text(encoding="utf-8")
-    assert issue_body.main(["--goal", "G", "--criterion", "C"]) == 2
+    assert issue_body.main(["--goal", "G", "--criterion", "C", "--task", "T"]) == 2
     assert "issue_body.py:" in capsys.readouterr().err
