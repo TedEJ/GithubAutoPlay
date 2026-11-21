@@ -14,7 +14,7 @@ from newsreader.build import BuildError, build
 from newsreader.fetch import FetchError
 from newsreader.parse import MAX_RESPONSE_BYTES
 from tests.fakes import (BROWSER_FEED_URL, FEED_URL, GOOD_FEED, NOW, ROBOTS_URL, FakeFetch,
-                            APP, browser_source, politics, rss, source)
+                            APP, browser_source, politics, requires_symlinks, rss, source)
 
 ITEM_FIELDS_V1 = {"id", "sourceId", "sourceName", "title", "url", "published", "publishedDisplay"}
 ITEM_FIELDS = ITEM_FIELDS_V1 | {"topics"}  # R1.5
@@ -634,6 +634,7 @@ def test_ok_source_has_no_message_field(project):
     assert "message" not in source_entry(document)
 
 
+@requires_symlinks
 def test_output_folder_given_by_an_indirect_path_cannot_point_at_site(project, tmp_path):
     for target in (project.root / "site" / ".." / "site", project.root / "." / "site" / "sub"):
         with pytest.raises(BuildError, match="overlaps"):
@@ -653,6 +654,7 @@ def test_output_folder_inside_the_project_is_fine(project):
     assert (project.root / "build" / "news.json").exists()
 
 
+@requires_symlinks
 def test_symlinked_output_folder_is_refused(project, tmp_path):
     real = tmp_path / "real-out"
     real.mkdir()
@@ -662,6 +664,7 @@ def test_symlinked_output_folder_is_refused(project, tmp_path):
     assert list(real.iterdir()) == []
 
 
+@requires_symlinks
 @pytest.mark.parametrize("name", ["news.json", "news.json.tmp", "sources.json", "logic.js"])
 def test_symlinked_targets_are_not_written_through(project, tmp_path, name):
     victim = tmp_path / "victim.txt"
@@ -674,6 +677,7 @@ def test_symlinked_targets_are_not_written_through(project, tmp_path, name):
     assert not (project.out / "politics-keywords.json").exists()  # nothing was written at all
 
 
+@requires_symlinks
 def test_symlinked_folder_inside_the_output_is_not_written_through(project, tmp_path):
     (project.root / "site" / "css").mkdir()
     (project.root / "site" / "css" / "a.css").write_text("x", encoding="utf-8")
@@ -688,6 +692,7 @@ def test_symlinked_folder_inside_the_output_is_not_written_through(project, tmp_
 
 # --- review round 2 -----------------------------------------------------
 
+@requires_symlinks
 def test_symlinked_site_folder_is_followed_for_the_overlap_check(project, tmp_path):
     real_site = tmp_path / "real-site"
     (project.root / "site").rename(real_site)
@@ -720,6 +725,7 @@ def test_hard_linked_targets_are_replaced_not_written_into(project, tmp_path, na
     assert not list(project.out.glob("*.tmp"))
 
 
+@requires_symlinks
 def test_file_symlinks_inside_site_are_not_followed(project, tmp_path):
     secret = tmp_path / "secret.txt"
     secret.write_text("private", encoding="utf-8")

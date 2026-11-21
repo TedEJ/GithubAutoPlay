@@ -3,9 +3,13 @@
 Nothing here touches the network. Hosts are `*.example.invalid`, headlines are invented.
 """
 import json
+import os
 import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+import pytest
 
 from newsreader.fetch import FetchError
 
@@ -14,6 +18,20 @@ NOW = datetime(2026, 11, 13, 12, 0, 0, tzinfo=timezone.utc)
 FEED_URL = "https://news.example.invalid/politics/rss.xml"
 ROBOTS_URL = "https://news.example.invalid/robots.txt"
 BROWSER_FEED_URL = "https://live.example.invalid/atom.xml"
+
+
+def _symlinks_work():
+    """Try once to create a link; only this probe decides whether symlink tests are skipped."""
+    with tempfile.TemporaryDirectory() as folder:
+        try:
+            os.symlink(os.path.join(folder, "target"), os.path.join(folder, "link"))
+        except (OSError, NotImplementedError):  # e.g. WinError 1314 without the privilege
+            return False
+    return True
+
+
+SYMLINKS_AVAILABLE = _symlinks_work()
+requires_symlinks = pytest.mark.skipif(not SYMLINKS_AVAILABLE, reason="symlinks are not available")
 
 
 TOPICS = [
