@@ -2,7 +2,8 @@
 import json
 import runpy
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 
 import pytest
 
@@ -546,8 +547,10 @@ def test_cli_requires_out(capsys):
 
 def test_python_dash_m_entry_point_with_the_projects_own_files(tmp_path, monkeypatch, capsys):
     """Runs `python -m newsreader --out <dir>` through runpy, with the real fetch layer replaced."""
-    svt_feed = rss(("Regeringen och riksdagen i en påhittad fråga", "/nyheter/inrikes/exempel",
-                    "Fri, 13 Nov 2026 11:00:00 GMT")).replace(b"news.example.invalid", b"www.svt.se")
+    # This path reads the real clock (datetime.now in __main__), so the article is dated
+    # relative to the current time; a fixed date would fall out of the 7-day window (R5.2).
+    recent = format_datetime(datetime.now(timezone.utc) - timedelta(hours=1), usegmt=True)
+    svt_feed = rss(("Regeringen och riksdagen i en påhittad fråga", "/nyheter/inrikes/exempel", recent)).replace(b"news.example.invalid", b"www.svt.se")
     fake = FakeFetch({"https://www.svt.se/nyheter/rss.xml": svt_feed,
                       "https://www.svt.se/nyheter/inrikes/rss.xml": svt_feed})
     monkeypatch.setattr(fetch_module, "fetch_url", fake)
