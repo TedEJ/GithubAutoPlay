@@ -1,0 +1,224 @@
+# network-health: design
+
+Issue #149. This document describes what the tool does, how it decides a verdict, and the rules it keeps. The thresholds in "Verdict rules" are in `network_health/thresholds.py` as well; change both together.
+
+## 1. Goal
+
+Run the tool on any network (first the owner's home network) and get a clear answer to three questions:
+
+1. Does the network perform well (latency, loss, DNS, bandwidth, Wi-Fi)?
+2. Should anything in its visible configuration be changed (firewall, profile, DNS, proxy, open ports)?
+3. Is anything on it a security hazard (weak Wi-Fi security, signs of ARP spoofing)?
+
+The output is an overall verdict, one line per area, and a list of findings, each with a plain explanation and a concrete fix tip. There is no numeric score.
+
+network-health is not a traffic analyser. #136 analyses traffic logs; the two tools share ideas, not code.
+
+## 2. Modes
+
+| Mode | Flag | What it may do | Issue |
+|------|------|----------------|-------|
+| Passive | (default) | Read what the computer already knows; ping the default gateway and two public addresses; send DNS queries to the configured resolvers; ping with do-not-fragment to one public address; run the bandwidth test against one public server. | #149 (this one) |
+| Active | `--active` | Scan the local network (for example ping sweep, port checks of devices). | #150 |
+| Live router | `--live-router` | Log in to the router to read its settings. | #151 |
+
+Only passive mode exists after #149. The two other flags are not accepted yet; they are added by their own issues, with the safety rules in section 9.
+
+## 3. What is checked (passive mode)
+
+Every check gives a result with status good, warn or bad (or info, see section 5), or skipped with a reason.
+
+### Performance
+| Check | How | Notes |
+|-------|-----|-------|
+| Latency, jitter and packet loss to the default gateway | `ping -n 20 -w 1000 <gateway>` | Jitter is the mean difference between consecutive replies. A router that ignores ping (while the internet answers) is info, not bad. |
+| The same to two public addresses | `ping -n 20` to 1.1.1.1 and 8.8.8.8, in parallel with the gateway | See section 6. |
+| DNS lookup time per configured resolver | A DNS query (type A) over UDP straight to each resolver, with Python's `socket`, for three names (example.com, www.iana.org, www.wikipedia.org); the median counts. | No program start in the measured time. The Windows placeholder servers `fec0:0:0:ffff::1`, `::2`, `::3` are left out. |
+| Path MTU | `ping -n 1 -f -l <size> 1.1.1.1`; first 1472 bytes (= MTU 1500), then a binary search down to 1200. | A reply means the size passed without fragmentation. |
+| Bandwidth down and up | `urllib` against the speed-test server (section 6). | Limits in section 6. Off with `--skip-bandwidth`. |
+| Bufferbloat | While the download and the upload run, `ping -n 1` to 1.1.1.1 every 0.2 s; the median loaded latency is compared with the idle average. | Needs at least two samples. |
+
+### Wi-Fi (only when connected over Wi-Fi)
+| Check | How |
+|-------|-----|
+| Signal strength | `netsh wlan show interfaces` (Signal %, and Rssi where Windows prints it) |
+| Link rate | the same (receive and transmit rate; the lower counts) |
+| Band (2.4 / 5 / 6 GHz) | the same (Band line; older Windows: from the channel) |
+| Channel congestion | `netsh wlan show networks mode=bssid`: other networks (not the own SSID) on the same channel (5/6 GHz) or an overlapping channel (2.4 GHz: fewer than 5 channels apart). The tip names the least crowded of channels 1, 6 and 11. |
+| Security of the current network | Authentication and cipher from `show interfaces`. |
+
+`show networks` lists what the adapter has already heard; it does not send an extra scan. Windows 11 needs location permission for both commands; without it the checks are skipped with a tip on how to turn it on.
+
+### Configuration of this computer
+| Check | How |
+|-------|-----|
+| Network profile (Public, Private, Domain) | PowerShell `Get-NetConnectionProfile` |
+| Windows Firewall on for every profile | PowerShell `Get-NetFirewallProfile` |
+| DNS servers and who they are | PowerShell `Get-NetIPConfiguration`; each server is named the router, a device on the local network, a known public resolver (section 6), a private address outside the network (VPN, ISP or company), or "your ISP or another public resolver" |
+| IPv6 present | the same (global IPv6 address on the main adapter) |
+| DHCP lease | the same (address origin and remaining valid lifetime; 169.254.x.x means no DHCP answer) |
+| Proxy settings | `reg query "HKCU\...\Internet Settings"` (ProxyEnable, ProxyServer, AutoConfigURL), `netsh winhttp show proxy`, and the variables HTTP_PROXY, HTTPS_PROXY, ALL_PROXY. User names and passwords inside proxy addresses are hidden in the report. |
+| Listening ports open to the network | PowerShell `Get-NetTCPConnection -State Listen` with the process name; ports that listen only on loopback are left out. |
+
+The main adapter is the one with an IPv4 default gateway and the lowest interface metric.
+
+PowerShell is called through the runner as `powershell -NoProfile -NonInteractive -Command ...`, and every command ends in `ConvertTo-Json` with enums turned into strings, so the output does not depend on the language of Windows.
+
+### Local network (from data the computer already has)
+| Check | How |
+|-------|-----|
+| Number of known neighbours | `arp -a`, entries of the main adapter; broadcast and multicast entries are left out. |
+| Duplicate MAC address for different IP addresses | the same |
+| Gateway MAC changed since the last snapshot | the gateway's MAC now compared with the newest snapshot in `local-data/` for the same network (same gateway address and SSID) |
+
+### Not checked in passive mode
+- Other devices on the network (open ports, services, vendors): that is active mode (#150).
+- Router settings (UPnP, WPS, firmware, remote admin): that is `--live-router` (#151).
+- UDP listening ports (Windows has many harmless ones), IPv6 neighbours, and the firewall rules for single programs.
+- Whether the firewall rules for file sharing are on: the file sharing ports are reported as info with an explanation.
+
+## 4. Rights and failures
+
+Everything runs as a normal user; raw ICMP from Python would need administrator rights, so the system `ping` is used. A check that cannot run says why and is skipped, never failed and never crashes:
+
+| Situation | Result |
+|-----------|--------|
+| A command is missing | skipped: "`<tool>` was not found on this computer." |
+| The command needs more rights ("Access is denied", "requires elevation") | skipped: needs administrator rights |
+| Wi-Fi location permission is off | skipped, with how to turn it on |
+| Output not understood (for example a non-English Windows for netsh) | skipped: "The output of `<tool>` was not recognised. The tool reads English Windows output; ..." |
+| Not on Wi-Fi | the Wi-Fi area is skipped: "This computer is not connected over Wi-Fi." |
+| Any other error | skipped with the error text |
+
+Parsers lean on parts that are the same in every language where they can: ping replies are lines with `TTL=` and a time in `ms`; `arp -a` is read by its addresses only; `reg query` output and the PowerShell JSON do not change with the language. Only `netsh wlan` and `netsh winhttp` are read in English.
+
+## 5. Verdict levels
+
+- Every result has a status: **good**, **info** (fine, with a note worth reading; counts as good), **warn** (should be improved), **bad** (should be fixed), or **skipped**.
+- Area verdict (Performance, Wi-Fi, Configuration, Local network): bad if any result is bad, else warn if any is warn, else good if any ran, else skipped.
+- Overall verdict: the worst area verdict; "unknown" when no check could run.
+- Findings in the report: bad first, then warn, then info, each in area order, each with "Why" and "Fix". Good results are listed after the findings, skipped results last.
+
+## 6. External servers
+
+These are the only external addresses the tool knows. They are in `network_health/known_hosts.py`, and the privacy guard (section 10) allows exactly these public addresses.
+
+| Server | Used for | Why this one |
+|--------|----------|--------------|
+| 1.1.1.1 (Cloudflare) | ping (latency, jitter, loss), path MTU, latency under load | Anycast, close to almost every network, run for public use, answers ping. |
+| 8.8.8.8 (Google) | ping (latency, jitter, loss) | A second, independent operator, so one target's problem is not taken for the connection's. |
+| Cloudflare speed test, `https://speed.cloudflare.com/__down?bytes=N` and `https://speed.cloudflare.com/__up` | bandwidth down and up | Public HTTPS endpoints made for speed tests, no account, no install, work with `urllib`, served from a nearby data centre. |
+| The configured DNS servers | DNS lookup time | Only the resolvers the computer already uses are asked. |
+
+Bandwidth limits: the download stops at 25 MB or after 10 seconds, whichever comes first. The upload first sends 1 MB; if that takes 4 seconds or more (slow link) it stops there, otherwise it sends as much as takes about 8 seconds at the measured rate, at most 10 MB. The report names the server, and `--skip-bandwidth` turns the test off.
+
+Known public resolvers (used only to name a DNS server, never contacted unless the computer is configured with them):
+
+| Operator | IPv4 | IPv6 |
+|----------|------|------|
+| Cloudflare | 1.1.1.1, 1.0.0.1 | 2606:4700:4700::1111, 2606:4700:4700::1001 |
+| Google Public DNS | 8.8.8.8, 8.8.4.4 | 2001:4860:4860::8888, 2001:4860:4860::8844 |
+| Quad9 | 9.9.9.9, 149.112.112.112 | 2620:fe::fe, 2620:fe::9 |
+| OpenDNS (Cisco) | 208.67.222.222, 208.67.220.220 | 2620:119:35::35, 2620:119:53::53 |
+
+Traffic in passive mode, in full: ping to the default gateway, ping to 1.1.1.1 and 8.8.8.8, DNS queries to the configured resolvers, and the bandwidth test. Nothing is sent to any other device on the local network.
+
+## 7. Verdict rules
+
+| Value | Good | Warn | Bad | Reason |
+|-------|------|------|-----|--------|
+| Latency to the gateway (average) | at most 10 ms | at most 30 ms | above 30 ms | A wired or healthy Wi-Fi link to the own router is a few ms; tens of ms mean a weak or busy link. |
+| Latency to a public address | at most 50 ms | at most 100 ms | above 100 ms | Under 50 ms feels instant for calls and games; above 100 ms is noticeable. |
+| Jitter | at most 10 ms | at most 30 ms | above 30 ms | Voice and video handle up to about 30 ms with their buffers. |
+| Packet loss (20 pings) | 0 % | at most 5 % (one lost) | above 5 % | One lost ping can be chance; two or more of 20 hurt calls and TCP speed. |
+| DNS answer time (median) | at most 50 ms | at most 150 ms | above 150 ms | Every new name waits for DNS; above 150 ms pages feel slow. A resolver that misses some answers is at least warn; one that never answers is bad. |
+| Path MTU | 1500 | 1400 to 1499 is info | below 1400 is warn | 1492 is normal for PPPoE and VPNs lower it a bit; much lower suggests a misconfiguration. |
+| Download | at least 25 Mbit/s | at least 10 | below 10 | 25 Mbit/s carries a 4K stream; below 10 even HD streaming and updates struggle. |
+| Upload | at least 5 Mbit/s | at least 2 | below 2 | 5 Mbit/s carries an HD video call; below 2 calls and backups suffer. |
+| Bufferbloat (extra latency under load) | at most 30 ms | at most 100 ms | above 100 ms | The common bufferbloat grades: below 30 ms nobody notices; above 100 ms calls lag while someone downloads. |
+| Wi-Fi signal | at least 70 % | at least 50 % | below 50 % | Windows' signal % is roughly (dBm + 100) x 2: 70 % is about -65 dBm (good for full speed), 50 % about -75 dBm (usable, slower). |
+| Wi-Fi link rate (lower of receive and transmit) | at least 100 Mbit/s | at least 30 | below 30 | Real throughput is about half the link rate. |
+| Band | 5 or 6 GHz | 2.4 GHz is info | | 2.4 GHz reaches further but is slower and more crowded. |
+| Channel congestion (other networks on the channel) | at most 3 | at most 7 | 8 or more | Networks on one channel take turns to send. |
+| Wi-Fi security | WPA2 with AES (CCMP/GCMP), WPA3 | Enhanced Open (OWE) | open, WEP, first WPA, TKIP | WEP, WPA and TKIP are broken; open networks are unencrypted. |
+| Network profile | Public or Domain; Private is info | Private on an open or weakly secured Wi-Fi | | Private makes the computer visible to others on the network. |
+| Firewall | on for every profile | | off for any profile | |
+| DNS servers | router, local device, known public resolver | an unknown public server is info | none configured | An unknown server is usually the ISP's, but malware also changes DNS. |
+| IPv6 | present | absent is info | | Everything works over IPv4. |
+| DHCP | DHCP lease of 1 hour or more | shorter lease, or a static address, is info | no IPv4 address, or 169.254.x.x | |
+| Proxy | none | any proxy is warn | | Malware and adware set proxies; companies set them on purpose. |
+| Listening ports | none open to the network | remote access (21, 22, 23, 3389, 5900, 5985, 5986) is warn; file sharing (139, 445) and other ports are info | | Remote access is a common attack target; Windows always listens on 139/445. |
+| Duplicate MAC | none | one MAC for several IP addresses | the gateway's IP shares a MAC with another IP | Extenders and virtual machines explain the first; the second is how ARP spoofing looks. |
+| Gateway MAC | same as the snapshot | changed is warn; no snapshot is info | | A changed MAC without a new router suggests spoofing. |
+
+## 8. Platform layer
+
+```
+network_health/
+  cli.py            command line, options, exit codes
+  collect.py        collects the facts in passive mode (platform independent)
+  checks.py         turns facts into results with status, why and fix (platform independent)
+  report.py         verdicts, text report, JSON
+  snapshot.py       snapshots in local-data/
+  dnsprobe.py       DNS timing over UDP (standard library)
+  bandwidth.py      bandwidth and latency under load (urllib)
+  known_hosts.py    the external servers of section 6
+  thresholds.py     the numbers of section 7
+  models.py         data classes shared by all parts
+  runner.py         the only place where a system command is started
+  platforms/
+    base.py         NetworkPlatform: the methods the checks need
+    windows.py      WindowsPlatform: the commands
+    windows_parsers.py  the parsers for their output
+```
+
+- `NetworkPlatform` (in `platforms/base.py`) has one method per fact: `ping`, `ping_dont_fragment`, `ip_configuration`, `wifi_status`, `wifi_networks`, `network_profiles`, `firewall_profiles`, `proxy_settings`, `listening_ports`, `neighbours`. Each returns objects from `models.py` or raises `Unavailable` with a kind and a reason.
+- `WindowsPlatform` implements them with commands that ship with Windows 11 (ping, netsh, arp, reg, Windows PowerShell). All of them go through the `Runner` passed to it.
+- Linux (#152) adds a `LinuxPlatform` with the same methods (for example `ip`, `ping -M do`, `nmcli` or `iw`, `ss`, `nft` or `ufw`) and an entry in `platforms/get_platform`. `collect.py`, `checks.py` and `report.py` do not change; a Linux concept that does not exist (such as the network profile) raises `Unavailable("not-applicable", ...)`.
+- On any other system the tool says it supports Windows only for now (#152) and exits with code 2.
+- Optional tools such as nmap are not used in passive mode; every check works without them.
+
+## 9. Safety rules for active scanning and router access (for #150 and #151)
+
+These rules are fixed now so the later issues build on them.
+
+Active scanning (`--active`):
+- Only with the flag, never by default, and only on the subnet of the main adapter, never on a public range.
+- Before the scan the tool prints what it will do and asks for confirmation (a `--yes` flag for scripted use).
+- Rate limited (a few packets per second per host), a small fixed port list, no exploits, no password guessing, no denial of service.
+- The user must own the network or have permission; the README says so.
+- Results with device names and MAC addresses go to `local-data/` only.
+
+Router access (`--live-router`):
+- Only with the flag. Read-only: the tool never changes a router setting.
+- The password is asked with `getpass` at run time and never stored, logged or printed; no password is ever written to a file or passed on the command line.
+- Only the router at the default gateway address, over the protocol the router offers (prefer HTTPS); certificate problems are shown, not silently ignored.
+- Router model and settings tied to the owner never leave `local-data/`.
+
+## 10. Privacy
+
+- The repository is public. No real network data (IP or MAC addresses, SSIDs, host or device names, vendors, public IP, router details tied to the owner, credentials) may be written in code, fixtures, commits, issues, pull requests or comments.
+- Snapshots (`--save`) go to `applications/network-health/local-data/`, which `.gitignore` excludes. The text and JSON reports go to the screen; if you save them, save them in `local-data/` as well.
+- Fixtures use the documentation ranges 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 and 2001:db8::/32, MAC addresses from the RFC 7042 range 00:00:5e:00:53:xx, and made-up names such as ExampleHome.
+- The tool never reads Wi-Fi passwords (`netsh wlan show profile key=clear` is not used).
+- The privacy guard `scripts/tests/test_network_health_privacy.py` runs in the required check `checks`. It scans every file under `applications/network-health/` and fails on other addresses, other MAC addresses and anything that looks like a password, key or token. Its allowlist is the list in section 6 plus the documentation and special ranges; its docstring describes the narrow exception marker.
+
+## 11. Report and options
+
+```
+python -m network_health [--skip-bandwidth] [--json] [--save]
+```
+
+- Text report: a header, the overall verdict with one sentence, one line per area (verdict, number of checks, counts of bad/warn/info), the findings ranked bad, warn, info with "Why" and "Fix", the checks that passed, the skipped checks with reasons, and "Contacted in this run" (which addresses were pinged and which servers were used, including the speed-test server).
+- `--json`: the same as one JSON object (`overall`, `areas`, `findings`, `results`, `contacted`).
+- `--save`: also writes `local-data/snapshot-YYYYMMDD-HHMMSS.json` with the report, the network identity (gateway address and SSID) and the gateway MAC.
+- Progress messages go to standard error, the report to standard output.
+- Exit code 0 when a report was printed (whatever the verdict), 2 on an unsupported system.
+- The whole run takes about a minute: 20 s of ping, a few seconds of DNS and MTU, up to about 30 s of bandwidth test, and a few seconds of PowerShell.
+
+## 12. Tests
+
+- Every parser and check is tested with recorded, made-up command output in `tests/fixtures/windows/` (English Windows, plus Swedish samples for the "not recognised" path).
+- A fake runner answers the commands; a test fails on any command it does not know. The DNS probe gets a fake socket and clock, the bandwidth test a fake opener and clock. No test opens a network connection or starts a real command, and the tests run on Linux as well.
+- A test checks that passive mode pings only the gateway and the two public targets and sends DNS queries only to the configured resolvers.
+- Run them with `scripts/check.sh applications/network-health`. CI steps for these tests are a later owner change to `ci.yml`; the privacy guard already runs in `checks` with the tests of `scripts/`.
