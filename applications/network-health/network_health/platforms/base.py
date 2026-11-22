@@ -36,6 +36,11 @@ class NetworkPlatform(ABC):
         """One ping with do-not-fragment set; True when a reply came back."""
 
     @abstractmethod
+    def ping_host(self, target: str, timeout_ms: int) -> bool:
+        """One ping (the ping sweep of --active); True when a reply came back.
+        Raises Unavailable when the ping command cannot run."""
+
+    @abstractmethod
     def ip_configuration(self) -> list[AdapterConfig]:
         """Adapters that are up, with addresses, gateways and DNS servers."""
 

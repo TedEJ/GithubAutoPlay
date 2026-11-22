@@ -102,3 +102,175 @@ def home_facts(*overrides, skip_bandwidth=False, bandwidth=fake_bandwidth,
 @pytest.fixture
 def home():
     return home_facts()
+
+
+# ---------------------------------------------------------------- real sockets are off
+
+@pytest.fixture(autouse=True)
+def no_real_sockets(monkeypatch):
+    """A test that tries to open a real connection or send a datagram fails."""
+    import socket
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("a test tried to use a real socket")
+
+    for name in ("connect", "connect_ex", "sendto", "send", "sendall"):
+        monkeypatch.setattr(socket.socket, name, refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+
+
+# ---------------------------------------------------------------- active scan helpers
+#
+# The scan only accepts a private RFC 1918 range, but the repository may not
+# contain such addresses (privacy guard). The tests therefore build them at run
+# time from the base address 10.0.0.0, which the guard allows: private_ip(10) is
+# the tenth address of that range. They are made-up and used only in memory.
+#
+# MAC addresses with a real vendor prefix are built the same way, from the
+# 6-digit prefix and a made-up suffix in the RFC 7042 style (005301 ...).
+
+import ipaddress  # noqa: E402
+import threading  # noqa: E402
+
+from network_health.devices import Device  # noqa: E402
+from network_health.models import Neighbour  # noqa: E402
+from network_health.netio import NetIO, NetIOError, ProbeResult  # noqa: E402
+from network_health.scan_target import MDNS_GROUP, SSDP_GROUP, ScanTarget  # noqa: E402
+
+PRIVATE_BASE = "10.0.0.0"
+
+
+def private_ip(offset: int, base: str = PRIVATE_BASE) -> str:
+    return str(ipaddress.ip_address(base) + offset)
+
+
+def make_target(prefix: int = 24, own: int = 10, base: str = PRIVATE_BASE) -> ScanTarget:
+    own_ip = private_ip(own, base)
+    network = ipaddress.ip_interface(f"{own_ip}/{prefix}").network
+    return ScanTarget(network, own_ip, "Wi-Fi", (own_ip,))
+
+
+def mac_with_prefix(prefix: str, last: int = 1) -> str:
+    """A MAC address with the given 6-hex-digit vendor prefix and a made-up
+    suffix, built at run time (colon separated, lower case)."""
+    digits = prefix.lower() + f"0053{last:02x}"
+    return ":".join(digits[i:i + 2] for i in range(0, 12, 2))
+
+
+def private_mac(last: int = 1) -> str:
+    """A locally administered ("private") MAC address, as phones use; built at
+    run time, with a made-up suffix."""
+    return mac_with_prefix("DAA119", last)
+
+
+def doc_mac(last: int) -> str:
+    """A MAC address of the RFC 7042 documentation range."""
+    return f"00:00:5e:00:53:{last:02x}"
+
+
+def neighbour(offset: int, mac: str, own: int = 10) -> Neighbour:
+    return Neighbour(interface_ip=private_ip(own), ip=private_ip(offset), mac=mac)
+
+
+class FakeClock:
+    """Time that only moves when a test says so (advance) or something sleeps."""
+
+    def __init__(self):
+        self.now = 1000.0
+        self._lock = threading.Lock()
+
+    def monotonic(self) -> float:
+        with self._lock:
+            return self.now
+
+    def sleep_until(self, moment: float) -> None:
+        with self._lock:
+            self.now = max(self.now, moment)
+
+    def advance(self, seconds: float) -> None:
+        with self._lock:
+            self.now += seconds
+
+
+class StubPlatform:
+    """The two things the scanner asks the platform: ping_host and neighbours."""
+
+    name = "Stub"
+
+    def __init__(self, alive=(), neighbours=(), clock=None, ping_cost=0.0, error=None):
+        self.alive = set(alive)
+        self._neighbours = list(neighbours)
+        self.clock = clock
+        self.ping_cost = ping_cost
+        self.error = error
+        self.pings: list[str] = []
+        self._lock = threading.Lock()
+
+    def ping_host(self, target, timeout_ms):
+        with self._lock:
+            self.pings.append(target)
+        if self.clock and self.ping_cost:
+            self.clock.advance(self.ping_cost)
+        if self.error:
+            raise self.error
+        return target in self.alive
+
+    def neighbours(self):
+        return list(self._neighbours)
+
+
+class FakeNetIO(NetIO):
+    """Answers from made-up data and records every call. ports maps an address
+    to {port: ProbeResult or True}; mdns and ssdp are lists of (sender, packet)."""
+
+    def __init__(self, ports=None, mdns=(), ssdp=(), clock=None, cost=0.0, mdns_error=None,
+                 multicast_cost=0.0):
+        self.ports = ports or {}
+        self.mdns = list(mdns)
+        self.ssdp = list(ssdp)
+        self.clock = clock
+        self.cost = cost
+        self.mdns_error = mdns_error
+        self.multicast_cost = multicast_cost
+        self.calls: list[tuple] = []
+        self._lock = threading.Lock()
+
+    def _answer(self, kind, ip, port):
+        with self._lock:
+            self.calls.append((kind, ip, port))
+        if self.clock and self.cost:
+            self.clock.advance(self.cost)
+        answer = self.ports.get(ip, {}).get(port)
+        if answer is None:
+            return ProbeResult(False)
+        return ProbeResult(True) if answer is True else answer
+
+    def connect(self, ip, port, timeout):
+        return self._answer("connect", ip, port)
+
+    def banner(self, ip, port, timeout, wait, max_bytes):
+        return self._answer("banner", ip, port)
+
+    def http_head(self, ip, port, timeout, wait, max_bytes):
+        return self._answer("http", ip, port)
+
+    def tls_handshake(self, ip, port, timeout):
+        return self._answer("tls", ip, port)
+
+    def multicast_query(self, group, port, payload, *, local_ip, sends, wait, max_packets):
+        with self._lock:
+            self.calls.append(("multicast", group, port))
+        if self.clock and self.multicast_cost:
+            self.clock.advance(self.multicast_cost)
+        if (group, port) == MDNS_GROUP:
+            if self.mdns_error:
+                raise NetIOError(self.mdns_error)
+            return list(self.mdns)
+        if (group, port) == SSDP_GROUP:
+            return list(self.ssdp)
+        raise AssertionError(f"unexpected group {group}:{port}")
+
+
+def make_device(offset=20, **fields) -> Device:
+    device = Device(private_ip(offset), **fields)
+    return device

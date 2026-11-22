@@ -10,6 +10,7 @@ from __future__ import annotations
 import ntpath
 import os
 
+from .. import thresholds
 from ..models import (
     AdapterConfig,
     FirewallProfile,
@@ -159,6 +160,11 @@ class WindowsPlatform(NetworkPlatform):
     def ping_dont_fragment(self, target: str, payload: int) -> bool:
         text = self._run(["ping", "-n", "1", "-w", "1000", "-f", "-l", str(payload), target],
                          "ping", timeout=15, allow_failure=True)
+        return parsers.ping_succeeded(text)
+
+    def ping_host(self, target: str, timeout_ms: int) -> bool:
+        text = self._run(["ping", "-n", "1", "-w", str(timeout_ms), target], "ping",
+                         timeout=thresholds.SCAN_MAX_OPERATION_S, allow_failure=True)
         return parsers.ping_succeeded(text)
 
     # -- configuration

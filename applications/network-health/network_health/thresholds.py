@@ -62,3 +62,49 @@ OVERLAP_24GHZ_CHANNELS = 4  # 2.4 GHz channels closer than 5 apart overlap
 
 # DHCP lease (seconds) below which the lease is called short.
 SHORT_LEASE_S = 3600
+
+# ---------------------------------------------------------------- active scan (--active)
+# Safety and politeness limits of the device scan. The reasons are in
+# network-health-design.md (section 9); change both together.
+
+# The largest subnet that is swept: a /22 has 1022 usable addresses.
+SCAN_MAX_HOSTS = 1022
+SCAN_MIN_PREFIX = 22
+# The most a scan may take, from the first ping to the last port check. No new
+# operation is started when less than SCAN_MAX_OPERATION_S is left, so the
+# scan ends within this limit.
+SCAN_TIME_LIMIT_S = 300.0
+# No single operation (one ping command, one port check) takes longer.
+SCAN_MAX_OPERATION_S = 6.0
+# The ping sweep may use at most this much of the limit.
+SCAN_SWEEP_BUDGET_S = 120.0
+
+# Parallelism: pings at the same time, and devices checked at the same time
+# (the ports of one device are checked one after the other).
+SWEEP_WORKERS = 32
+PORT_WORKERS = 16
+# Pause between starts of two operations (all workers together): at most 50
+# pings per second and 50 port checks per second.
+SWEEP_INTERVAL_S = 0.02
+PORT_INTERVAL_S = 0.02
+# Ping sweep: one echo request per address, this long to wait for the reply.
+SWEEP_PING_TIMEOUT_MS = 500
+
+# Port checks: time to connect, time to wait for a banner, for an HTTP answer.
+CONNECT_TIMEOUT_S = 1.0
+BANNER_WAIT_S = 1.0
+HTTP_WAIT_S = 2.0
+TLS_TIMEOUT_S = 2.0
+# Never read more than this from a device.
+BANNER_MAX_BYTES = 256
+HTTP_MAX_BYTES = 2048
+
+# mDNS and SSDP: queries sent to the multicast group, this many times, this
+# long to listen after each.
+MULTICAST_SENDS = 2
+MULTICAST_WAIT_S = 2.0
+MULTICAST_MAX_PACKETS = 512
+
+# Text taken from the network is cut to these lengths before it is shown.
+MAX_NAME_CHARS = 64
+MAX_BANNER_CHARS = 120

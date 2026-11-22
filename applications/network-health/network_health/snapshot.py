@@ -10,8 +10,9 @@ DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "local-data"
 PREFIX = "snapshot-"
 
 
-def load_latest(data_dir: Path = DEFAULT_DATA_DIR) -> dict | None:
-    """The newest snapshot, or None. A broken file is ignored."""
+def load_latest(data_dir: Path = DEFAULT_DATA_DIR, accept=None) -> dict | None:
+    """The newest snapshot, or None. A broken file is ignored. With accept (a
+    function of the snapshot), the newest snapshot it returns True for."""
     data_dir = Path(data_dir)
     if not data_dir.is_dir():
         return None
@@ -20,7 +21,7 @@ def load_latest(data_dir: Path = DEFAULT_DATA_DIR) -> dict | None:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if isinstance(data, dict):
+        if isinstance(data, dict) and (accept is None or accept(data)):
             return data
     return None
 
