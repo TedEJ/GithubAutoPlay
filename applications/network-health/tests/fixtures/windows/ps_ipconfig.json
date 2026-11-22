@@ -1,0 +1,47 @@
+[
+    {
+        "InterfaceAlias":  "Wi-Fi",
+        "InterfaceIndex":  12,
+        "Metric":  35,
+        "IPv4":  [
+                     {
+                         "Address":  "192.0.2.10",
+                         "PrefixLength":  24,
+                         "PrefixOrigin":  "Dhcp",
+                         "ValidLifetimeSeconds":  84211
+                     }
+                 ],
+        "IPv6Global":  [
+                           "2001:db8:1::10"
+                       ],
+        "IPv4Gateway":  [
+                            "192.0.2.1"
+                        ],
+        "IPv6Gateway":  [
+                            "fe80::1"
+                        ],
+        "DnsServers":  [
+                           "192.0.2.1",
+                           "fec0:0:0:ffff::1",
+                           "fec0:0:0:ffff::2",
+                           "fec0:0:0:ffff::3"
+                       ]
+    },
+    {
+        "InterfaceAlias":  "vEthernet (Default Switch)",
+        "InterfaceIndex":  27,
+        "Metric":  5000,
+        "IPv4":  [
+                     {
+                         "Address":  "198.51.100.1",
+                         "PrefixLength":  28,
+                         "PrefixOrigin":  "Manual",
+                         "ValidLifetimeSeconds":  922337203685
+                     }
+                 ],
+        "IPv6Global":  [],
+        "IPv4Gateway":  [],
+        "IPv6Gateway":  [],
+        "DnsServers":  []
+    }
+]

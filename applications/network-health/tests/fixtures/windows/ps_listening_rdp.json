@@ -1,0 +1,20 @@
+[
+    {
+        "LocalAddress":  "0.0.0.0",
+        "LocalPort":  3389,
+        "ProcessId":  1400,
+        "ProcessName":  "svchost"
+    },
+    {
+        "LocalAddress":  "0.0.0.0",
+        "LocalPort":  8080,
+        "ProcessId":  6200,
+        "ProcessName":  "examplesrv"
+    },
+    {
+        "LocalAddress":  "127.0.0.1",
+        "LocalPort":  9100,
+        "ProcessId":  5120,
+        "ProcessName":  null
+    }
+]

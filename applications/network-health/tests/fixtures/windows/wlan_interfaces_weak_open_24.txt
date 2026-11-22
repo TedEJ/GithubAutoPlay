@@ -1,0 +1,22 @@
+
+There is 1 interface on the system:
+
+    Name                   : Wi-Fi
+    Description            : Example Wireless Network Adapter
+    GUID                   : 00000000-0000-0000-0000-000000000001
+    Physical address       : 00:00:5e:00:53:10
+    State                  : connected
+    SSID                   : ExampleCafe
+    BSSID                  : 00:00:5e:00:53:41
+    Network type           : Infrastructure
+    Radio type             : 802.11n
+    Authentication         : Open
+    Cipher                 : None
+    Connection mode        : Manual connection
+    Channel                : 6
+    Receive rate (Mbps)    : 26
+    Transmit rate (Mbps)   : 19.5
+    Signal                 : 38%
+    Profile                : ExampleCafe
+
+    Hosted network status  : Not available

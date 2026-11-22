@@ -1,0 +1,38 @@
+[
+    {
+        "LocalAddress":  "::",
+        "LocalPort":  135,
+        "ProcessId":  1180,
+        "ProcessName":  "svchost"
+    },
+    {
+        "LocalAddress":  "0.0.0.0",
+        "LocalPort":  135,
+        "ProcessId":  1180,
+        "ProcessName":  "svchost"
+    },
+    {
+        "LocalAddress":  "192.0.2.10",
+        "LocalPort":  139,
+        "ProcessId":  4,
+        "ProcessName":  "System"
+    },
+    {
+        "LocalAddress":  "0.0.0.0",
+        "LocalPort":  445,
+        "ProcessId":  4,
+        "ProcessName":  "System"
+    },
+    {
+        "LocalAddress":  "127.0.0.1",
+        "LocalPort":  9100,
+        "ProcessId":  5120,
+        "ProcessName":  "exampled"
+    },
+    {
+        "LocalAddress":  "::1",
+        "LocalPort":  9101,
+        "ProcessId":  5120,
+        "ProcessName":  "exampled"
+    }
+]

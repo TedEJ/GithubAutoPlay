@@ -1,0 +1,9 @@
+
+Skickar ping-signal till 192.0.2.1 med 32 byte data:
+Svar från 192.0.2.1: byte=32 tid=3ms TTL=64
+Svar från 192.0.2.1: byte=32 tid<1ms TTL=64
+Begäran gjorde time out.
+Svar från 192.0.2.1: byte=32 tid=4ms TTL=64
+
+Ping-statistik för 192.0.2.1:
+    Paket: Skickade = 4, Mottagna = 3, Förlorade = 1 (25 % förlust),

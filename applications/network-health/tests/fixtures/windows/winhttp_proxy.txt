@@ -1,0 +1,6 @@
+
+Current WinHTTP proxy settings:
+
+    Proxy Server(s) :  proxy.example.invalid:3128
+    Bypass List     :  (none)
+

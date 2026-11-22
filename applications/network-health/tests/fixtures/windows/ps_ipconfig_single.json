@@ -1,0 +1,18 @@
+{
+    "InterfaceAlias":  "Ethernet",
+    "InterfaceIndex":  7,
+    "Metric":  25,
+    "IPv4":  {
+                 "Address":  "203.0.113.25",
+                 "PrefixLength":  24,
+                 "PrefixOrigin":  "Manual",
+                 "ValidLifetimeSeconds":  922337203685
+             },
+    "IPv6Global":  null,
+    "IPv4Gateway":  "203.0.113.1",
+    "IPv6Gateway":  null,
+    "DnsServers":  [
+                       "198.51.100.53",
+                       "9.9.9.9"
+                   ]
+}
