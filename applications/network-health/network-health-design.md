@@ -1,6 +1,6 @@
 # network-health: design
 
-Issue #149. This document describes what the tool does, how it decides a verdict, and the rules it keeps. The thresholds in "Verdict rules" are in `network_health/thresholds.py` as well; change both together.
+Issues #149 (passive mode) and #150 (active mode, section 13). This document describes what the tool does, how it decides a verdict, and the rules it keeps. The thresholds in "Verdict rules" are in `network_health/thresholds.py` as well; change both together.
 
 ## 1. Goal
 
@@ -19,10 +19,10 @@ network-health is not a traffic analyser. #136 analyses traffic logs; the two to
 | Mode | Flag | What it may do | Issue |
 |------|------|----------------|-------|
 | Passive | (default) | Read what the computer already knows; ping the default gateway and two public addresses; send DNS queries to the configured resolvers; ping with do-not-fragment to one public address; run the bandwidth test against one public server. | #149 (this one) |
-| Active | `--active` | Scan the local network (for example ping sweep, port checks of devices). | #150 |
+| Active | `--active` | Everything passive mode does, and in addition scan the local subnet: ping sweep, mDNS and SSDP queries, the ARP table, and a TCP check of 14 ports on every device found, with hazard rules for what is found. Only after confirmation, only a private range this computer is connected to. Section 13. | #150 |
 | Live router | `--live-router` | Log in to the router to read its settings. | #151 |
 
-Only passive mode exists after #149. The two other flags are not accepted yet; they are added by their own issues, with the safety rules in section 9.
+Passive mode (#149) and active mode (#150) exist. `--live-router` is not accepted yet; it is added by its own issue, with the safety rules in section 9.
 
 ## 3. What is checked (passive mode)
 
@@ -72,7 +72,7 @@ PowerShell is called through the runner as `powershell -NoProfile -NonInteractiv
 | Gateway MAC changed since the last snapshot | the gateway's MAC now compared with the newest snapshot in `local-data/` for the same network (same gateway address and SSID) |
 
 ### Not checked in passive mode
-- Other devices on the network (open ports, services, vendors): that is active mode (#150).
+- Other devices on the network (open ports, services, vendors): that is active mode (`--active`, section 13).
 - Router settings (UPnP, WPS, firmware, remote admin): that is `--live-router` (#151).
 - UDP listening ports (Windows has many harmless ones), IPv6 neighbours, and the firewall rules for single programs.
 - Whether the firewall rules for file sharing are on: the file sharing ports are reported as info with an explanation.
@@ -166,6 +166,17 @@ Nothing is sent to any other device on the local network.
 network_health/
   cli.py            command line, options, exit codes
   collect.py        collects the facts in passive mode (platform independent)
+  scan_target.py    what --active may scan, and the guard for every address (section 13)
+  scanner.py        the device scan: sweep, discovery, port checks, limits (section 13)
+  netio.py          the one place where the device scan opens a socket (section 13)
+  discovery.py      mDNS and SSDP messages: build the query, read the answers
+  services.py       the port list and how a banner, HTTP head or TLS handshake is read
+  oui.py, oui_data.py  the vendor prefixes (generated) and the kind guess
+tools/
+  build_oui_data.py  generates oui_data.py from a local copy of the IEEE registry (section 13.5)
+  device_checks.py  the hazard rules for devices (section 13)
+  devices.py        data classes of the device scan
+  safe_text.py      cleans text that came from the network before it is shown
   checks.py         turns facts into results with status, why and fix (platform independent)
   report.py         verdicts, text report, JSON
   snapshot.py       snapshots in local-data/
@@ -181,20 +192,20 @@ network_health/
     windows_parsers.py  the parsers for their output
 ```
 
-- `NetworkPlatform` (in `platforms/base.py`) has one method per fact: `ping`, `ping_dont_fragment`, `ip_configuration`, `wifi_status`, `wifi_networks`, `network_profiles`, `firewall_profiles`, `proxy_settings`, `listening_ports`, `neighbours`. Each returns objects from `models.py` or raises `Unavailable` with a kind and a reason.
+- `NetworkPlatform` (in `platforms/base.py`) has one method per fact: `ping`, `ping_dont_fragment`, `ping_host` (one ping, for the sweep of `--active`), `ip_configuration`, `wifi_status`, `wifi_networks`, `network_profiles`, `firewall_profiles`, `proxy_settings`, `listening_ports`, `neighbours`. Each returns objects from `models.py` or raises `Unavailable` with a kind and a reason.
 - `WindowsPlatform` implements them with commands that ship with Windows 11 (ping, netsh, arp, reg, Windows PowerShell). All of them go through the `Runner` passed to it, started by their full path under `%SystemRoot%\System32` (`ping.exe`, `netsh.exe`, `arp.exe`, `reg.exe`, `WindowsPowerShell\v1.0\powershell.exe`), so a program of the same name earlier in `PATH` is not run instead. Without `SystemRoot` the bare name is used.
 - Linux (#152) adds a `LinuxPlatform` with the same methods (for example `ip`, `ping -M do`, `nmcli` or `iw`, `ss`, `nft` or `ufw`) and an entry in `platforms/get_platform`. `collect.py`, `checks.py` and `report.py` do not change; a Linux concept that does not exist (such as the network profile) raises `Unavailable("not-applicable", ...)`.
 - On any other system the tool says it supports Windows only for now (#152) and exits with code 2.
-- Optional tools such as nmap are not used in passive mode; every check works without them.
+- Optional tools such as nmap are not used, in passive or in active mode (section 13); every check works without them.
 
 ## 9. Safety rules for active scanning and router access (for #150 and #151)
 
 These rules are fixed now so the later issues build on them.
 
-Active scanning (`--active`):
+Active scanning (`--active`), implemented by #150 as described in section 13:
 - Only with the flag, never by default, and only on the subnet of the main adapter, never on a public range.
 - Before the scan the tool prints what it will do and asks for confirmation (a `--yes` flag for scripted use).
-- Rate limited (a few packets per second per host), a small fixed port list, no exploits, no password guessing, no denial of service.
+- Rate limited (at most 50 pings and 50 port checks per second, one port of a device at a time), a small fixed port list, no exploits, no password guessing, no denial of service.
 - The user must own the network or have permission; the README says so.
 - Results with device names and MAC addresses go to `local-data/` only.
 
@@ -208,7 +219,7 @@ Router access (`--live-router`):
 
 - The repository is public. No real network data (IP or MAC addresses, SSIDs, host or device names, vendors, public IP, router details tied to the owner, credentials) may be written in code, fixtures, commits, issues, pull requests or comments.
 - Snapshots (`--save`) go to `applications/network-health/local-data/`, which `.gitignore` excludes. The text and JSON reports go to the screen; if you save them, save them in `local-data/` as well.
-- Fixtures use the documentation ranges 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 and 2001:db8::/32, MAC addresses from the RFC 7042 range 00:00:5e:00:53:xx, and made-up names such as ExampleHome.
+- Fixtures use the documentation ranges 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 and 2001:db8::/32, MAC addresses from the RFC 7042 range 00:00:5e:00:53:xx, and made-up names such as ExampleHome. The one exception is the tests of `--active`: the scan refuses documentation ranges (they are not private), so those tests build addresses in a private range at run time, in memory, from the allowed base 10.0.0.0 (`conftest.private_ip(10)`), and MAC addresses with a vendor prefix from the 6-digit prefix plus a made-up suffix (`conftest.mac_with_prefix`). No such address is written in a file, so the guard needs no new rule. The bundled vendor list holds 3-byte prefixes only (the guard allows them).
 - Real SSIDs, host names and device vendors cannot be told apart from made-up ones automatically. The privacy guard does not detect them; they rely on review of every change in this folder.
 - The tool never reads Wi-Fi passwords (`netsh wlan show profile key=clear` is not used).
 - The privacy guard `scripts/tests/test_network_health_privacy.py` runs in the required check `checks`. It scans every file under `applications/network-health/` that git tracks or would add (`git ls-files -co --exclude-standard`, so ignored files such as `local-data/` are left out; without git it walks the folder), reads UTF-8 and UTF-16 files (what Windows PowerShell 5.1 writes with `>`), and fails on other addresses (also with leading zeros), other MAC addresses (also as 12 bare hex digits) and anything that looks like a password, key or token, quoted or as an unquoted `NAME=value` line. Its allowlist is the list in section 6 plus the documentation and special ranges; its docstring describes the exact rules and the narrow exception marker.
@@ -216,19 +227,119 @@ Router access (`--live-router`):
 ## 11. Report and options
 
 ```
-python -m network_health [--skip-bandwidth] [--json] [--save]
+python -m network_health [--skip-bandwidth] [--json] [--save] [--active [--yes]]
 ```
 
 - Text report: a header, the overall verdict with one sentence, one line per area (verdict, number of checks, counts of bad/warn/info), the findings ranked bad, warn, info with "Why" and "Fix", the checks that passed, the skipped checks with reasons, and "Contacted in this run" (which addresses were pinged and which servers were used, including the speed-test server).
 - `--json`: the same as one JSON object (`overall`, `areas`, `findings`, `results`, `contacted`).
 - `--save`: also writes `local-data/snapshot-YYYYMMDD-HHMMSS.json` with the report, the network identity (gateway address and SSID) and the gateway MAC.
 - Progress messages go to standard error, the report to standard output.
-- Exit code 0 when a report was printed (whatever the verdict), 2 on an unsupported system.
-- The whole run takes about a minute: 20 s of ping, a few seconds of DNS and MTU, up to about 30 s of bandwidth test, and a few seconds of PowerShell.
+- Exit code 0 when a report was printed (whatever the verdict), 2 on an unsupported system, 3 when `--active` was refused or not confirmed (nothing was sent).
+- The whole run takes about a minute: 20 s of ping, a few seconds of DNS and MTU, up to about 30 s of bandwidth test, and a few seconds of PowerShell. `--active` adds the device scan (section 13): about one to two minutes on a /24 at home, never more than 5 minutes.
 
 ## 12. Tests
 
 - Every parser and check is tested with recorded, made-up command output in `tests/fixtures/windows/` (English Windows, plus Swedish samples for the "not recognised" path).
 - A fake runner answers the commands; a test fails on any command it does not know. The DNS probe gets a fake socket and clock, the bandwidth test a fake opener and clock. No test opens a network connection or starts a real command, and the tests run on Linux as well.
 - A test checks that passive mode pings only the gateway and the two public targets and sends DNS queries only to the configured resolvers.
+- The tests of `--active` replace the network layer (`netio.NetIO`) with a fake that answers from made-up data and records every call, the ping and ARP table with a stub platform, and the clock with a fake clock. `tests/conftest.py` makes any real socket (`connect`, `sendto`, `create_connection`) fail the test, so a test cannot reach the network by mistake. `test_netio.py` tests the real network layer against fake sockets. Section 13 lists what is checked.
 - Run them with `scripts/check.sh applications/network-health`. CI steps for these tests are a later owner change to `ci.yml`; the privacy guard already runs in `checks` with the tests of `scripts/`.
+
+## 13. Active mode (`--active`, issue #150)
+
+`--active` runs everything of passive mode and then scans the local network. It is never the default. The code is in `scan_target.py` (the rules), `scanner.py` (the steps and limits), `netio.py` (all sockets), `discovery.py`, `services.py`, `oui.py`, `device_checks.py` and `report.py`.
+
+### 13.1 What may be scanned
+
+The target is never typed by the user and there is no option to choose another range. It is worked out from the IPv4 address and prefix length of this computer's main adapter (the one with an IPv4 default gateway and the lowest metric; other adapters, such as virtual switches, are not scanned) and accepted only when all of this holds:
+
+| Rule | What happens when it fails |
+|------|----------------------------|
+| The subnet lies inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16 (RFC 1918). | Refused: "it is not a private range" (public and documentation ranges). Loopback (127.0.0.0/8), self-assigned 169.254.0.0/16 (no DHCP answer) and multicast get their own wording. |
+| It is not the shared range 100.64.0.0/10 (carrier-grade NAT, RFC 6598). | Refused: it is the provider's range, not the user's own network. |
+| It is directly attached: the subnet is computed from this computer's own address, so this computer is in it. The main adapter must have an IPv4 default gateway (the fallback of the passive checks to any adapter is not used for a scan). | Refused when the adapter has no IPv4 address, no IPv4 default gateway, or the configuration cannot be read. |
+| It has at most 1022 usable addresses (a /22 or smaller) and at least one address besides this computer's. | Refused with: "A home network is usually a /24 (254 addresses). Use a smaller subnet on the router, or connect to a smaller network. The tool has no option to choose another range." |
+
+IPv6 is never swept: a /64 has 2^64 addresses. Devices are found over IPv4 (ping sweep, ARP table, and mDNS and SSDP answers that arrive over IPv4). IPv6 neighbours are not read and no IPv6 port is checked; a device that is reachable over IPv6 only is not listed, and the report says so. (Reading the IPv6 neighbour table and checking the on-link neighbours found that way is a possible follow-up.)
+
+`ScanGuard` repeats the rules for every single destination, right before it is used: a unicast address must be a usable address of the confirmed subnet (not the network or broadcast address, not another subnet), a multicast destination must be exactly 224.0.0.251:5353 (mDNS) or 239.255.255.250:1900 (SSDP), and the multicast query leaves from this computer's own address in the subnet. `ScanGuard` cannot even be created for a public, CGNAT or too large subnet. The scan stops with an error if any code asks it to send elsewhere. Answers that come from an address outside the subnet are ignored and counted in a note, so a device cannot make the tool probe another address by answering from it. After the confirmation the passive checks read the network configuration again; when the network is not the confirmed one any more, the scan is not run.
+
+### 13.2 Confirmation
+
+Before anything is sent the tool prints, on standard error, the subnet and the number of addresses, what the scan does, the limits, and "WARNING: Only scan networks you own or have permission to test. Scanning a network without permission can be illegal." Then it asks `Scan this network? Type y or yes to continue [y/N]`. Anything other than `y` or `yes` (also an empty line or end of input) aborts with exit code 3 and nothing sent. `--yes` skips the question, but the description is still printed. When standard input is not a terminal and `--yes` is not given, the tool aborts with a message instead of waiting. Refused scans also exit with 3.
+
+### 13.3 What is sent, in full
+
+1. **Ping sweep:** one system `ping -n 1 -w 500 <address>` for every usable address of the subnet except this computer's, through the platform layer and the Runner (no raw sockets, no administrator rights).
+2. **mDNS and SSDP:** one UDP datagram each, sent twice, to the multicast groups on the local link (time-to-live 1, so it does not pass the router): an mDNS query for 11 service types (`_services._dns-sd._udp`, `_workstation`, `_http`, `_ipp`, `_printer`, `_airplay`, `_googlecast`, `_hap`, `_smb`, `_ssh`, `_device-info`) to 224.0.0.251:5353, and an SSDP `M-SEARCH` (`ST: ssdp:all`, `MX: 1`) to 239.255.255.250:1900. The tool listens for 2 seconds after each send. The `LOCATION` address in an SSDP answer is not followed.
+3. **ARP table:** `arp -a` once, after the sweep, so devices that ignore ping but answer ARP are found too.
+4. **Port checks** on every device found: a TCP connect to each port below, one port of a device at a time. Nothing else is sent to a device except what the third column says.
+
+| Port | Service | What is done after a connection is accepted | Why it matters |
+|------|---------|---------------------------------------------|----------------|
+| 21 | FTP | Nothing is sent; waits up to 1 s for the banner, reads at most 256 bytes. | Files and passwords without encryption. |
+| 22 | SSH | The same. | Remote login (encrypted). |
+| 23 | Telnet | The same; the telnet option bytes are removed. | Remote login without encryption. |
+| 80 | HTTP | One `HEAD / HTTP/1.0` request (no cookie, no login), reads the answer head, at most 2048 bytes, 2 s. | Web interface without encryption. |
+| 443 | HTTPS | A TLS handshake without checking the certificate (home devices use self-signed ones); nothing is sent after it, no request, no credentials. Only to learn that HTTPS is offered. | Web interface with encryption. |
+| 445 | SMB | Connect only. | Windows file sharing. |
+| 554 | RTSP | Connect only. | Camera video stream. |
+| 1900 | UPnP (TCP) | Connect only. | UPnP (the main UPnP traffic is UDP, answered in step 2). |
+| 3389 | RDP | Connect only. | Windows remote desktop. |
+| 5000 | HTTP | One `HEAD /` as for port 80. | NAS web interfaces, UPnP descriptions. |
+| 5900 | VNC | The same as port 21: waits for the banner. | Remote desktop. |
+| 7547 | TR-069 | Connect only. | The provider's router management. |
+| 8080 | HTTP | One `HEAD /` as for port 80. | Web interface on another port. |
+| 8443 | HTTPS | A TLS handshake as for port 443. | Web interface with encryption on another port. |
+
+The list is `services.PORT_PLAN`. No login, no password guessing, no exploit, no UDP flood, nothing that changes a device, no retries. Text from the network (names, banners, Server headers) is cleaned before it is stored or printed: control characters, including the escape character of terminal commands, are replaced and the length is cut (`safe_text.py`).
+
+### 13.4 Limits and time
+
+| Limit | Value |
+|-------|-------|
+| Subnet size | at most 1022 addresses (a /22) |
+| Time limit for the whole device scan | 300 seconds (5 minutes). No new operation is started when less than 6 seconds (the longest single operation) are left, checked before and after the rate-limit wait of every operation, and the ARP table is not read when the deadline has passed, so the scan ends within the limit; the result is then marked incomplete and a warning says which part was cut short. |
+| Share of that for the ping sweep | at most 120 seconds |
+| Pings at the same time | 32 |
+| Devices checked at the same time | 16 (the ports of one device one after the other) |
+| Rate | operations of all workers start at least 0.02 s apart: at most 50 pings and at most 50 port checks per second |
+| One ping | waits 500 ms for the reply; the command is stopped after 6 s |
+| One port check | connect time-out 1 s; banner wait 1 s; HTTP wait 2 s; TLS time-out 2 s |
+| mDNS and SSDP | sent 2 times, 2 s of listening after each, at most 512 answers |
+
+Expected time on a /24 at home: ping sweep 10 to 30 s (an address that does not answer can take about 3 s while Windows asks for its ARP answer, 32 at a time), mDNS and SSDP 4 s, port checks a few seconds per device (a closed port answers at once; a filtered port takes 1 s; 16 devices in parallel). Typically one to two minutes in all. The test `test_full_slash_24_scan_ends_within_the_time_limit` runs a full /24 with 60 devices through the fake layer and a fake clock, charging the slowest answers a network can give (every dead address 3 s, every port filtered, 2 s per port check); it ends after about 137 simulated seconds, and the test requires at most 300. Two more tests cut the sweep and the port checks short with one worker, to show that the limit is enforced and the scan is marked incomplete. The time limit applies to the device scan; the passive checks before it (about a minute) are not part of it.
+
+### 13.5 Names, vendors and kinds
+
+- **Name:** only from mDNS, and only from records about the sending device itself (its own A record, then its SRV host name, then the service instance name). No reverse DNS lookup is made, because Windows may use LLMNR or NetBIOS for that, which sends multicast and broadcast.
+- **Vendor:** from the first 3 bytes of the MAC address (the OUI). The list `network_health/oui_data.py` is **generated** from the public IEEE registry by `tools/build_oui_data.py`: every 24-bit prefix whose registry vendor name matches a pattern of the mapping in that script (display name, kind of device, case-insensitive patterns for the makers found on home networks: phones and computers, PC network chips, routers and provider boxes, consoles, TVs, printers, cameras, NAS, smart-home devices, boards and virtual machines) is written, sorted, so the same registry always gives the same file. At the time of writing that is about 12,000 prefixes of 94 vendors (about 98 kB). Only 24-bit prefixes are used; the 28-bit and 36-bit blocks of the registry are shared between small companies and ignored. The file holds prefixes only, never full MAC addresses, so the privacy guard allows it unchanged. To rebuild it, download the registry yourself into `local-data/` (the IEEE `oui.txt` from https://standards-oui.ieee.org/oui/oui.txt, or the Wireshark `manuf` file from https://www.wireshark.org/download/automated/data/manuf.gz, unpacked; both formats are read; git ignores `local-data/` and the registry must never be committed) and run `python tools/build_oui_data.py local-data/<file>` from `applications/network-health`. To add a maker, add an entry to the mapping and run the script again. **A MAC address with the "locally administered" bit set is a private (random) address (phones and computers use these); it never gets a vendor** and is marked as a private MAC address. A vendor says who made the network chip, not what the device is, so the report calls every vendor-based type a guess ("probably"). For a maker with several kinds of product the most likely or a neutral kind is used (for example "a computer or a built-in network card" for Intel, Realtek and similar, "a computer or a printer" for HP).
+- **Kind** (probably a printer, camera, router, NAS, game console, media player, smart-home device, computer, phone ...): from the strongest hint: the default gateway is a router; then a word in the name (nas, printer, cam ...); then the mDNS service types (`_ipp` is a printer); then words in the Server header (SSDP or HTTP); then the vendor.
+- **Known file server** (for the SMB rule): a device whose kind is "nas", that is, a NAS maker's vendor prefix (Synology, QNAP), a name with nas, diskstation, storage, fileserver, mycloud, truenas and the like, or a Server header that says so. This computer is not scanned, so its own file sharing is judged by the passive check "Listening ports", not here.
+- **nmap** is not used. Everything works without it, and one code path is easier to keep safe.
+
+### 13.6 Hazard rules
+
+Each rule gives one result in the area **Devices** with a status, a "Why" and a "Fix", and marks the devices it names in the Devices table. When nothing matches, the rule shows as a passed check.
+
+| Rule (result id) | Status | Applies when | Why it matters (short) |
+|------------------|--------|--------------|------------------------|
+| Telnet open (`dev.telnet`) | bad | port 23 accepts a connection | The login is in plain text and Mirai-type malware takes over devices with default passwords. |
+| FTP open (`dev.ftp`) | warn | port 21 open | Passwords and files without encryption. |
+| SMB on a device that is not a known file server (`dev.smb`) | warn | port 445 open and the device is not a known file server (13.5) | Shares and a spreading route for ransomware and worms. |
+| Remote desktop or VNC open (`dev.remote`) | warn | port 3389 or 5900 open | Full control for anyone with the password; common target. |
+| Admin page on plain HTTP (`dev.http_admin`) | warn; info when HTTPS is offered as well | a router (the gateway), camera, NAS, printer, or any page that asks for a login (WWW-Authenticate) answers HTTP on 80, 5000 or 8080 without redirecting to https:// | The admin password travels unencrypted. |
+| UPnP answering (`dev.upnp`) | warn when the router answers; otherwise info | a device answers the SSDP search | UPnP lets programs open router ports without a password; other devices announce themselves. |
+| TR-069 reachable (`dev.tr069`) | warn | port 7547 open | The provider's management port, reachable from the whole LAN. |
+| Unknown devices (`dev.unknown`) | info | no name from mDNS and no vendor in the list (the gateway is left out) | May be a guest or something that should not be there. The list is short, so a real device can be missing; private MAC addresses are named. |
+| New devices (`dev.new`) | warn; info when there is no earlier scan | the MAC address (or the IP address when there is none) is not in the newest snapshot of the same network that holds devices | A new phone of yours, or someone who should not be on the network. |
+| Scan cut short (`dev.incomplete`) | warn | the time limit stopped the sweep or the port checks | The list may be incomplete. |
+
+Also, one result "Devices found" (good, or info when none were found, with the usual reasons: guest network, AP isolation, firewall), and an info result for each note of the scan (for example the ping command was missing, mDNS could not be sent). Pings that could not run (for example the command timed out) are counted apart from addresses skipped because of the time limit; only the second makes the scan "cut short", the first gives a note. The status of the area is worked out as in section 5: bad if any is bad, else warn, and so on; the area is part of the report and of the overall verdict only when `--active` ran.
+
+### 13.7 Report, JSON and snapshots
+
+- The text report gets a **Devices** section after the findings: a table with IP, MAC, name, vendor (with "probably <kind>"), open ports (with service names) and hazards, and a note that the vendor and type are guesses and that only IPv4 is scanned. The findings are in the normal ranked list, in the area Devices.
+- `--json` adds `"mode": "active"`, `"scan"` (subnet, adapter, counts, ports, complete, what was cut short, notes) and `"devices"` (the same fields as the table plus banners, Server headers and the rule ids in `hazards`).
+- `--save` writes the same into the snapshot in `local-data/`. The next `--active` run compares with the newest snapshot of the same subnet that holds devices, by MAC address. Snapshots stay in the git-ignored `local-data/`; the report goes to the screen.
+- "Contacted in this run" names the subnet and the two multicast groups.

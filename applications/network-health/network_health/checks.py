@@ -30,6 +30,9 @@ WIFI = "Wi-Fi"
 CONFIGURATION = "Configuration"
 LOCAL_NETWORK = "Local network"
 AREAS = (PERFORMANCE, WIFI, CONFIGURATION, LOCAL_NETWORK)
+# The area of the device scan (--active). It is part of the report only when
+# the scan ran, so the passive report keeps its four areas.
+DEVICES = "Devices"
 
 
 @dataclass
