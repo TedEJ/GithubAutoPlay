@@ -292,3 +292,24 @@ def test_defaults_match_the_design_document_numbers():
     assert limits.sweep_workers == 32 and limits.port_workers == 16
     assert limits.connect_timeout_s == 1.0 and limits.multicast_sends == 2
     assert thresholds.SCAN_MAX_HOSTS == 1022 and thresholds.SCAN_MIN_PREFIX == 22
+
+
+def test_a_refusal_inside_the_network_layer_stops_the_scan():
+    import pytest
+    from network_health.scan_target import ScanRefused
+
+    class Refusing(FakeNetIO):
+        def multicast_query(self, *args, **kwargs):
+            raise ScanRefused("outside")
+
+    with pytest.raises(ScanRefused):
+        run(StubPlatform(alive=[private_ip(20)]), Refusing())
+
+
+def test_an_unexpected_error_in_a_multicast_query_is_a_note():
+    class Broken(FakeNetIO):
+        def multicast_query(self, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    scan = run(StubPlatform(alive=[private_ip(20)]), Broken())
+    assert any("RuntimeError: boom" in n for n in scan.notes)

@@ -364,3 +364,12 @@ def test_scan_progress_goes_to_stderr_and_the_prompt_never_pollutes_json(tmp_pat
     json.loads(text)                               # pure JSON on stdout
     assert "Ping sweep of" in stderr and "Checking 14 ports" in stderr
     assert "[y/N]" in stderr
+
+
+def test_windows_ping_host_runs_one_system_ping_by_its_full_path():
+    target = private_ip(20)
+    runner = FakeRunner([("-n 1 -w 500", ping_answer({target}))])
+    platform = WindowsPlatform(runner, environ={"SystemRoot": "C:\Windows"})
+    assert platform.ping_host(target, 500) is True
+    assert platform.ping_host(private_ip(21), 500) is False
+    assert runner.calls[0] == ("C:\Windows\System32\ping.exe", "-n", "1", "-w", "500", target)

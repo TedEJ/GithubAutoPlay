@@ -35,7 +35,7 @@ from .devices import Device, DeviceScan
 from .models import Unavailable
 from .netio import NetIO, NetIOError, ProbeResult
 from .safe_text import clean_text
-from .scan_target import MDNS_GROUP, SSDP_GROUP, ScanGuard, ScanTarget
+from .scan_target import MDNS_GROUP, SSDP_GROUP, ScanGuard, ScanRefused, ScanTarget
 
 
 class RealClock:
@@ -205,6 +205,7 @@ def _discover(guard, io, target, limits, result):
     """mDNS and SSDP in parallel: {ip: MdnsAnswer}, {ip: SsdpAnswer}."""
     out: dict[str, list] = {"mdns": [], "ssdp": []}
     problems: dict[str, str] = {}
+    refused: list[ScanRefused] = []
 
     def ask(key: str, group, payload: bytes) -> None:
         try:
@@ -214,6 +215,10 @@ def _discover(guard, io, target, limits, result):
                 max_packets=thresholds.MULTICAST_MAX_PACKETS)
         except NetIOError as exc:
             problems[key] = str(exc)
+        except ScanRefused as exc:      # a bug: re-raised below, in the main thread
+            refused.append(exc)
+        except Exception as exc:        # never crash on one query
+            problems[key] = f"{type(exc).__name__}: {exc}"
 
     threads = [
         threading.Thread(target=ask, args=("mdns", MDNS_GROUP, discovery.build_mdns_query())),
@@ -223,6 +228,8 @@ def _discover(guard, io, target, limits, result):
         thread.start()
     for thread in threads:
         thread.join()
+    if refused:
+        raise refused[0]
     for key, label in (("mdns", "mDNS"), ("ssdp", "SSDP")):
         if key in problems:
             result.notes.append(f"The {label} query could not be sent: {problems[key]}")
