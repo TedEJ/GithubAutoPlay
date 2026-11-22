@@ -13,3 +13,6 @@ ENV/
 .idea/
 .vscode/
 .DS_Store
+
+# Real network data from network-health (snapshots, saved reports). Never commit.
+applications/network-health/local-data/

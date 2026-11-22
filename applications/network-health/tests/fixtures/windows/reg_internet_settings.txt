@@ -1,0 +1,12 @@
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
+    User Agent    REG_SZ    Mozilla/4.0 (compatible; MSIE 8.0; Win32)
+    IE5_UA_Backup_Flag    REG_SZ    5.0
+    ZonesSecurityUpgrade    REG_BINARY    00000000000000000000000000000000
+    EnableNegotiate    REG_DWORD    0x1
+    ProxyEnable    REG_DWORD    0x0
+    MigrateProxy    REG_DWORD    0x1
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings\5.0
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Cache
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Connections

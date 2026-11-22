@@ -1,0 +1,7 @@
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
+    User Agent    REG_SZ    Mozilla/4.0 (compatible; MSIE 8.0; Win32)
+    ProxyEnable    REG_DWORD    0x1
+    ProxyServer    REG_SZ    proxy.example.invalid:8080
+    AutoConfigURL    REG_SZ    http://wpad.example.invalid/proxy.pac
+    MigrateProxy    REG_DWORD    0x1

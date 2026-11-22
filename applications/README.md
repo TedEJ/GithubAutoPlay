@@ -6,3 +6,4 @@ This folder holds small projects that are built step by step from GitHub issues.
 - [Countdown](Countdown/README.md): a memory game in Python where numbers turn into X and must be clicked in order.
 - [Passningsspelet (football-chess)](football-chess/README.md): a football puzzle game in the browser where the player passes the ball past red defender zones to reach a free shot at goal.
 - [News reader](news-reader/README.md): a web page in Swedish that lists headlines about Swedish politics from a few approved sources (SVT and Sveriges Radio). Skeleton only so far.
+- [Network health](network-health/README.md): a command-line tool for Windows that checks the network the computer is on (passively, without scanning other devices) and prints a verdict with a fix tip for every finding.

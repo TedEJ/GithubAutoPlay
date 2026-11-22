@@ -1,0 +1,10 @@
+
+Det finns 1 gränssnitt i systemet:
+
+    Namn                   : Wi-Fi
+    Beskrivning            : Example Wireless Network Adapter
+    Fysisk adress          : 00:00:5e:00:53:10
+    Tillstånd              : ansluten
+    SSID                   : ExampleHome
+    Kanal                  : 36
+    Signal                 : 88%

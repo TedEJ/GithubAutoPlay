@@ -1,0 +1,27 @@
+
+Pinging 192.0.2.1 with 32 bytes of data:
+Reply from 192.0.2.1: bytes=32 time=45ms TTL=64
+Request timed out.
+Reply from 192.0.2.1: bytes=32 time=80ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=12ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=95ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=40ms TTL=64
+Request timed out.
+Reply from 192.0.2.1: bytes=32 time=60ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=15ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=110ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=35ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=70ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=20ms TTL=64
+Request timed out.
+Reply from 192.0.2.1: bytes=32 time=90ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=30ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=55ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=85ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=25ms TTL=64
+Reply from 192.0.2.1: bytes=32 time=65ms TTL=64
+
+Ping statistics for 192.0.2.1:
+    Packets: Sent = 20, Received = 17, Lost = 3 (15% loss),
+Approximate round trip times in milli-seconds:
+    Minimum = 12ms, Maximum = 110ms, Average = 55ms

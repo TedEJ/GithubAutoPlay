@@ -1,0 +1,5 @@
+
+Aktuella proxyinställningar för WinHTTP:
+
+    Direktåtkomst (ingen proxyserver).
+

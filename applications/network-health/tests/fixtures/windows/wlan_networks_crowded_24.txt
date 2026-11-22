@@ -1,0 +1,103 @@
+
+Interface name : Wi-Fi
+There are 10 networks currently visible.
+
+SSID 1 : ExampleCafe
+    Network type            : Infrastructure
+    Authentication          : Open
+    Encryption              : None
+    BSSID 1                 : 00:00:5e:00:53:41
+         Signal             : 50%
+         Radio type         : 802.11n
+         Band               : 2.4 GHz
+         Channel            : 6
+
+SSID 2 : ExampleNet1
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP
+    BSSID 1                 : 00:00:5e:00:53:51
+         Signal             : 50%
+         Radio type         : 802.11n
+         Band               : 2.4 GHz
+         Channel            : 6
+
+SSID 3 : ExampleNet2
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP
+    BSSID 1                 : 00:00:5e:00:53:52
+         Signal             : 50%
+         Radio type         : 802.11n
+         Band               : 2.4 GHz
+         Channel            : 6
+
+SSID 4 : ExampleNet3
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP
+    BSSID 1                 : 00:00:5e:00:53:53
+         Signal             : 50%
+         Radio type         : 802.11n
+         Band               : 2.4 GHz
+         Channel            : 4
+
+SSID 5 : ExampleNet4
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP
+    BSSID 1                 : 00:00:5e:00:53:54
+         Signal             : 50%
+         Radio type         : 802.11n
+         Band               : 2.4 GHz
+         Channel            : 7
+
+SSID 6 : ExampleNet5
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP
+    BSSID 1                 : 00:00:5e:00:53:55
+         Signal             : 50%
+         Radio type         : 802.11n
+         Band               : 2.4 GHz
+         Channel            : 8
+
+SSID 7 : ExampleNet6
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP
+    BSSID 1                 : 00:00:5e:00:53:56
+         Signal             : 50%
+         Radio type         : 802.11n
+         Band               : 2.4 GHz
+         Channel            : 6
+
+SSID 8 : ExampleNet7
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP
+    BSSID 1                 : 00:00:5e:00:53:57
+         Signal             : 50%
+         Radio type         : 802.11n
+         Band               : 2.4 GHz
+         Channel            : 11
+
+SSID 9 : ExampleNet8
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP
+    BSSID 1                 : 00:00:5e:00:53:58
+         Signal             : 50%
+         Radio type         : 802.11n
+         Band               : 2.4 GHz
+         Channel            : 1
+
+SSID 10 : ExampleNet9
+    Network type            : Infrastructure
+    Authentication          : WPA2-Personal
+    Encryption              : CCMP
+    BSSID 1                 : 00:00:5e:00:53:59
+         Signal             : 50%
+         Radio type         : 802.11n
+         Band               : 2.4 GHz
+         Channel            : 3
