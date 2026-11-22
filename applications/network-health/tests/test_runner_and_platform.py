@@ -1,6 +1,7 @@
 """The Runner (with subprocess replaced) and the Windows platform's error
 handling. No real command is started."""
 
+import ntpath
 import subprocess
 
 import pytest
@@ -151,3 +152,43 @@ def test_fake_runner_refuses_unknown_commands():
 def test_command_result_defaults():
     result = CommandResult(("x",), 0)
     assert result.stdout == "" and result.error is None
+
+
+# ---------------------------------------------------------------- full paths
+
+WINDOWS_ROOT = ntpath.join("C:" + ntpath.sep, "Windows")
+SYSTEM32 = ntpath.join(WINDOWS_ROOT, "System32")
+
+
+def test_system_commands_start_by_full_path_under_system_root():
+    runner = FakeRunner([
+        ("ping.exe -n 20", ok("ping_gateway.txt")),
+        ("netsh.exe wlan show interfaces", ok("wlan_interfaces_connected.txt")),
+        ("arp.exe -a", ok("arp.txt")),
+        ("reg.exe query", ok("reg_internet_settings.txt")),
+        ("netsh.exe winhttp", ok("winhttp_direct.txt")),
+        ("Get-NetFirewallProfile", ok("ps_firewall.json")),
+    ])
+    platform = WindowsPlatform(runner, environ={"SystemRoot": WINDOWS_ROOT})
+    platform.ping("192.0.2.1", 20)
+    platform.wifi_status()
+    platform.neighbours()
+    platform.proxy_settings()
+    platform.firewall_profiles()
+    programs = [call[0] for call in runner.calls]
+    assert programs == [
+        ntpath.join(SYSTEM32, "ping.exe"),
+        ntpath.join(SYSTEM32, "netsh.exe"),
+        ntpath.join(SYSTEM32, "arp.exe"),
+        ntpath.join(SYSTEM32, "reg.exe"),
+        ntpath.join(SYSTEM32, "netsh.exe"),
+        ntpath.join(SYSTEM32, "WindowsPowerShell", "v1.0", "powershell.exe"),
+    ]
+    assert programs[0] == "C:" + ntpath.sep + ntpath.sep.join(["Windows", "System32", "ping.exe"])
+
+
+def test_system_command_falls_back_to_the_bare_name():
+    from network_health.platforms.windows import system_command
+    assert system_command("ping", {}) == "ping"
+    assert system_command("ping", {"SYSTEMROOT": WINDOWS_ROOT}) == ntpath.join(SYSTEM32, "ping.exe")
+    assert system_command("other", {"SystemRoot": WINDOWS_ROOT}) == "other"

@@ -190,6 +190,8 @@ class BandwidthResult:
     upload_mbps: float | None = None
     download_bytes: int = 0
     upload_bytes: int = 0
+    download_seconds: float | None = None
+    upload_seconds: float | None = None
     download_error: str | None = None
     upload_error: str | None = None
     loaded_latency_ms: list[float] = field(default_factory=list)

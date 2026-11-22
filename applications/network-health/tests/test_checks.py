@@ -49,12 +49,61 @@ def status(results, check_id):
     return by_id(results, check_id).status
 
 
-def test_every_result_has_text_and_every_problem_has_a_fix_tip(base):
-    for result in run_checks(base):
-        assert result.summary
-        assert result.area in checks.AREAS
-        if result.status in (WARN, BAD):
-            assert result.why and result.fix, result.id
+def _finding_scenarios(base):
+    """Facts that together give every kind of info, warn and bad finding."""
+    yield base, None
+    other = {"network": {"gateway": "198.51.100.1", "ssid": "Other"}}
+    yield base, other
+    changed = {"network": checks.network_identity(base), "gateway_mac": "00:00:5e:00:53:99"}
+    yield base, changed
+    yield facts_with(base, mtu=MtuResult("1.1.1.1", 1492)), None
+    yield facts_with(base, mtu=MtuResult("1.1.1.1", 1300)), None
+    yield facts_with(base, wifi=_wifi(band="2.4 GHz", channel=6, signal_pct=40,
+                                      receive_mbps=11, transmit_mbps=11,
+                                      authentication="Open", cipher="None")), None
+    yield facts_with(base, wifi=_wifi(authentication="OWE", cipher="CCMP")), None
+    yield facts_with(base, bandwidth=_bw(5, 1, [300.0, 280.0, 290.0])), None
+    yield facts_with(base, dns={"192.0.2.1": DnsTiming("192.0.2.1", [], 3)}), None
+    no_v6 = copy.deepcopy(base)
+    no_v6.primary.ipv6_global = []
+    no_v6.primary.dns_servers = ["198.51.100.53"]
+    yield no_v6, None
+    for entry in (IPv4Entry("192.0.2.10", 24, "Dhcp", 1800),
+                  IPv4Entry("192.0.2.10", 24, "Manual", None),
+                  IPv4Entry(str(ipaddress.ip_address("169.254.0.0") + 7), 16,
+                            "WellKnown", None)):
+        yield _with_ipv4(base, entry), None
+    yield _with_ipv4(base), None
+    no_dns = copy.deepcopy(base)
+    no_dns.primary.dns_servers = []
+    yield no_dns, None
+    yield facts_with(base, proxy=ProxySettings(user_proxy_enabled=True,
+                                               user_proxy_server="proxy.example.invalid:8080")), None
+    rdp, _ = home_facts(("Get-NetTCPConnection", ok("ps_listening_rdp.json")),
+                        ("Get-NetFirewallProfile", ok("ps_firewall_off.json")),
+                        ("arp -a", ok("arp_spoofed.txt")),
+                        ("ping -n 20 -w 1000 192.0.2.1", ok("ping_all_lost.txt", 1)))
+    yield rdp, None
+    bad_link, _ = home_facts(("ping -n 20 -w 1000 192.0.2.1", ok("ping_gateway_bad.txt")))
+    yield bad_link, None
+    dup = copy.deepcopy(base)
+    dup.neighbours[2].mac = dup.neighbours[1].mac
+    yield dup, None
+
+
+def test_every_result_has_text_and_every_finding_has_a_fix_tip(base):
+    """The issue asks for a fix tip on every finding: bad, warn and info."""
+    seen = set()
+    for facts, previous in _finding_scenarios(base):
+        for result in run_checks(facts, previous):
+            assert result.summary
+            assert result.area in checks.AREAS
+            if result.status in (INFO, WARN, BAD):
+                assert result.fix, f"{result.id} ({result.status}) has no fix tip"
+                seen.add(result.status)
+            if result.status in (WARN, BAD):
+                assert result.why, result.id
+    assert seen == {INFO, WARN, BAD}
 
 
 # ---------------------------------------------------------------- ping
@@ -159,7 +208,7 @@ def test_bandwidth(base, down, up, expected_down, expected_up):
 
 
 @pytest.mark.parametrize("loaded,expected", [
-    ([20.0, 25.0, 22.0], GOOD), ([80.0, 90.0, 85.0], WARN), ([300.0, 280.0], BAD)])
+    ([20.0, 25.0, 22.0], GOOD), ([80.0, 90.0, 85.0], WARN), ([300.0, 280.0, 290.0], BAD)])
 def test_bufferbloat(base, loaded, expected):
     results = checks.check_bandwidth(facts_with(base, bandwidth=_bw(100, 20, loaded)))
     assert status(results, "perf.bufferbloat") == expected
@@ -455,3 +504,18 @@ def test_run_checks_never_crashes_when_nothing_could_be_read():
     results = run_checks(facts)
     assert results and all(r.status == SKIPPED for r in results)
 
+
+
+def test_bufferbloat_on_a_very_fast_link_is_skipped_with_the_reason(base):
+    bw = _bw(900, 400, [20.0])
+    bw.download_seconds, bw.upload_seconds = 0.2, 0.3
+    result = by_id(checks.check_bandwidth(facts_with(base, bandwidth=bw)), "perf.bufferbloat")
+    assert result.status == SKIPPED
+    assert "so fast" in result.summary and "0.2 s down" in result.summary
+
+
+def test_bufferbloat_without_replies_during_load_says_so(base):
+    bw = _bw(50, 10, [])
+    bw.download_seconds, bw.upload_seconds = 10.0, 8.0
+    result = by_id(checks.check_bandwidth(facts_with(base, bandwidth=bw)), "perf.bufferbloat")
+    assert result.status == SKIPPED and "no replies" in result.summary

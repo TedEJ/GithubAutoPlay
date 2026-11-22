@@ -33,7 +33,7 @@ python -m network_health --save
 A run takes about a minute. Progress messages go to the screen while it runs; the report comes at the end. The report ends with "Contacted in this run", which lists every address and server the run used.
 
 ## Your data stays local
-The report and snapshots contain real data about your network (IP and MAC addresses, the Wi-Fi name). Snapshots are written to `local-data/` in this folder, which git ignores (`.gitignore` in the repository root). If you save a report, put it there too. Never paste real output into an issue, a pull request or a commit: the repository is public.
+The report and snapshots contain real data about your network (IP and MAC addresses, the Wi-Fi name). Snapshots are written to `local-data/` in this folder, which git ignores (`.gitignore` in the repository root). If you save a report, put it there too. Never paste real output into an issue, a pull request or a commit: the repository is public. The privacy guard catches real-looking addresses and secrets, but real Wi-Fi names, host names and device vendors cannot be detected automatically; they rely on review.
 
 ## Run the tests
 

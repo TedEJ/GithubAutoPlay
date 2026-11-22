@@ -4,8 +4,15 @@ The only check that sends noticeable traffic to a third party. The server is
 named in known_hosts.py and in the report, and --skip-bandwidth turns it off.
 
 Limits: the download stops at DOWNLOAD_MAX_BYTES or after TIME_LIMIT_S,
-whichever comes first. The upload first sends a small probe; on a slow link
-it stops there, otherwise it sends at most UPLOAD_MAX_BYTES.
+whichever comes first. The upload first sends a small probe (100 kB); on a
+slow link it stops there, otherwise it sends about UPLOAD_TARGET_S worth of
+data, at most UPLOAD_MAX_BYTES. Even at about 0.1 Mbit/s the whole test stays
+near 30 seconds.
+
+Timing: neither direction counts connection set-up (DNS, TCP, TLS). The
+download clock starts when the response headers have arrived; the upload
+clock starts when urllib reads the first block of the body, which happens
+after the connection is open and the request headers are sent.
 
 The opener (urllib.request.urlopen by default), the clock and the latency
 sampler are parameters, so tests run without a network.
@@ -23,13 +30,14 @@ from . import known_hosts
 from .models import BandwidthResult, Unavailable
 
 DOWNLOAD_MAX_BYTES = 25_000_000
-UPLOAD_PROBE_BYTES = 1_000_000
+UPLOAD_PROBE_BYTES = 100_000
 UPLOAD_MAX_BYTES = 10_000_000
 TIME_LIMIT_S = 10.0
 UPLOAD_TARGET_S = 8.0
 UPLOAD_SLOW_PROBE_S = 4.0
-CHUNK_BYTES = 64 * 1024
+CHUNK_BYTES = 16 * 1024  # small, so a slow link overshoots the time limit little
 REQUEST_TIMEOUT_S = 30.0
+SAMPLE_INTERVAL_S = 0.05
 USER_AGENT = "network-health/0.1 (Python urllib)"
 
 _NETWORK_ERRORS = (urllib.error.URLError, OSError, TimeoutError, ValueError)
@@ -58,18 +66,45 @@ def download(opener: Callable, clock: Callable[[], float], *,
     return total, elapsed
 
 
+class TimedBody:
+    """An upload body that notes when its first block is read.
+
+    http.client reads a file-like body only after it has opened the
+    connection and sent the headers, so the first read marks the start of
+    the transfer itself.
+    """
+
+    def __init__(self, size: int, clock: Callable[[], float]):
+        self.size = size
+        self.left = size
+        self.clock = clock
+        self.started: float | None = None
+
+    def read(self, block: int = -1) -> bytes:
+        if self.started is None:
+            self.started = self.clock()
+        if block is None or block < 0:
+            block = self.left
+        n = min(block, self.left)
+        self.left -= n
+        return bytes(n)
+
+
 def _post(opener: Callable, clock: Callable[[], float], size: int) -> float:
+    body = TimedBody(size, clock)
     request = urllib.request.Request(
         known_hosts.SPEED_TEST_UPLOAD_URL,
-        data=bytes(size),
+        data=body,
         method="POST",
         headers={"User-Agent": USER_AGENT,
-                 "Content-Type": "application/octet-stream"},
+                 "Content-Type": "application/octet-stream",
+                 "Content-Length": str(size)},
     )
-    start = clock()
+    before = clock()
     with opener(request, timeout=REQUEST_TIMEOUT_S) as response:
         response.read()
-    return clock() - start
+    end = clock()
+    return end - (body.started if body.started is not None else before)
 
 
 def upload(opener: Callable, clock: Callable[[], float], *,
@@ -86,8 +121,8 @@ def upload(opener: Callable, clock: Callable[[], float], *,
 class LoadSampler:
     """Pings a target again and again while a transfer runs."""
 
-    def __init__(self, platform, target: str, interval_s: float = 0.2,
-                 max_samples: int = 200):
+    def __init__(self, platform, target: str, interval_s: float = SAMPLE_INTERVAL_S,
+                 max_samples: int = 400):
         self.platform = platform
         self.target = target
         self.interval_s = interval_s
@@ -134,10 +169,12 @@ def measure_bandwidth(
             if direction == "download":
                 size, seconds = download(opener, clock)
                 result.download_bytes = size
+                result.download_seconds = seconds
                 result.download_mbps = mbps(size, seconds)
             else:
                 size, seconds = upload(opener, clock)
                 result.upload_bytes = size
+                result.upload_seconds = seconds
                 result.upload_mbps = mbps(size, seconds)
         except _NETWORK_ERRORS as exc:
             message = f"the speed-test server could not be used ({exc})"

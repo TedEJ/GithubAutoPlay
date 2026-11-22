@@ -41,25 +41,37 @@ class FakeResponse:
 
 
 class FakeOpener:
-    """Download: serves the requested bytes. Upload: takes size / rate seconds."""
+    """Download: serves the requested bytes. Upload: reads the body in blocks
+    the way http.client does, after setup_s of connection set-up."""
 
     def __init__(self, clock, *, download_seconds_per_chunk=0.01,
-                 upload_bytes_per_s=5_000_000, fail=None):
+                 upload_bytes_per_s=5_000_000, setup_s=0.0, fail=None):
         self.clock = clock
         self.download_seconds_per_chunk = download_seconds_per_chunk
         self.upload_bytes_per_s = upload_bytes_per_s
+        self.setup_s = setup_s
         self.fail = fail or set()
         self.requests = []
+        self.upload_sizes = []
 
     def __call__(self, request, timeout=None):
         self.requests.append(request)
         method = request.get_method()
         if method in self.fail:
             raise urllib.error.URLError("no route (fake)")
+        self.clock.now += self.setup_s  # DNS, TCP and TLS
         if method == "GET":
             size = int(request.full_url.split("bytes=")[1])
             return FakeResponse(self.clock, size, self.download_seconds_per_chunk)
-        self.clock.now += len(request.data) / self.upload_bytes_per_s
+        sent = 0
+        while True:
+            block = request.data.read(8192)
+            if not block:
+                break
+            sent += len(block)
+            self.clock.now += len(block) / self.upload_bytes_per_s
+        assert int(request.get_header("Content-length")) == sent
+        self.upload_sizes.append(sent)
         return FakeResponse(self.clock, 0, 0.0)
 
 
@@ -86,25 +98,58 @@ def test_upload_scales_size_after_probe_and_respects_maximum():
     opener = FakeOpener(clock, upload_bytes_per_s=50_000_000)
     size, seconds = bandwidth.upload(opener, clock)
     assert size == bandwidth.UPLOAD_MAX_BYTES
-    assert [len(r.data) for r in opener.requests] == [bandwidth.UPLOAD_PROBE_BYTES,
-                                                      bandwidth.UPLOAD_MAX_BYTES]
+    assert opener.upload_sizes == [bandwidth.UPLOAD_PROBE_BYTES, bandwidth.UPLOAD_MAX_BYTES]
     assert opener.requests[0].full_url == known_hosts.SPEED_TEST_UPLOAD_URL
 
 
 def test_upload_stops_after_probe_on_a_slow_link():
     clock = Clock()
-    opener = FakeOpener(clock, upload_bytes_per_s=100_000)  # 0.8 Mbit/s
+    opener = FakeOpener(clock, upload_bytes_per_s=12_500)  # 0.1 Mbit/s
     size, seconds = bandwidth.upload(opener, clock)
     assert size == bandwidth.UPLOAD_PROBE_BYTES
     assert len(opener.requests) == 1
-    assert bandwidth.mbps(size, seconds) == pytest.approx(0.8)
+    assert bandwidth.mbps(size, seconds) == pytest.approx(0.1)
+    assert seconds <= 10
 
 
 def test_upload_medium_link_aims_at_target_duration():
     clock = Clock()
     opener = FakeOpener(clock, upload_bytes_per_s=500_000)  # 4 Mbit/s
     size, _ = bandwidth.upload(opener, clock)
-    assert size == int(500_000 * bandwidth.UPLOAD_TARGET_S)
+    assert size == pytest.approx(500_000 * bandwidth.UPLOAD_TARGET_S, abs=10)
+
+
+def test_connection_setup_is_not_counted_in_either_direction():
+    clock = Clock()
+    opener = FakeOpener(clock, upload_bytes_per_s=1_000_000, setup_s=2.0,
+                        download_seconds_per_chunk=0.0)
+    _, upload_seconds = bandwidth.upload(opener, clock, probe_bytes=100_000,
+                                         max_bytes=100_000)
+    assert upload_seconds == pytest.approx(0.1)  # not 2.1
+    _, download_seconds = bandwidth.download(opener, clock, max_bytes=100_000)
+    assert download_seconds == pytest.approx(0.0)
+
+
+def test_timed_body_reads_in_blocks_and_notes_the_start():
+    clock = Clock()
+    clock.now = 5.0
+    body = bandwidth.TimedBody(10, clock)
+    assert body.started is None
+    assert body.read(4) == bytes(4)
+    assert body.started == 5.0
+    assert body.read() == bytes(6)
+    assert body.read(4) == b""
+
+
+def test_whole_test_stays_near_30_seconds_on_a_very_slow_link():
+    clock = Clock()
+    rate = 12_500  # 0.1 Mbit/s in both directions
+    opener = FakeOpener(clock, download_seconds_per_chunk=bandwidth.CHUNK_BYTES / rate,
+                        upload_bytes_per_s=rate, setup_s=0.5)
+    result = bandwidth.measure_bandwidth(opener=opener, clock=clock)
+    assert result.download_mbps == pytest.approx(0.1, rel=0.05)
+    assert result.upload_mbps == pytest.approx(0.1, rel=0.05)
+    assert clock.now <= 30
 
 
 class FakeSampler:
@@ -132,6 +177,7 @@ def test_measure_bandwidth_collects_both_directions_and_loaded_latency():
     assert result.server == known_hosts.SPEED_TEST_NAME
     assert len(samplers) == 2 and all(s.started for s in samplers)
     assert result.loaded_latency_ms == [30.0, 32.0, 30.0, 32.0]
+    assert result.download_seconds > 0 and result.upload_seconds > 0
 
 
 def test_measure_bandwidth_upload_failure_is_kept_as_error():

@@ -36,7 +36,7 @@ Every check gives a result with status good, warn or bad (or info, see section 5
 | DNS lookup time per configured resolver | A DNS query (type A) over UDP straight to each resolver, with Python's `socket`, for three names (example.com, www.iana.org, www.wikipedia.org); the median counts. | No program start in the measured time. The Windows placeholder servers `fec0:0:0:ffff::1`, `::2`, `::3` are left out. |
 | Path MTU | `ping -n 1 -f -l <size> 1.1.1.1`; first 1472 bytes (= MTU 1500), then a binary search down to 1200. | A reply means the size passed without fragmentation. |
 | Bandwidth down and up | `urllib` against the speed-test server (section 6). | Limits in section 6. Off with `--skip-bandwidth`. |
-| Bufferbloat | While the download and the upload run, `ping -n 1` to 1.1.1.1 every 0.2 s; the median loaded latency is compared with the idle average. | Needs at least two samples. |
+| Bufferbloat | While the download and the upload run, `ping -n 1` to 1.1.1.1 again and again (0.05 s pause between pings); the median loaded latency is compared with the idle average. | Needs at least three samples. On a very fast link the size-capped test can finish in well under a second; then the check is skipped and says so, instead of guessing. |
 
 ### Wi-Fi (only when connected over Wi-Fi)
 | Check | How |
@@ -62,7 +62,7 @@ Every check gives a result with status good, warn or bad (or info, see section 5
 
 The main adapter is the one with an IPv4 default gateway and the lowest interface metric.
 
-PowerShell is called through the runner as `powershell -NoProfile -NonInteractive -Command ...`, and every command ends in `ConvertTo-Json` with enums turned into strings, so the output does not depend on the language of Windows.
+PowerShell is called through the runner as `powershell -NoProfile -NonInteractive -Command ...` (by its full path, see section 8), and every command ends in `ConvertTo-Json` with enums turned into strings, so the output does not depend on the language of Windows.
 
 ### Local network (from data the computer already has)
 | Check | How |
@@ -110,7 +110,9 @@ These are the only external addresses the tool knows. They are in `network_healt
 | Cloudflare speed test, `https://speed.cloudflare.com/__down?bytes=N` and `https://speed.cloudflare.com/__up` | bandwidth down and up | Public HTTPS endpoints made for speed tests, no account, no install, work with `urllib`, served from a nearby data centre. |
 | The configured DNS servers | DNS lookup time | Only the resolvers the computer already uses are asked. |
 
-Bandwidth limits: the download stops at 25 MB or after 10 seconds, whichever comes first. The upload first sends 1 MB; if that takes 4 seconds or more (slow link) it stops there, otherwise it sends as much as takes about 8 seconds at the measured rate, at most 10 MB. The report names the server, and `--skip-bandwidth` turns the test off.
+Bandwidth limits: the download stops at 25 MB or after 10 seconds, whichever comes first (it reads in 16 kB blocks, so a slow link overshoots the 10 seconds by little). The upload first sends a 100 kB probe; if that takes 4 seconds or more (slow link) it stops there, otherwise it sends as much as takes about 8 seconds at the measured rate, at most 10 MB. Even at about 0.1 Mbit/s the whole test stays near 30 seconds. The report names the server, and `--skip-bandwidth` turns the test off.
+
+Bandwidth timing: neither direction counts connection set-up (DNS, TCP, TLS). The download clock starts when the response headers have arrived. The upload body is a file-like object, and its clock starts when urllib reads the first block, which happens after the connection is open and the request headers are sent; it stops when the server's answer has arrived.
 
 Known public resolvers (used only to name a DNS server, never contacted unless the computer is configured with them):
 
@@ -121,7 +123,14 @@ Known public resolvers (used only to name a DNS server, never contacted unless t
 | Quad9 | 9.9.9.9, 149.112.112.112 | 2620:fe::fe, 2620:fe::9 |
 | OpenDNS (Cisco) | 208.67.222.222, 208.67.220.220 | 2620:119:35::35, 2620:119:53::53 |
 
-Traffic in passive mode, in full: ping to the default gateway, ping to 1.1.1.1 and 8.8.8.8, DNS queries to the configured resolvers, and the bandwidth test. Nothing is sent to any other device on the local network.
+Traffic in passive mode, in full:
+
+- 20 pings each to the default gateway, 1.1.1.1 and 8.8.8.8;
+- DNS queries (three names) to each configured resolver;
+- path MTU: pings with do-not-fragment to 1.1.1.1 (one when 1500 bytes pass, otherwise up to about ten for the search);
+- the bandwidth test against speed.cloudflare.com (unless `--skip-bandwidth`), and during it repeated single pings to 1.1.1.1 to measure latency under load.
+
+Nothing is sent to any other device on the local network.
 
 ## 7. Verdict rules
 
@@ -173,7 +182,7 @@ network_health/
 ```
 
 - `NetworkPlatform` (in `platforms/base.py`) has one method per fact: `ping`, `ping_dont_fragment`, `ip_configuration`, `wifi_status`, `wifi_networks`, `network_profiles`, `firewall_profiles`, `proxy_settings`, `listening_ports`, `neighbours`. Each returns objects from `models.py` or raises `Unavailable` with a kind and a reason.
-- `WindowsPlatform` implements them with commands that ship with Windows 11 (ping, netsh, arp, reg, Windows PowerShell). All of them go through the `Runner` passed to it.
+- `WindowsPlatform` implements them with commands that ship with Windows 11 (ping, netsh, arp, reg, Windows PowerShell). All of them go through the `Runner` passed to it, started by their full path under `%SystemRoot%\System32` (`ping.exe`, `netsh.exe`, `arp.exe`, `reg.exe`, `WindowsPowerShell\v1.0\powershell.exe`), so a program of the same name earlier in `PATH` is not run instead. Without `SystemRoot` the bare name is used.
 - Linux (#152) adds a `LinuxPlatform` with the same methods (for example `ip`, `ping -M do`, `nmcli` or `iw`, `ss`, `nft` or `ufw`) and an entry in `platforms/get_platform`. `collect.py`, `checks.py` and `report.py` do not change; a Linux concept that does not exist (such as the network profile) raises `Unavailable("not-applicable", ...)`.
 - On any other system the tool says it supports Windows only for now (#152) and exits with code 2.
 - Optional tools such as nmap are not used in passive mode; every check works without them.
@@ -200,8 +209,9 @@ Router access (`--live-router`):
 - The repository is public. No real network data (IP or MAC addresses, SSIDs, host or device names, vendors, public IP, router details tied to the owner, credentials) may be written in code, fixtures, commits, issues, pull requests or comments.
 - Snapshots (`--save`) go to `applications/network-health/local-data/`, which `.gitignore` excludes. The text and JSON reports go to the screen; if you save them, save them in `local-data/` as well.
 - Fixtures use the documentation ranges 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 and 2001:db8::/32, MAC addresses from the RFC 7042 range 00:00:5e:00:53:xx, and made-up names such as ExampleHome.
+- Real SSIDs, host names and device vendors cannot be told apart from made-up ones automatically. The privacy guard does not detect them; they rely on review of every change in this folder.
 - The tool never reads Wi-Fi passwords (`netsh wlan show profile key=clear` is not used).
-- The privacy guard `scripts/tests/test_network_health_privacy.py` runs in the required check `checks`. It scans every file under `applications/network-health/` and fails on other addresses, other MAC addresses and anything that looks like a password, key or token. Its allowlist is the list in section 6 plus the documentation and special ranges; its docstring describes the narrow exception marker.
+- The privacy guard `scripts/tests/test_network_health_privacy.py` runs in the required check `checks`. It scans every file under `applications/network-health/` that git tracks or would add (`git ls-files -co --exclude-standard`, so ignored files such as `local-data/` are left out; without git it walks the folder), reads UTF-8 and UTF-16 files (what Windows PowerShell 5.1 writes with `>`), and fails on other addresses (also with leading zeros), other MAC addresses (also as 12 bare hex digits) and anything that looks like a password, key or token, quoted or as an unquoted `NAME=value` line. Its allowlist is the list in section 6 plus the documentation and special ranges; its docstring describes the exact rules and the narrow exception marker.
 
 ## 11. Report and options
 

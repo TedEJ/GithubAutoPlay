@@ -42,7 +42,10 @@ UPLOAD_WARN_MBPS = 2
 # Bufferbloat: extra latency under load (ms).
 BUFFERBLOAT_GOOD_MS = 30
 BUFFERBLOAT_WARN_MS = 100
-BUFFERBLOAT_MIN_SAMPLES = 2
+BUFFERBLOAT_MIN_SAMPLES = 3
+# Below this total transfer time (s) a lack of samples is put down to a very
+# fast link that finished the size-capped test too quickly.
+BUFFERBLOAT_SHORT_LOAD_S = 3.0
 
 # Wi-Fi signal (%, as Windows shows it; roughly dBm = % / 2 - 100).
 SIGNAL_GOOD_PCT = 70

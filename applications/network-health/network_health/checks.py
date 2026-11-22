@@ -315,6 +315,22 @@ def check_bandwidth(facts: Facts) -> list[CheckResult]:
     return results
 
 
+def _too_few_samples_reason(bw) -> str:
+    count = len(bw.loaded_latency_ms)
+    durations = [s for s in (bw.download_seconds, bw.upload_seconds) if s is not None]
+    if durations and sum(durations) < t.BUFFERBLOAT_SHORT_LOAD_S:
+        parts = []
+        if bw.download_seconds is not None:
+            parts.append(f"{bw.download_seconds:.1f} s down")
+        if bw.upload_seconds is not None:
+            parts.append(f"{bw.upload_seconds:.1f} s up")
+        return (f"Only {count} latency samples: the link is so fast that the "
+                f"size-capped bandwidth test took just {' and '.join(parts)}, "
+                "too short to measure latency under load.")
+    return (f"Only {count} latency samples during the bandwidth test: ping got "
+            "no replies while the test ran.")
+
+
 def _bufferbloat(facts: Facts, bw) -> CheckResult:
     title = "Bufferbloat (latency under load)"
     idle_stats = facts.ping_public.get(known_hosts.BUFFERBLOAT_TARGET)
@@ -322,9 +338,8 @@ def _bufferbloat(facts: Facts, bw) -> CheckResult:
         return skipped("perf.bufferbloat", PERFORMANCE, title, Unavailable(
             "error", "No idle latency to compare with."))
     if len(bw.loaded_latency_ms) < t.BUFFERBLOAT_MIN_SAMPLES:
-        return skipped("perf.bufferbloat", PERFORMANCE, title, Unavailable(
-            "error", "Too few latency samples during the bandwidth test (the "
-                     "test was very short, or ping was blocked)."))
+        return skipped("perf.bufferbloat", PERFORMANCE, title,
+                       Unavailable("error", _too_few_samples_reason(bw)))
     idle = idle_stats.avg_ms
     loaded = statistics.median(bw.loaded_latency_ms)
     increase = max(loaded - idle, 0.0)

@@ -7,6 +7,7 @@ the Runner given to the constructor.
 
 from __future__ import annotations
 
+import ntpath
 import os
 
 from ..models import (
@@ -80,6 +81,26 @@ PROXY_ENVIRONMENT = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
 _RIGHTS_WORDS = ("access is denied", "requires elevation", "run as administrator")
 
 
+# System commands are started by their full path under %SystemRoot%\System32,
+# so a program with the same name earlier in PATH (or in the current folder)
+# is not run instead. Without SystemRoot the bare name is used.
+SYSTEM_TOOLS = {
+    "ping": "ping.exe",
+    "netsh": "netsh.exe",
+    "arp": "arp.exe",
+    "reg": "reg.exe",
+    "powershell": ntpath.join("WindowsPowerShell", "v1.0", "powershell.exe"),
+}
+
+
+def system_command(name: str, environ) -> str:
+    """Full path of a Windows system command, or the bare name."""
+    root = environ.get("SystemRoot") or environ.get("SYSTEMROOT")
+    if not root or name not in SYSTEM_TOOLS:
+        return name
+    return ntpath.join(root, "System32", SYSTEM_TOOLS[name])
+
+
 def powershell(command: str) -> list[str]:
     return ["powershell", "-NoProfile", "-NonInteractive", "-Command", command]
 
@@ -95,6 +116,7 @@ class WindowsPlatform(NetworkPlatform):
 
     def _run(self, args: list[str], tool: str, *, timeout: float = 30.0,
              encoding: str | None = None, allow_failure: bool = False) -> str:
+        args = [system_command(args[0], self.environ)] + list(args[1:])
         result = self.runner.run(args, timeout=timeout, encoding=encoding)
         return self._output(result, tool, allow_failure)
 
