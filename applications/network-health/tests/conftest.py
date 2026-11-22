@@ -204,6 +204,7 @@ class StubPlatform:
         self.ping_cost = ping_cost
         self.error = error
         self.pings: list[str] = []
+        self.arp_calls = 0
         self._lock = threading.Lock()
 
     def ping_host(self, target, timeout_ms):
@@ -216,6 +217,7 @@ class StubPlatform:
         return target in self.alive
 
     def neighbours(self):
+        self.arp_calls += 1
         return list(self._neighbours)
 
 

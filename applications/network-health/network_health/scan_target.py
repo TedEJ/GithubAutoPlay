@@ -108,6 +108,14 @@ def choose_scan_target(adapters, primary: AdapterConfig | None = None) -> ScanTa
     if primary is None or not primary.ipv4:
         raise ScanRefused("Cannot scan: the main network adapter has no IPv4 "
                           "address. Is the computer connected to a network?")
+    if not primary.ipv4_gateways:
+        # choose_primary falls back to any adapter for the passive checks; a
+        # scan never does: without a default gateway it is not clear that this
+        # is the network the user means.
+        raise ScanRefused(f"Cannot scan: no network adapter has an IPv4 default "
+                          f"gateway (adapter \"{primary.alias}\" has none), so it is "
+                          "not clear which network is meant. Connect to the router's "
+                          "network and run again.")
     first_error: ScanRefused | None = None
     for entry in primary.ipv4:
         try:

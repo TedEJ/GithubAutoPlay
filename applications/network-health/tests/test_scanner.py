@@ -313,3 +313,57 @@ def test_an_unexpected_error_in_a_multicast_query_is_a_note():
 
     scan = run(StubPlatform(alive=[private_ip(20)]), Broken())
     assert any("RuntimeError: boom" in n for n in scan.notes)
+
+
+def test_failed_pings_are_counted_apart_from_addresses_skipped_by_the_deadline():
+    class Flaky(StubPlatform):
+        def ping_host(self, target, timeout_ms):
+            if int(target.rsplit(".", 1)[1]) % 2:
+                raise Unavailable("error", "`ping` did not finish in time.")
+            return target in self.alive
+
+    scan = run(Flaky(alive=[private_ip(20)]), FakeNetIO())
+    assert scan.addresses_failed > 100 and scan.addresses_skipped == 0
+    assert scan.addresses_pinged + scan.addresses_failed == scan.addresses_total
+    assert scan.complete and scan.stopped == ""        # not the time limit
+    assert any("pings could not run" in n and "did not finish in time" in n for n in scan.notes)
+    assert scan.meta_dict()["addresses_failed"] == scan.addresses_failed
+
+
+def test_stopped_at_the_time_limit_is_only_said_when_the_deadline_was_the_cause():
+    clock = FakeClock()
+    limits = scanner.ScanLimits(sweep_workers=1, port_workers=1)
+    platform = StubPlatform(alive=[private_ip(20)], clock=clock, ping_cost=1.0)
+    scan = run(platform, FakeNetIO(clock=clock), clock=clock, limits=limits)
+    assert scan.addresses_skipped > 0 and "ping sweep" in scan.stopped
+    assert scan.addresses_pinged + scan.addresses_skipped == scan.addresses_total
+
+
+def test_the_deadline_is_checked_again_after_the_rate_limit_wait():
+    clock = FakeClock()
+    # Starts are 10 s apart; the scan may last 20 s and no operation may start in
+    # the last 6 s. Pings at 0 s and 10 s are fine; the one that waits until 20 s
+    # must not start.
+    limits = scanner.ScanLimits(sweep_workers=1, port_workers=1, time_limit_s=20.0,
+                                sweep_budget_s=20.0, sweep_interval_s=10.0)
+    platform = StubPlatform(alive=[private_ip(20)], clock=clock)
+    start = clock.monotonic()
+    scan = run(platform, FakeNetIO(clock=clock), clock=clock, limits=limits)
+    assert len(platform.pings) == 2
+    assert scan.addresses_skipped == 251 and not scan.complete
+    assert clock.monotonic() - start <= 20.0
+
+
+def test_the_arp_table_is_not_read_after_the_deadline():
+    clock = FakeClock()
+    limits = scanner.ScanLimits(sweep_workers=1, port_workers=1, time_limit_s=10.0,
+                                sweep_budget_s=10.0)
+    platform = StubPlatform(alive=[], neighbours=[neighbour(20, doc_mac(1))],
+                            clock=clock, ping_cost=5.0)
+    scan = run(platform, FakeNetIO(clock=clock), clock=clock, limits=limits)
+    assert platform.arp_calls == 0 and scan.devices == []
+    assert not scan.complete and "ARP table" in scan.stopped
+    # With time left, it is read as before.
+    platform = StubPlatform(alive=[], neighbours=[neighbour(20, doc_mac(1))])
+    run(platform, FakeNetIO())
+    assert platform.arp_calls == 1

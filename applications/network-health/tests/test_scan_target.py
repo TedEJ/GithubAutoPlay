@@ -172,3 +172,28 @@ def test_real_netio_refuses_before_a_socket_is_opened():
 
 def test_netio_error_is_an_exception_class():
     assert issubclass(netio.NetIOError, Exception)
+
+
+def test_the_172_16_range_starts_exactly_at_172_16():
+    just_below = private_ip(-5, "172.16.0.0")            # just below the range
+    assert just_below.startswith("172.15.")
+    with pytest.raises(ScanRefused) as error:
+        choose_scan_target([adapter(just_below, 24, gateway="x")])
+    assert "not a private range" in str(error.value)
+    choose_scan_target([adapter(private_ip(5, "172.16.0.0"), 24, gateway="x")])      # first address range
+    last = private_ip(2**20 - 5, "172.16.0.0")           # the last 172.16/12 range
+    assert last.startswith("172.31.")
+    choose_scan_target([adapter(last, 24, gateway="x")])
+
+
+def test_no_default_gateway_means_no_scan_but_passive_choice_is_unchanged():
+    from network_health.collect import choose_primary
+    only = adapter(private_ip(5), 24, alias="Ethernet")              # no gateway at all
+    assert choose_primary([only]) is only                             # passive: the fallback stays
+    with pytest.raises(ScanRefused) as error:
+        choose_scan_target([only])
+    assert "default gateway" in str(error.value) and "Ethernet" in str(error.value)
+    # An adapter with a gateway is used even when another one has a lower metric.
+    other = adapter(private_ip(5, "172.16.0.0"), 24, alias="vEthernet", metric=1)
+    main = adapter(private_ip(5), 24, alias="Wi-Fi", gateway="x", metric=50)
+    assert choose_scan_target([other, main]).interface == "Wi-Fi"

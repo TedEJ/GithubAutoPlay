@@ -26,6 +26,9 @@ KIND_TEXT = {
     "mobile": "a phone, tablet, computer or TV box",
     "consumer": "a phone, TV or home appliance",
     "vm": "a virtual machine",
+    "netcard": "a computer or a built-in network card",
+    "tv": "a TV or media device",
+    "pcprinter": "a computer or a printer",
 }
 
 # The same kinds, short, for the table of the report.
@@ -35,6 +38,8 @@ KIND_SHORT = {
     "iot": "smart-home device", "lighting": "lighting bridge",
     "board": "Raspberry Pi", "computer": "computer", "mobile": "phone or computer",
     "consumer": "phone, TV or appliance", "vm": "virtual machine",
+    "netcard": "computer or network card", "tv": "TV or media device",
+    "pcprinter": "computer or printer",
 }
 
 _PREFIX_RE = re.compile(r"^[0-9A-F]{6}$")

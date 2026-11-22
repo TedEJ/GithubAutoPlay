@@ -171,7 +171,9 @@ network_health/
   netio.py          the one place where the device scan opens a socket (section 13)
   discovery.py      mDNS and SSDP messages: build the query, read the answers
   services.py       the port list and how a banner, HTTP head or TLS handshake is read
-  oui.py, oui_data.py  the bundled vendor prefixes and the kind guess
+  oui.py, oui_data.py  the vendor prefixes (generated) and the kind guess
+tools/
+  build_oui_data.py  generates oui_data.py from a local copy of the IEEE registry (section 13.5)
   device_checks.py  the hazard rules for devices (section 13)
   devices.py        data classes of the device scan
   safe_text.py      cleans text that came from the network before it is shown
@@ -255,7 +257,7 @@ The target is never typed by the user and there is no option to choose another r
 |------|----------------------------|
 | The subnet lies inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16 (RFC 1918). | Refused: "it is not a private range" (public and documentation ranges). Loopback (127.0.0.0/8), self-assigned 169.254.0.0/16 (no DHCP answer) and multicast get their own wording. |
 | It is not the shared range 100.64.0.0/10 (carrier-grade NAT, RFC 6598). | Refused: it is the provider's range, not the user's own network. |
-| It is directly attached: the subnet is computed from this computer's own address, so this computer is in it. | Refused when the adapter has no IPv4 address or the configuration cannot be read. |
+| It is directly attached: the subnet is computed from this computer's own address, so this computer is in it. The main adapter must have an IPv4 default gateway (the fallback of the passive checks to any adapter is not used for a scan). | Refused when the adapter has no IPv4 address, no IPv4 default gateway, or the configuration cannot be read. |
 | It has at most 1022 usable addresses (a /22 or smaller) and at least one address besides this computer's. | Refused with: "A home network is usually a /24 (254 addresses). Use a smaller subnet on the router, or connect to a smaller network. The tool has no option to choose another range." |
 
 IPv6 is never swept: a /64 has 2^64 addresses. Devices are found over IPv4 (ping sweep, ARP table, and mDNS and SSDP answers that arrive over IPv4). IPv6 neighbours are not read and no IPv6 port is checked; a device that is reachable over IPv6 only is not listed, and the report says so. (Reading the IPv6 neighbour table and checking the on-link neighbours found that way is a possible follow-up.)
@@ -297,7 +299,7 @@ The list is `services.PORT_PLAN`. No login, no password guessing, no exploit, no
 | Limit | Value |
 |-------|-------|
 | Subnet size | at most 1022 addresses (a /22) |
-| Time limit for the whole device scan | 300 seconds (5 minutes). No new operation is started when less than 6 seconds (the longest single operation) are left, so the scan ends within the limit; the result is then marked incomplete and a warning says which part was cut short. |
+| Time limit for the whole device scan | 300 seconds (5 minutes). No new operation is started when less than 6 seconds (the longest single operation) are left, checked before and after the rate-limit wait of every operation, and the ARP table is not read when the deadline has passed, so the scan ends within the limit; the result is then marked incomplete and a warning says which part was cut short. |
 | Share of that for the ping sweep | at most 120 seconds |
 | Pings at the same time | 32 |
 | Devices checked at the same time | 16 (the ports of one device one after the other) |
@@ -311,7 +313,7 @@ Expected time on a /24 at home: ping sweep 10 to 30 s (an address that does not 
 ### 13.5 Names, vendors and kinds
 
 - **Name:** only from mDNS, and only from records about the sending device itself (its own A record, then its SRV host name, then the service instance name). No reverse DNS lookup is made, because Windows may use LLMNR or NetBIOS for that, which sends multicast and broadcast.
-- **Vendor:** from the first 3 bytes of the MAC address (the OUI), with the short bundled list in `oui_data.py` (about 425 prefixes of common makers of routers, printers, cameras, TVs, phones, consoles, NAS and smart-home devices; prefixes only, no full MAC addresses). A MAC address with the "locally administered" bit set is a private address (phones and computers use these), has no vendor, and is marked as such. The list is short; a prefix that is missing gives "no vendor", and the report calls every vendor-based type a guess ("probably a printer"). It was written without access to the IEEE registry, so it should be spot-checked against https://standards-oui.ieee.org/oui/oui.txt; extend it in `oui_data.py`.
+- **Vendor:** from the first 3 bytes of the MAC address (the OUI). The list `network_health/oui_data.py` is **generated** from the public IEEE registry by `tools/build_oui_data.py`: every 24-bit prefix whose registry vendor name matches a pattern of the mapping in that script (display name, kind of device, case-insensitive patterns for the makers found on home networks: phones and computers, PC network chips, routers and provider boxes, consoles, TVs, printers, cameras, NAS, smart-home devices, boards and virtual machines) is written, sorted, so the same registry always gives the same file. At the time of writing that is about 12,000 prefixes of 94 vendors (about 98 kB). Only 24-bit prefixes are used; the 28-bit and 36-bit blocks of the registry are shared between small companies and ignored. The file holds prefixes only, never full MAC addresses, so the privacy guard allows it unchanged. To rebuild it, download the registry yourself into `local-data/` (the IEEE `oui.txt` from https://standards-oui.ieee.org/oui/oui.txt, or the Wireshark `manuf` file from https://www.wireshark.org/download/automated/data/manuf.gz, unpacked; both formats are read; git ignores `local-data/` and the registry must never be committed) and run `python tools/build_oui_data.py local-data/<file>` from `applications/network-health`. To add a maker, add an entry to the mapping and run the script again. **A MAC address with the "locally administered" bit set is a private (random) address (phones and computers use these); it never gets a vendor** and is marked as a private MAC address. A vendor says who made the network chip, not what the device is, so the report calls every vendor-based type a guess ("probably"). For a maker with several kinds of product the most likely or a neutral kind is used (for example "a computer or a built-in network card" for Intel, Realtek and similar, "a computer or a printer" for HP).
 - **Kind** (probably a printer, camera, router, NAS, game console, media player, smart-home device, computer, phone ...): from the strongest hint: the default gateway is a router; then a word in the name (nas, printer, cam ...); then the mDNS service types (`_ipp` is a printer); then words in the Server header (SSDP or HTTP); then the vendor.
 - **Known file server** (for the SMB rule): a device whose kind is "nas", that is, a NAS maker's vendor prefix (Synology, QNAP), a name with nas, diskstation, storage, fileserver, mycloud, truenas and the like, or a Server header that says so. This computer is not scanned, so its own file sharing is judged by the passive check "Listening ports", not here.
 - **nmap** is not used. Everything works without it, and one code path is easier to keep safe.
@@ -333,7 +335,7 @@ Each rule gives one result in the area **Devices** with a status, a "Why" and a 
 | New devices (`dev.new`) | warn; info when there is no earlier scan | the MAC address (or the IP address when there is none) is not in the newest snapshot of the same network that holds devices | A new phone of yours, or someone who should not be on the network. |
 | Scan cut short (`dev.incomplete`) | warn | the time limit stopped the sweep or the port checks | The list may be incomplete. |
 
-Also, one result "Devices found" (good, or info when none were found, with the usual reasons: guest network, AP isolation, firewall), and an info result for each note of the scan (for example the ping command was missing, mDNS could not be sent). The status of the area is worked out as in section 5: bad if any is bad, else warn, and so on; the area is part of the report and of the overall verdict only when `--active` ran.
+Also, one result "Devices found" (good, or info when none were found, with the usual reasons: guest network, AP isolation, firewall), and an info result for each note of the scan (for example the ping command was missing, mDNS could not be sent). Pings that could not run (for example the command timed out) are counted apart from addresses skipped because of the time limit; only the second makes the scan "cut short", the first gives a note. The status of the area is worked out as in section 5: bad if any is bad, else warn, and so on; the area is part of the report and of the overall verdict only when `--active` ran.
 
 ### 13.7 Report, JSON and snapshots
 

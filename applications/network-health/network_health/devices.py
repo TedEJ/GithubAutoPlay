@@ -60,7 +60,9 @@ class DeviceScan:
     interface: str
     gateway: str | None = None
     addresses_total: int = 0    # usable addresses of the subnet, minus this computer
-    addresses_pinged: int = 0
+    addresses_pinged: int = 0   # pings that ran (a reply or no reply)
+    addresses_failed: int = 0   # pings that could not run (time-out of the command, ...)
+    addresses_skipped: int = 0  # not pinged because the time limit was reached
     ports: tuple[int, ...] = ()
     devices: list[Device] = field(default_factory=list)
     complete: bool = True       # False when the time limit stopped the scan
@@ -78,6 +80,8 @@ class DeviceScan:
             "gateway": self.gateway,
             "addresses_total": self.addresses_total,
             "addresses_pinged": self.addresses_pinged,
+            "addresses_failed": self.addresses_failed,
+            "addresses_skipped": self.addresses_skipped,
             "ports": list(self.ports),
             "complete": self.complete,
             "stopped": self.stopped,

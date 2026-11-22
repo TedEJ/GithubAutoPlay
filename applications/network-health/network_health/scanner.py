@@ -38,6 +38,10 @@ from .safe_text import clean_text
 from .scan_target import MDNS_GROUP, SSDP_GROUP, ScanGuard, ScanRefused, ScanTarget
 
 
+SKIPPED = "skipped"   # a sweep address that was not pinged because of the time limit
+FAILED = "failed"     # a sweep address whose ping could not run
+
+
 class RealClock:
     def monotonic(self) -> float:
         return time.monotonic()
@@ -122,7 +126,7 @@ def scan(platform, target: ScanTarget, guard: ScanGuard, io: NetIO, *,
     say(f"Ping sweep of {target.network} ({len(hosts)} addresses, "
         f"{limits.sweep_workers} at a time) ...")
     responders = _sweep(platform, guard, hosts, limits, clock, start, deadline, result)
-    if result.addresses_pinged < len(hosts) and not _sweep_failed(result):
+    if result.addresses_skipped:
         stopped.append(f"the ping sweep ({result.addresses_pinged} of {len(hosts)} "
                        "addresses were pinged)")
 
@@ -134,8 +138,12 @@ def scan(platform, target: ScanTarget, guard: ScanGuard, io: NetIO, *,
     else:
         stopped.append("the mDNS and SSDP queries")
 
-    say("Reading the ARP table ...")
-    neighbours = _neighbours(platform, result)
+    if deadline.expired():
+        stopped.append("the ARP table (not read)")
+        neighbours = []
+    else:
+        say("Reading the ARP table ...")
+        neighbours = _neighbours(platform, result)
 
     found = _collect_devices(guard, own, responders, neighbours, mdns, ssdp, result)
     result.devices = [found[ip] for ip in sorted(found, key=_ip_key)]
@@ -165,10 +173,6 @@ def _ip_key(ip: str) -> int:
     return int(ipaddress.ip_address(ip))
 
 
-def _sweep_failed(result: DeviceScan) -> bool:
-    return any(note.startswith("The ping sweep could not run") for note in result.notes)
-
-
 def _sweep(platform, guard, hosts, limits, clock, start, deadline, result) -> set[str]:
     sweep_deadline = Deadline(clock, start,
                               min(limits.sweep_budget_s, limits.time_limit_s),
@@ -176,29 +180,38 @@ def _sweep(platform, guard, hosts, limits, clock, start, deadline, result) -> se
     pacer = Pacer(clock, limits.sweep_interval_s)
     errors: list[str] = []
 
-    def one(host) -> bool | None:
-        """True or False for a reply; None when not pinged (time limit or error)."""
+    def one(host):
+        """True or False for a reply; SKIPPED when the time limit was reached
+        before the ping started; FAILED when the ping could not run."""
         ip = str(host)
         guard.check_host(ip)
         if sweep_deadline.expired() or deadline.expired():
-            return None
+            return SKIPPED
         pacer.wait()
+        if sweep_deadline.expired() or deadline.expired():  # the wait may have been long
+            return SKIPPED
         try:
             return bool(platform.ping_host(ip, limits.sweep_ping_timeout_ms))
         except Unavailable as exc:
             errors.append(exc.reason)
         except Exception as exc:  # never crash on one address
             errors.append(f"{type(exc).__name__}: {exc}")
-        return None
+        return FAILED
 
     with ThreadPoolExecutor(max_workers=max(1, limits.sweep_workers)) as pool:
         answers = list(pool.map(one, hosts))
-    result.addresses_pinged = sum(1 for a in answers if a is not None)
+    result.addresses_skipped = sum(1 for a in answers if a is SKIPPED)
+    result.addresses_failed = sum(1 for a in answers if a is FAILED)
+    result.addresses_pinged = sum(1 for a in answers if isinstance(a, bool))
     if errors and result.addresses_pinged == 0:
         result.notes.append("The ping sweep could not run: " + errors[0]
                             + " Devices were looked for in the ARP table and with "
                               "mDNS and SSDP only.")
-    return {str(h) for h, a in zip(hosts, answers) if a}
+    elif errors:
+        result.notes.append(f"{result.addresses_failed} pings could not run (for example: "
+                            f"{errors[0]}), so those addresses may have been missed by "
+                            "the sweep.")
+    return {str(h) for h, a in zip(hosts, answers) if a is True}
 
 
 def _discover(guard, io, target, limits, result):
@@ -327,6 +340,9 @@ def _check_ports(guard, io, devices, limits, clock, deadline) -> bool:
                 return
             guard.check_host(dev.ip)
             pacer.wait()
+            if deadline.expired():  # the wait may have been long
+                dev.ports_complete = False
+                return
             probe = _probe(io, dev.ip, spec, limits)
             if probe.open:
                 dev.open_ports.append(spec.port)

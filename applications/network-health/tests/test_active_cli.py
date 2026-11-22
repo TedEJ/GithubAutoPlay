@@ -9,6 +9,7 @@ a private range at run time (see conftest.py).
 
 import io
 import json
+import ntpath
 from datetime import datetime
 
 import pytest
@@ -36,6 +37,7 @@ from network_health.runner import CommandResult
 NOW = datetime(2026, 11, 22, 12, 30, 0)
 PRIV = private_ip(0).rsplit(".", 1)[0] + "."        # the first three parts, with a dot
 DOC = "192.0.2."
+WINDOWS_ROOT = ntpath.join("C:" + ntpath.sep, "Windows")
 
 
 def moved(text: str, prefix: str = PRIV) -> str:
@@ -354,6 +356,9 @@ def test_a_failing_scan_still_gives_the_report(tmp_path, monkeypatch):
     platform, _ = private_platform()
     code, text, _, _ = run_cli(["--active", "--yes"], tmp_path, platform)
     assert code == 0 and "The device scan failed: RuntimeError: boom" in text
+    # The traffic of the scan is listed even though the scan stopped with an error.
+    assert f"{PRIV}0/24 (the local subnet" in text
+    assert "224.0.0.251:5353 (mDNS)" in text
     assert "Overall verdict:" in text
 
 
@@ -369,7 +374,8 @@ def test_scan_progress_goes_to_stderr_and_the_prompt_never_pollutes_json(tmp_pat
 def test_windows_ping_host_runs_one_system_ping_by_its_full_path():
     target = private_ip(20)
     runner = FakeRunner([("-n 1 -w 500", ping_answer({target}))])
-    platform = WindowsPlatform(runner, environ={"SystemRoot": "C:\Windows"})
+    platform = WindowsPlatform(runner, environ={"SystemRoot": WINDOWS_ROOT})
     assert platform.ping_host(target, 500) is True
     assert platform.ping_host(private_ip(21), 500) is False
-    assert runner.calls[0] == ("C:\Windows\System32\ping.exe", "-n", "1", "-w", "500", target)
+    assert runner.calls[0] == (ntpath.join(WINDOWS_ROOT, "System32", "ping.exe"),
+                               "-n", "1", "-w", "500", target)

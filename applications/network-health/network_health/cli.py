@@ -205,6 +205,9 @@ def _run_scan(platform, target, facts, results, data_dir, progress, net_io_facto
                               "it was not run. Run the tool again.")
         guard = ScanGuard(target)
         io = (net_io_factory or RealNetIO)(guard)
+        # Listed before the scan starts, so the traffic is in the report even
+        # if the scan stops with an error.
+        facts.contacted.extend(_contacted_by_scan(target))
         scan = scanner.scan(platform, target, guard, io, gateway=facts.gateway,
                             clock=clock, limits=scan_limits, progress=progress)
     except ScanRefused as exc:
@@ -220,5 +223,4 @@ def _run_scan(platform, target, facts, results, data_dir, progress, net_io_facto
                                     and isinstance(d.get("scan"), dict)
                                     and d["scan"].get("network") == network))
     results.extend(check_devices(scan, previous_scan))
-    facts.contacted.extend(_contacted_by_scan(target))
     return scan
