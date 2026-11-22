@@ -44,6 +44,7 @@ All gates must pass. If one fails, fix it on the same branch and run the gates a
 7. After opening a pull request, check that auto-merge was enabled (the Conversation tab shows "github-actions enabled auto-merge"). If it was not, for example because the Action failed or the repository setting "Allow auto-merge" is off, report it as a follow-up issue instead of merging by hand.
 8. To keep a pull request from merging automatically, set the label `no-auto-merge` when the pull request is opened (a label added afterwards does not undo auto-merge that is already enabled), or open it as a draft. Pull requests from forks never get auto-merge.
 9. Name the issue in the pull request description: `Closes #N` if the pull request finishes issue #N, or `Refs #N` if it does not. Issues named with `Closes #N` were not closed after merges made by the auto-merge Action (see #28), so do not rely on it. The manager (the agent) closes the issue as completed after the pull request is merged; the owner does not have to. GitHub also closes it by itself when the owner merges by hand. Workers do not close issues (they have no access) and do not wait for the issue to close. A manager running in a local terminal closes it with `gh issue close N --reason completed` (add `--comment` with the pull request number). A manager without `gh` or a token closes it in the browser with the "Close issue" button, or says so and the owner closes it. In the report after the last pull request of an issue, say who closes the issue.
+10. When the issue is closed, the manager posts its completion record as a comment on the issue: which subagents did which task, on which model and effort, and what each used in tokens, tool calls and time (format in "Completion record" in section 10). Every issue gets one, also an issue done without subagents. A manager without `gh` or a token puts the record in its last report, and the owner pastes it on the issue.
 
 ## 6. Follow-up work
 Create a new issue for any follow-up found during the work or raised in pull request comments. Set a workload level (Low, Medium or High) on every new issue. New issues use an issue template so that goal, tasks and acceptance criteria are always present: `.github/ISSUE_TEMPLATE/task.md` for ordinary tasks and `.github/ISSUE_TEMPLATE/gui-task.md` for changes to a window that the owner tests by hand (it adds an owner check list and reminds that the pull request needs the label `no-auto-merge`). Issues created with `gh issue create` do not get the template automatically, so write the body with `scripts/issue_body.py` (section 8). Both templates have the required line `Depends on:` in the Notes section (see section 2); a follow-up issue lists there the issues it depends on, or `None`.
@@ -106,7 +107,7 @@ The manager may start more than one worker in a role when the work needs it. A n
 5. If the Reviewer lists things that must be fixed, the manager sends them back to the Designer/Developer. At most two rounds; after that the manager asks the owner.
    After the Reviewer's OK, the manager may send small "should consider" items back to the Designer/Developer as a short extra task. The Reviewer looks again when that extra work changes more than comments, wording or names; otherwise the manager checks the diff itself, and the `## Reviewer` section says that the last commit was not reviewed again.
 6. The manager pushes the branch and creates the pull request with the description written by `scripts/pr_body.py` (section 5). The `## Reviewer` section of the description holds the Reviewer's verdict (`Verdict: OK`, or `Verdict: Must fix`) and a short summary of what it found. The required check `checks` fails unless the verdict is OK; a pull request that changes only Markdown files may use `Verdict: Not needed (documentation only)`.
-7. The owner tests changes that users see, and merges or the auto-merge does. The manager closes the issue.
+7. The owner tests changes that users see, and merges or the auto-merge does. The manager closes the issue and posts the completion record (see "Completion record").
 
 GitHub does not let the author of a pull request approve it, and all work is done with the owner's account, so the Reviewer reports to the manager instead of approving on GitHub. The verdict check in `checks` is therefore a process rule: it reads what the description says, not who wrote it. A technical guard comes later (level 2): the Reviewer gets its own identity (a separate account or a GitHub App) and the ruleset on `main` requires an approving review from it.
 
@@ -145,6 +146,24 @@ The project skill `subagent-delegation` (`.claude/skills/subagent-delegation/`) 
 - Claude Code started in a clone of this repository loads project skills from `.claude/skills/`. Whether an app or Cowork task loads them will be recorded here after the owner's check on the pull request for issue #137. If it does not, the owner can upload the skill file to the account instead, and the two copies must then be kept equal.
 - The skill brings its own labelled cases and a scorer. `scripts/tests/test_subagent_delegation_skill.py` runs them, so `scripts/check.sh` and the check `checks` fail if a case is under-powered or any pick differs from its label. Change the skill through an issue like any other file.
 
+### Completion record
+Every issue ends with a completion record, posted by the manager as a comment on the issue when it closes it (section 5). It shows how the work was done, so that a later run of the same kind of work on another model or effort (for example in #146) has something to compare with.
+
+- **Who and when:** the manager writes it; workers have no `gh` access. While the work runs, the manager keeps each subagent's figures as they come back, because they cannot be fetched afterwards.
+- **What it holds:** one line for the manager (model, effort, and its own tokens when the owner reads them out with `/cost` or `/usage`, otherwise "manager tokens not recorded"); one line per subagent run (every Designer/Developer and Reviewer round, and any other subagent) with its role, task name, model, effort, round, total tokens, tool calls and duration; and one line for the issue (the pull request or pull requests, how many times `checks` ran, and the time from start to merge, taken from the timestamps `gh` shows). An issue done without subagents says "no subagents".
+- **What the figures mean:** total tokens, tool calls and duration are reported by the Agent tool when a subagent finishes. Total tokens is one number without a split into input, output or cache, so it compares runs but is not a cost; no dollar cost is estimated. Model and effort are what the brief assigned, which does not prove which model ran (see "Choosing model and effort for a worker"). Where a figure is not reported, for example in an app or Cowork task, the line says "not available" instead of leaving it out.
+
+Format (the numbers here are only an example):
+```
+Completed with: manager Opus 5.5 (high), manager tokens not recorded
+- Designer/Developer 'implement issue_body.py', sonnet, medium, round 1/2: 84,210 tokens, 41 tool calls, 6m 12s
+- Designer/Developer 'fix review items', sonnet, medium, round 2/2: 22,905 tokens, 13 tool calls, 1m 48s
+- Reviewer 'review feature-Issue-body-helper', sonnet, medium, round 1: 51,330 tokens, 27 tool calls, 3m 05s
+Issue: PR #141, checks ran 2 times, 1h 40m from start to merge
+```
+
+Both issue templates have a fixed task line for the record, so it is ticked when the issue closes.
+
 ### Two ways of working
 The same roles can be run in two ways. Both follow every rule in this file; they differ in **where** the manager and the workers run and therefore in **what enforces the limits**. Pick the way per issue, not per project.
 
@@ -173,7 +192,7 @@ The same roles can be run in two ways. Both follow every rule in this file; they
   - **Create an issue:** write the body with `python3 scripts/issue_body.py --goal "..." --task "..." --depends-on None --criterion "..." --output body.md` (add `--gui` and `--owner-check` for the GUI template), then `gh issue create --title "..." --body-file body.md --label Low` (or `Medium` or `High`). The script follows the sections of `.github/ISSUE_TEMPLATE/task.md` (Goal, Tasks, Notes with `Depends on:`, Acceptance criteria), because `gh` does not apply the template by itself.
   - **Push and open the pull request:** `git push -u origin <branch>`, then `gh pr create --title "..." --body-file pr.md` with the description written by `scripts/pr_body.py` in full (never the empty template, or `checks` fails on the missing Reviewer verdict). Add `--label no-auto-merge` at this step when the pull request must not merge by itself.
   - **Check the result:** `gh pr checks <number>` shows `checks`, and `gh pr view <number> --json autoMergeRequest,state` shows whether auto-merge is enabled and whether the pull request merged (gate 7 of section 5). Do not merge by hand.
-  - **Close the issue** after the merge with `gh issue close N --reason completed`.
+  - **Close the issue** after the merge: post the completion record (see "Completion record") with `gh issue comment N --body-file record.md`, then `gh issue close N --reason completed`.
   - **Limit:** the `gh` login has the scopes `repo`, `read:org` and `gist`, not `workflow`, so a change under `.github/workflows/` cannot be pushed from it; the owner makes such a change another way.
   - **Tested:** on 2026-11-20 the local login created issue #139 with a label and closed it as not planned.
 - **Windows:** `.gitattributes` keeps LF line endings for the agent files and scripts, because CRLF can make Claude Code skip an agent file without a message. The hook wrappers try `python3`, `python` and `py`.

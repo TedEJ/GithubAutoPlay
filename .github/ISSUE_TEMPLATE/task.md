@@ -15,6 +15,7 @@ assignees: ""
 ## Tasks
 - [ ] <!-- Small, concrete step -->
 - [ ] <!-- Small, concrete step -->
+- [ ] Post the completion record when the issue is closed (subagents, model, effort, tokens, tool calls, time; section 10 of WORKFLOW.md)
 
 ## Notes
 Depends on: None

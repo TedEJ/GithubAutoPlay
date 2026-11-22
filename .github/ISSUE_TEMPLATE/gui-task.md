@@ -20,6 +20,7 @@ assignees: ""
 - [ ] <!-- Small, concrete step -->
 - [ ] <!-- Small, concrete step -->
 - [ ] Update the README of the project (how to run, step list)
+- [ ] Post the completion record when the issue is closed (subagents, model, effort, tokens, tool calls, time; section 10 of WORKFLOW.md)
 - [ ] Run the tests of the project
 
 ## Notes
